@@ -1,0 +1,13 @@
+[project]
+name = "pov-project"
+version = "0.1.0"
+description = "POV LED display firmware development tools"
+requires-python = ">=3.11"
+dependencies = [
+    "esptool>=5.1.0",
+    "platformio>=6.1.0",
+]
+
+[tool.uv]
+package = false  # This is a firmware project, not a Python package
+
