@@ -1,10 +1,11 @@
 {
     "recommendations": [
-        "platformio.platformio-ide",
-        "llvm.vscode-clangd"
+        "llvm.vscode-clangd",
+        "pioarduino.pioarduino-ide",
+        "platformio.platformio-ide"
     ],
     "unwantedRecommendations": [
-        "ms-vscode.cpptools-extension-pack",
-        "ms-vscode.cpptools"
+        "ms-vscode.cpptools",
+        "ms-vscode.cpptools-extension-pack"
     ]
 }
