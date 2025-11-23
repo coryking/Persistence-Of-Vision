@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "esptool>=5.1.0",
     "platformio>=6.1.0",
+    "pip>=25.0",  # Required by PlatformIO ESP32 framework builder
 ]
 
 [tool.uv]

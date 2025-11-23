@@ -1,23 +1,21 @@
 #include <Arduino.h>
 #include "esp_timer.h"
 
-#define FASTLED_ALL_PINS_HARDWARE_SPI
-#define FASTLED_ESP32_SPI_BUS FSPI
-
+// Original pins - physically wired
 #define LED_CLOCK 9
 #define LED_DATA 7
 #define NUM_LEDS 30
-#define LED_DATA_RATE_MHZ 20
 
+#ifdef DO_FASTLED_INIT
 #include <FastLED.h>
 CRGB leds[NUM_LEDS];
+#endif
 
-#ifdef DO_FANCY_SHIT
+#ifdef DO_FASTLED_INIT
 
 void setup()
 {
     Serial.begin(115200);
-    // Wait for USB CDC connection on ESP32-S3
     delay(100);
 
     Serial.println("=== ESP32-S3 Starting Up ===");
@@ -29,7 +27,8 @@ void setup()
     Serial.println("Stage 2: About to initialize FastLED");
     Serial.flush();
 
-    FastLED.addLeds<SK9822, LED_DATA, LED_CLOCK, BGR, DATA_RATE_MHZ(LED_DATA_RATE_MHZ)>(&leds[0], NUM_LEDS);
+    // APA102HD mode - software SPI with default speed
+    FastLED.addLeds<APA102HD, LED_DATA, LED_CLOCK, BGR>(&leds[0], NUM_LEDS);
 
     Serial.println("Stage 3: FastLED initialized successfully");
     Serial.println("=== Setup Complete ===");
@@ -38,13 +37,27 @@ void setup()
 
 void loop()
 {
-    fill_solid(leds, NUM_LEDS, CRGB::White);
+    static uint8_t hue = 0;
+
+#ifdef DO_FASTLED_SHOW
+    // Test with rainbow pattern
+    fill_rainbow(leds, NUM_LEDS, hue, 7);
+
     uint64_t start = esp_timer_get_time();
     FastLED.show();
     uint64_t end = esp_timer_get_time();
-    Serial.printf("Sample: %llu\n", end - start);
-    delay(1000);
+
+    Serial.printf("Frame %03d: %llu us | ", hue, end - start);
+    Serial.printf("Speed: %.1f fps\n", 1000000.0 / (end - start));
+
+    hue += 4;
+#else
+    Serial.println("Loop running (no FastLED.show())");
+#endif
+
+    delay(50);  // ~20 fps
 }
+
 #else
 void setup()
 {
