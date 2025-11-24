@@ -14,6 +14,7 @@
 // POV Display Configuration
 #define DEGREES_PER_ARC 4           // 4-degree line width
 #define ARC_START_ANGLE 0           // Line starts at 0 degrees (hall trigger position)
+#define ARC_GROWTH_INTERVAL_MS 50  // Milliseconds between each degree change (tune: 100-500ms)
 #define WARMUP_REVOLUTIONS 20       // Number of revolutions before display starts
 #define ROLLING_AVERAGE_SIZE 20     // Smoothing window size
 #define ROTATION_TIMEOUT_US 2000000 // 2 seconds timeout to detect stopped rotation
@@ -36,6 +37,14 @@ volatile timestamp_t isrTimestamp = 0;
 // Line color (red)
 const RgbColor LINE_COLOR(255, 0, 0);
 const RgbColor OFF_COLOR(0, 0, 0);
+
+// Arc animation state
+int currentArcDegrees = DEGREES_PER_ARC;  // Start at 4 degrees
+bool arcGrowing = true;                    // true = growing, false = shrinking
+timestamp_t lastArcUpdateTime = 0;         // Track last animation update
+const interval_t ARC_UPDATE_INTERVAL = ARC_GROWTH_INTERVAL_MS * 1000;  // Convert ms to microseconds
+const int MIN_ARC_DEGREES = 4;
+const int MAX_ARC_DEGREES = 180;
 
 /**
  * ISR handler for hall effect sensor
@@ -111,23 +120,40 @@ void loop()
 
         // Calculate arc timing
         timestamp_t arcStartTime = lastHallTime + static_cast<interval_t>(ARC_START_ANGLE * microsecondsPerDegree);
-        timestamp_t arcEndTime = lastHallTime + static_cast<interval_t>((ARC_START_ANGLE + DEGREES_PER_ARC) * microsecondsPerDegree);
+        timestamp_t arcEndTime = lastHallTime + static_cast<interval_t>((ARC_START_ANGLE + currentArcDegrees) * microsecondsPerDegree);
 
-        // Check if we're currently within the 4-degree arc
+        // Check if we're currently within the arc
         bool inArc = (now >= arcStartTime && now < arcEndTime);
 
-        if (inArc) {
-            // Turn on first 10 LEDs to red
-            for (int i = 0; i < NUM_LEDS_ACTIVE; i++) {
-                strip.SetPixelColor(i, LINE_COLOR);
+        // Update arc size at configured interval
+        if (now - lastArcUpdateTime >= ARC_UPDATE_INTERVAL) {
+            if (arcGrowing) {
+                currentArcDegrees++;
+                if (currentArcDegrees >= MAX_ARC_DEGREES) {
+                    arcGrowing = false;  // Start shrinking
+                }
+            } else {
+                currentArcDegrees--;
+                if (currentArcDegrees <= MIN_ARC_DEGREES) {
+                    arcGrowing = true;  // Start growing
+                }
             }
-            // Ensure remaining LEDs are off
-            for (int i = NUM_LEDS_ACTIVE; i < NUM_LEDS; i++) {
+            lastArcUpdateTime = now;
+        }
+
+        // Control all 30 LEDs explicitly to prevent artifacts
+        for (uint16_t i = 0; i < NUM_LEDS; i++) {
+            if (i < NUM_LEDS_ACTIVE) {
+                // First 10 LEDs - active display
+                if (inArc) {
+                    strip.SetPixelColor(i, LINE_COLOR);
+                } else {
+                    strip.SetPixelColor(i, OFF_COLOR);
+                }
+            } else {
+                // LEDs 10-29 - explicitly turn off to prevent artifacts
                 strip.SetPixelColor(i, OFF_COLOR);
             }
-        } else {
-            // Outside arc - all LEDs off
-            strip.ClearTo(OFF_COLOR);
         }
 
         // Update the strip
