@@ -4,7 +4,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-NeoPixelBus Test Jig for ESP32-S3 development, specifically testing SPI behavior with LED strips (SK9822/APA102). This is an embedded systems project using PlatformIO and Arduino framework targeting ESP32-S3 boards (Lolin S3 Mini / Seeed XIAO ESP32S3).
+What We're Building: A high-speed Persistence of Vision (POV) display using rotating LED arrays.
+
+This is an embedded systems project testing SPI performance for driving SK9822/APA102 LED strips on ESP32-S3. The test jig validates whether we can achieve the sub-20μs update timing required for a full POV display spinning at 8000 RPM.
+
+**The POV Display Vision**
+The ultimate goal is a spinning LED display with three arms arranged 120° apart. Each arm has 10 SK9822 LEDs, creating an interlaced 30-row radial display when spinning. A hall effect sensor detects rotation, subdividing each revolution into 360 angular columns (1° resolution) (as an example).
+
+**The Timing Challenge:**
+
+- At 8000 RPM = 133.33 rev/sec
+- Revolution period = 7500 microseconds
+- Time per 1° column = 20.8 microseconds
+- Need to update 10 LEDs in <20μs per arm
+
+### Why SK9822/APA102?
+
+4-wire clocked SPI protocol (unlike WS2812B's timing-sensitive 3-wire)
+Can drive up to 20-30MHz on hardware SPI
+Much more forgiving timing for high-speed updates
+Each arm's 10 LEDs can theoretically update in ~5μs at maximum SPI speed
+
+### Why ESP32-S3?
+
+- Tiny form factor (using Lolin S3 Mini or Seeed XIAO ESP32S3)
+- WiFi for programming/control (device is wirelessly powered)
+- Tight power budget - just enough for 30 LEDs
+- Hardware SPI with DMA support
 
 ## Build System: PlatformIO + uv
 
