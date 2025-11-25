@@ -52,8 +52,12 @@ const RgbColor MIDDLE_ARM_COLOR(0, 255, 0);   // Green (middle)
 const RgbColor OUTER_ARM_COLOR(0, 0, 255);    // Blue (outer)
 const RgbColor OFF_COLOR(0, 0, 0);
 
-// Arm animation structure - each arm has independent animation
-struct ArmAnimation {
+// Blob structure - independent lava lamp blobs with lifecycle
+struct Blob {
+    bool active;                  // Is this blob alive?
+    uint8_t armIndex;             // Which arm (0-2) this blob belongs to
+    RgbColor color;               // Blob's color
+
     // Position (where the arc is)
     float currentStartAngle;      // 0-360°, current position
     float driftVelocity;          // rad/sec frequency for sine wave drift
@@ -66,8 +70,9 @@ struct ArmAnimation {
     float maxArcSize;             // maximum wedge size
     float sizeChangeRate;         // frequency for size oscillation
 
-    // Timing
-    timestamp_t lastUpdate;       // for delta-time calculations
+    // Lifecycle timing
+    timestamp_t birthTime;        // When blob spawned
+    timestamp_t deathTime;        // When blob will die (0 = immortal for now)
 };
 
 // Arm indices
@@ -75,8 +80,9 @@ struct ArmAnimation {
 #define ARM_MIDDLE 1
 #define ARM_OUTER  2
 
-// One animation state per arm
-ArmAnimation arms[3];
+// Blob pool - up to 5 total blobs across all arms
+#define MAX_BLOBS 5
+Blob blobs[MAX_BLOBS];
 
 /**
  * ISR handler for hall effect sensor
@@ -88,69 +94,93 @@ void IRAM_ATTR hallSensorISR(void* arg) {
 }
 
 /**
- * Update arm animation state using time-based sine waves
+ * Update blob animation state using time-based sine waves
  */
-void updateArmAnimation(ArmAnimation& arm, timestamp_t now) {
+void updateBlob(Blob& blob, timestamp_t now) {
+    if (!blob.active) return;
+
     float timeInSeconds = now / 1000000.0f;
 
     // Position drift: sine wave wandering around center point
-    arm.currentStartAngle = arm.wanderCenter +
-                            sin(timeInSeconds * arm.driftVelocity) * arm.wanderRange;
-    arm.currentStartAngle = fmod(arm.currentStartAngle + 360.0f, 360.0f);
+    blob.currentStartAngle = blob.wanderCenter +
+                             sin(timeInSeconds * blob.driftVelocity) * blob.wanderRange;
+    blob.currentStartAngle = fmod(blob.currentStartAngle + 360.0f, 360.0f);
 
     // Size breathing: sine wave oscillation between min and max
-    float sizePhase = timeInSeconds * arm.sizeChangeRate;
-    arm.currentArcSize = arm.minArcSize +
-                         (arm.maxArcSize - arm.minArcSize) *
-                         (sin(sizePhase) * 0.5f + 0.5f);
+    float sizePhase = timeInSeconds * blob.sizeChangeRate;
+    blob.currentArcSize = blob.minArcSize +
+                          (blob.maxArcSize - blob.minArcSize) *
+                          (sin(sizePhase) * 0.5f + 0.5f);
 }
 
 /**
- * Check if angle is within arm's current arc (handles 360° wraparound)
+ * Check if angle is within blob's current arc (handles 360° wraparound)
  */
-bool isAngleInArc(double angle, const ArmAnimation& arm) {
-    double arcEnd = arm.currentStartAngle + arm.currentArcSize;
+bool isAngleInArc(double angle, const Blob& blob) {
+    if (!blob.active) return false;
+
+    double arcEnd = blob.currentStartAngle + blob.currentArcSize;
 
     // Handle wraparound (e.g., arc from 350° to 10°)
     if (arcEnd > 360.0f) {
-        return (angle >= arm.currentStartAngle) || (angle < fmod(arcEnd, 360.0f));
+        return (angle >= blob.currentStartAngle) || (angle < fmod(arcEnd, 360.0f));
     }
 
-    return (angle >= arm.currentStartAngle) && (angle < arcEnd);
+    return (angle >= blob.currentStartAngle) && (angle < arcEnd);
 }
 
 /**
- * Initialize arm animation configurations with different personalities
+ * Initialize 5 blobs with random distribution across arms
  */
-void setupArmAnimations() {
+void setupBlobs() {
     timestamp_t now = esp_timer_get_time();
 
-    // Inner arm: small, fast bubble
-    arms[ARM_INNER].wanderCenter = 0;
-    arms[ARM_INNER].wanderRange = 60;        // wanders ±60°
-    arms[ARM_INNER].driftVelocity = 0.5;     // rad/sec frequency
-    arms[ARM_INNER].minArcSize = 5;
-    arms[ARM_INNER].maxArcSize = 30;
-    arms[ARM_INNER].sizeChangeRate = 0.3;
-    arms[ARM_INNER].lastUpdate = now;
+    // Color palette for blobs (primary colors for now)
+    RgbColor colors[3] = {
+        RgbColor(255, 0, 0),    // Red
+        RgbColor(0, 255, 0),    // Green
+        RgbColor(0, 0, 255)     // Blue
+    };
 
-    // Middle arm: medium, medium speed
-    arms[ARM_MIDDLE].wanderCenter = 120;
-    arms[ARM_MIDDLE].wanderRange = 90;
-    arms[ARM_MIDDLE].driftVelocity = 0.3;
-    arms[ARM_MIDDLE].minArcSize = 10;
-    arms[ARM_MIDDLE].maxArcSize = 60;
-    arms[ARM_MIDDLE].sizeChangeRate = 0.2;
-    arms[ARM_MIDDLE].lastUpdate = now;
+    // Blob configuration templates for variety
+    struct BlobTemplate {
+        float minSize, maxSize;
+        float driftSpeed;
+        float sizeSpeed;
+        float wanderRange;
+    } templates[3] = {
+        {5, 30, 0.5, 0.3, 60},      // Small, fast
+        {10, 60, 0.3, 0.2, 90},     // Medium
+        {20, 90, 0.15, 0.1, 120}    // Large, slow
+    };
 
-    // Outer arm: large, slow blob
-    arms[ARM_OUTER].wanderCenter = 240;
-    arms[ARM_OUTER].wanderRange = 120;
-    arms[ARM_OUTER].driftVelocity = 0.15;
-    arms[ARM_OUTER].minArcSize = 20;
-    arms[ARM_OUTER].maxArcSize = 90;
-    arms[ARM_OUTER].sizeChangeRate = 0.1;
-    arms[ARM_OUTER].lastUpdate = now;
+    // Distribute 5 blobs: 2 inner, 2 middle, 1 outer
+    uint8_t armAssignments[MAX_BLOBS] = {
+        ARM_INNER, ARM_INNER,
+        ARM_MIDDLE, ARM_MIDDLE,
+        ARM_OUTER
+    };
+
+    for (int i = 0; i < MAX_BLOBS; i++) {
+        blobs[i].active = true;
+        blobs[i].armIndex = armAssignments[i];
+        blobs[i].color = colors[i % 3];  // Cycle through colors
+
+        // Use template based on blob index (varied sizes)
+        BlobTemplate& tmpl = templates[i % 3];
+
+        // Random wander center within 0-360°
+        blobs[i].wanderCenter = (i * 72.0f);  // Spread evenly: 0, 72, 144, 216, 288
+        blobs[i].wanderRange = tmpl.wanderRange;
+        blobs[i].driftVelocity = tmpl.driftSpeed;
+
+        blobs[i].minArcSize = tmpl.minSize;
+        blobs[i].maxArcSize = tmpl.maxSize;
+        blobs[i].sizeChangeRate = tmpl.sizeSpeed;
+
+        blobs[i].birthTime = now;
+        blobs[i].deathTime = 0;  // Immortal for now
+    }
 }
 
 void setup()
@@ -183,10 +213,10 @@ void setup()
     gpio_isr_handler_add(hallPin, hallSensorISR, nullptr);
     Serial.println("Hall effect sensor initialized on D1");
 
-    // Initialize arm animations
-    Serial.println("Setting up arm animations...");
-    setupArmAnimations();
-    Serial.println("Arm animations configured");
+    // Initialize blobs
+    Serial.println("Setting up blob animations...");
+    setupBlobs();
+    Serial.println("Blobs configured");
 
     Serial.println("\n=== POV Display Ready ===");
     Serial.println("Configuration:");
@@ -233,30 +263,65 @@ void loop()
         double angleInner = fmod(angleMiddle + INNER_ARM_PHASE, 360.0);
         double angleOuter = fmod(angleMiddle + OUTER_ARM_PHASE, 360.0);
 
-        // Update each arm's independent animation state
-        updateArmAnimation(arms[ARM_INNER], now);
-        updateArmAnimation(arms[ARM_MIDDLE], now);
-        updateArmAnimation(arms[ARM_OUTER], now);
-
-        // Check each arm against its own arc
-        bool innerInArc = isAngleInArc(angleInner, arms[ARM_INNER]);
-        bool middleInArc = isAngleInArc(angleMiddle, arms[ARM_MIDDLE]);
-        bool outerInArc = isAngleInArc(angleOuter, arms[ARM_OUTER]);
-
-        // Set LEDs for each arm (physical order from center outward)
-        // Inner arm: LEDs 10-19 (orange)
-        for (uint16_t i = 0; i < LEDS_PER_ARM; i++) {
-            strip.SetPixelColor(INNER_ARM_START + i, innerInArc ? INNER_ARM_COLOR : OFF_COLOR);
+        // Update all blob animations
+        for (int i = 0; i < MAX_BLOBS; i++) {
+            updateBlob(blobs[i], now);
         }
 
-        // Middle arm: LEDs 0-9 (red)
-        for (uint16_t i = 0; i < LEDS_PER_ARM; i++) {
-            strip.SetPixelColor(MIDDLE_ARM_START + i, middleInArc ? MIDDLE_ARM_COLOR : OFF_COLOR);
+        // Calculate accumulated color for each arm (additive blending)
+        RgbColor innerColor(0, 0, 0);
+        RgbColor middleColor(0, 0, 0);
+        RgbColor outerColor(0, 0, 0);
+
+        // Check all blobs and accumulate colors for their respective arms
+        for (int i = 0; i < MAX_BLOBS; i++) {
+            if (!blobs[i].active) continue;
+
+            bool blobActive = false;
+            double armAngle = 0;
+
+            // Determine which arm angle to check based on blob's assigned arm
+            if (blobs[i].armIndex == ARM_INNER) {
+                armAngle = angleInner;
+                blobActive = isAngleInArc(armAngle, blobs[i]);
+                if (blobActive) {
+                    innerColor.R = min(255, innerColor.R + blobs[i].color.R);
+                    innerColor.G = min(255, innerColor.G + blobs[i].color.G);
+                    innerColor.B = min(255, innerColor.B + blobs[i].color.B);
+                }
+            } else if (blobs[i].armIndex == ARM_MIDDLE) {
+                armAngle = angleMiddle;
+                blobActive = isAngleInArc(armAngle, blobs[i]);
+                if (blobActive) {
+                    middleColor.R = min(255, middleColor.R + blobs[i].color.R);
+                    middleColor.G = min(255, middleColor.G + blobs[i].color.G);
+                    middleColor.B = min(255, middleColor.B + blobs[i].color.B);
+                }
+            } else if (blobs[i].armIndex == ARM_OUTER) {
+                armAngle = angleOuter;
+                blobActive = isAngleInArc(armAngle, blobs[i]);
+                if (blobActive) {
+                    outerColor.R = min(255, outerColor.R + blobs[i].color.R);
+                    outerColor.G = min(255, outerColor.G + blobs[i].color.G);
+                    outerColor.B = min(255, outerColor.B + blobs[i].color.B);
+                }
+            }
         }
 
-        // Outer arm: LEDs 20-29 (green)
+        // Set LEDs for each arm with accumulated colors
+        // Inner arm: LEDs 10-19
         for (uint16_t i = 0; i < LEDS_PER_ARM; i++) {
-            strip.SetPixelColor(OUTER_ARM_START + i, outerInArc ? OUTER_ARM_COLOR : OFF_COLOR);
+            strip.SetPixelColor(INNER_ARM_START + i, innerColor);
+        }
+
+        // Middle arm: LEDs 0-9
+        for (uint16_t i = 0; i < LEDS_PER_ARM; i++) {
+            strip.SetPixelColor(MIDDLE_ARM_START + i, middleColor);
+        }
+
+        // Outer arm: LEDs 20-29
+        for (uint16_t i = 0; i < LEDS_PER_ARM; i++) {
+            strip.SetPixelColor(OUTER_ARM_START + i, outerColor);
         }
 
         // Update the strip
