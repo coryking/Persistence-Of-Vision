@@ -84,6 +84,16 @@ struct Blob {
 #define MAX_BLOBS 5
 Blob blobs[MAX_BLOBS];
 
+// Color palette: Citrus (oranges to greens)
+// HSL: Hue (0-1), Saturation (0-1), Lightness (0-1)
+HslColor citrusPalette[MAX_BLOBS] = {
+    HslColor(0.08f, 1.0f, 0.5f),    // Orange (30°)
+    HslColor(0.15f, 0.9f, 0.5f),    // Yellow-orange (55°)
+    HslColor(0.25f, 0.85f, 0.5f),   // Yellow-green (90°)
+    HslColor(0.33f, 0.9f, 0.45f),   // Green (120°)
+    HslColor(0.40f, 0.85f, 0.4f)    // Blue-green (145°)
+};
+
 /**
  * ISR handler for hall effect sensor
  * Captures timestamp immediately and sets flag for processing in main loop
@@ -135,13 +145,6 @@ bool isAngleInArc(double angle, const Blob& blob) {
 void setupBlobs() {
     timestamp_t now = esp_timer_get_time();
 
-    // Color palette for blobs (primary colors for now)
-    RgbColor colors[3] = {
-        RgbColor(255, 0, 0),    // Red
-        RgbColor(0, 255, 0),    // Green
-        RgbColor(0, 0, 255)     // Blue
-    };
-
     // Blob configuration templates for variety
     struct BlobTemplate {
         float minSize, maxSize;
@@ -164,7 +167,7 @@ void setupBlobs() {
     for (int i = 0; i < MAX_BLOBS; i++) {
         blobs[i].active = true;
         blobs[i].armIndex = armAssignments[i];
-        blobs[i].color = colors[i % 3];  // Cycle through colors
+        blobs[i].color = RgbColor(citrusPalette[i]);  // Convert HSL to RGB
 
         // Use template based on blob index (varied sizes)
         BlobTemplate& tmpl = templates[i % 3];
