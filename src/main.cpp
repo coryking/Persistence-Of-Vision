@@ -52,13 +52,31 @@ const RgbColor MIDDLE_ARM_COLOR(0, 255, 0);   // Green (middle)
 const RgbColor OUTER_ARM_COLOR(0, 0, 255);    // Blue (outer)
 const RgbColor OFF_COLOR(0, 0, 0);
 
-// Arc animation state
-int currentArcDegrees = DEGREES_PER_ARC;  // Start at 4 degrees
-bool arcGrowing = true;                    // true = growing, false = shrinking
-timestamp_t lastArcUpdateTime = 0;         // Track last animation update
-const interval_t ARC_UPDATE_INTERVAL = ARC_GROWTH_INTERVAL_MS * 1000;  // Convert ms to microseconds
-const int MIN_ARC_DEGREES = 4;
-const int MAX_ARC_DEGREES = 180;
+// Arm animation structure - each arm has independent animation
+struct ArmAnimation {
+    // Position (where the arc is)
+    float currentStartAngle;      // 0-360°, current position
+    float driftVelocity;          // rad/sec frequency for sine wave drift
+    float wanderCenter;           // center point for wandering
+    float wanderRange;            // +/- range from center
+
+    // Size (how big the arc is)
+    float currentArcSize;         // current size in degrees
+    float minArcSize;             // minimum wedge size
+    float maxArcSize;             // maximum wedge size
+    float sizeChangeRate;         // frequency for size oscillation
+
+    // Timing
+    timestamp_t lastUpdate;       // for delta-time calculations
+};
+
+// Arm indices
+#define ARM_INNER  0
+#define ARM_MIDDLE 1
+#define ARM_OUTER  2
+
+// One animation state per arm
+ArmAnimation arms[3];
 
 /**
  * ISR handler for hall effect sensor
@@ -67,6 +85,72 @@ const int MAX_ARC_DEGREES = 180;
 void IRAM_ATTR hallSensorISR(void* arg) {
     isrTimestamp = esp_timer_get_time();
     newRevolutionDetected = true;
+}
+
+/**
+ * Update arm animation state using time-based sine waves
+ */
+void updateArmAnimation(ArmAnimation& arm, timestamp_t now) {
+    float timeInSeconds = now / 1000000.0f;
+
+    // Position drift: sine wave wandering around center point
+    arm.currentStartAngle = arm.wanderCenter +
+                            sin(timeInSeconds * arm.driftVelocity) * arm.wanderRange;
+    arm.currentStartAngle = fmod(arm.currentStartAngle + 360.0f, 360.0f);
+
+    // Size breathing: sine wave oscillation between min and max
+    float sizePhase = timeInSeconds * arm.sizeChangeRate;
+    arm.currentArcSize = arm.minArcSize +
+                         (arm.maxArcSize - arm.minArcSize) *
+                         (sin(sizePhase) * 0.5f + 0.5f);
+}
+
+/**
+ * Check if angle is within arm's current arc (handles 360° wraparound)
+ */
+bool isAngleInArc(double angle, const ArmAnimation& arm) {
+    double arcEnd = arm.currentStartAngle + arm.currentArcSize;
+
+    // Handle wraparound (e.g., arc from 350° to 10°)
+    if (arcEnd > 360.0f) {
+        return (angle >= arm.currentStartAngle) || (angle < fmod(arcEnd, 360.0f));
+    }
+
+    return (angle >= arm.currentStartAngle) && (angle < arcEnd);
+}
+
+/**
+ * Initialize arm animation configurations with different personalities
+ */
+void setupArmAnimations() {
+    timestamp_t now = esp_timer_get_time();
+
+    // Inner arm: small, fast bubble
+    arms[ARM_INNER].wanderCenter = 0;
+    arms[ARM_INNER].wanderRange = 60;        // wanders ±60°
+    arms[ARM_INNER].driftVelocity = 0.5;     // rad/sec frequency
+    arms[ARM_INNER].minArcSize = 5;
+    arms[ARM_INNER].maxArcSize = 30;
+    arms[ARM_INNER].sizeChangeRate = 0.3;
+    arms[ARM_INNER].lastUpdate = now;
+
+    // Middle arm: medium, medium speed
+    arms[ARM_MIDDLE].wanderCenter = 120;
+    arms[ARM_MIDDLE].wanderRange = 90;
+    arms[ARM_MIDDLE].driftVelocity = 0.3;
+    arms[ARM_MIDDLE].minArcSize = 10;
+    arms[ARM_MIDDLE].maxArcSize = 60;
+    arms[ARM_MIDDLE].sizeChangeRate = 0.2;
+    arms[ARM_MIDDLE].lastUpdate = now;
+
+    // Outer arm: large, slow blob
+    arms[ARM_OUTER].wanderCenter = 240;
+    arms[ARM_OUTER].wanderRange = 120;
+    arms[ARM_OUTER].driftVelocity = 0.15;
+    arms[ARM_OUTER].minArcSize = 20;
+    arms[ARM_OUTER].maxArcSize = 90;
+    arms[ARM_OUTER].sizeChangeRate = 0.1;
+    arms[ARM_OUTER].lastUpdate = now;
 }
 
 void setup()
@@ -98,6 +182,11 @@ void setup()
     gpio_install_isr_service(0);
     gpio_isr_handler_add(hallPin, hallSensorISR, nullptr);
     Serial.println("Hall effect sensor initialized on D1");
+
+    // Initialize arm animations
+    Serial.println("Setting up arm animations...");
+    setupArmAnimations();
+    Serial.println("Arm animations configured");
 
     Serial.println("\n=== POV Display Ready ===");
     Serial.println("Configuration:");
@@ -144,27 +233,15 @@ void loop()
         double angleInner = fmod(angleMiddle + INNER_ARM_PHASE, 360.0);
         double angleOuter = fmod(angleMiddle + OUTER_ARM_PHASE, 360.0);
 
-        // Check if each arm is within the display arc
-        double arcEnd = ARC_START_ANGLE + currentArcDegrees;
-        bool innerInArc = (angleInner >= ARC_START_ANGLE && angleInner < arcEnd);
-        bool middleInArc = (angleMiddle >= ARC_START_ANGLE && angleMiddle < arcEnd);
-        bool outerInArc = (angleOuter >= ARC_START_ANGLE && angleOuter < arcEnd);
+        // Update each arm's independent animation state
+        updateArmAnimation(arms[ARM_INNER], now);
+        updateArmAnimation(arms[ARM_MIDDLE], now);
+        updateArmAnimation(arms[ARM_OUTER], now);
 
-        // Update arc size at configured interval
-        if (now - lastArcUpdateTime >= ARC_UPDATE_INTERVAL) {
-            if (arcGrowing) {
-                currentArcDegrees++;
-                if (currentArcDegrees >= MAX_ARC_DEGREES) {
-                    arcGrowing = false;  // Start shrinking
-                }
-            } else {
-                currentArcDegrees--;
-                if (currentArcDegrees <= MIN_ARC_DEGREES) {
-                    arcGrowing = true;  // Start growing
-                }
-            }
-            lastArcUpdateTime = now;
-        }
+        // Check each arm against its own arc
+        bool innerInArc = isAngleInArc(angleInner, arms[ARM_INNER]);
+        bool middleInArc = isAngleInArc(angleMiddle, arms[ARM_MIDDLE]);
+        bool outerInArc = isAngleInArc(angleOuter, arms[ARM_OUTER]);
 
         // Set LEDs for each arm (physical order from center outward)
         // Inner arm: LEDs 10-19 (orange)
