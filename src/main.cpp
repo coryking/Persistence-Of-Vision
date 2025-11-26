@@ -58,17 +58,29 @@ struct Blob {
     uint8_t armIndex;             // Which arm (0-2) this blob belongs to
     RgbColor color;               // Blob's color
 
-    // Position (where the arc is)
+    // Angular position (where the arc is)
     float currentStartAngle;      // 0-360°, current position
     float driftVelocity;          // rad/sec frequency for sine wave drift
     float wanderCenter;           // center point for wandering
     float wanderRange;            // +/- range from center
 
-    // Size (how big the arc is)
+    // Angular size (how big the arc is)
     float currentArcSize;         // current size in degrees
     float minArcSize;             // minimum wedge size
     float maxArcSize;             // maximum wedge size
     float sizeChangeRate;         // frequency for size oscillation
+
+    // Radial position (LED index along arm, 0-9)
+    float currentRadialCenter;    // current LED position (can go out of bounds)
+    float radialDriftVelocity;    // rad/sec frequency for radial drift
+    float radialWanderCenter;     // radial center point for wandering
+    float radialWanderRange;      // +/- radial drift range
+
+    // Radial size (height in LED count)
+    float currentRadialSize;      // current height in LEDs
+    float minRadialSize;          // minimum LED count
+    float maxRadialSize;          // maximum LED count
+    float radialSizeChangeRate;   // frequency for radial breathing
 
     // Lifecycle timing
     timestamp_t birthTime;        // When blob spawned
@@ -111,16 +123,27 @@ void updateBlob(Blob& blob, timestamp_t now) {
 
     float timeInSeconds = now / 1000000.0f;
 
-    // Position drift: sine wave wandering around center point
+    // Angular position drift: sine wave wandering around center point
     blob.currentStartAngle = blob.wanderCenter +
                              sin(timeInSeconds * blob.driftVelocity) * blob.wanderRange;
     blob.currentStartAngle = fmod(blob.currentStartAngle + 360.0f, 360.0f);
 
-    // Size breathing: sine wave oscillation between min and max
-    float sizePhase = timeInSeconds * blob.sizeChangeRate;
+    // Angular size breathing: sine wave oscillation between min and max
+    float angularPhase = timeInSeconds * blob.sizeChangeRate;
     blob.currentArcSize = blob.minArcSize +
                           (blob.maxArcSize - blob.minArcSize) *
-                          (sin(sizePhase) * 0.5f + 0.5f);
+                          (sin(angularPhase) * 0.5f + 0.5f);
+
+    // Radial position drift: sine wave wandering around center point
+    blob.currentRadialCenter = blob.radialWanderCenter +
+                               sin(timeInSeconds * blob.radialDriftVelocity) * blob.radialWanderRange;
+    // Note: No wraparound needed - clipping happens at render time
+
+    // Radial size breathing: sine wave oscillation between min and max
+    float radialPhase = timeInSeconds * blob.radialSizeChangeRate;
+    blob.currentRadialSize = blob.minRadialSize +
+                            (blob.maxRadialSize - blob.minRadialSize) *
+                            (sin(radialPhase) * 0.5f + 0.5f);
 }
 
 /**
@@ -140,6 +163,22 @@ bool isAngleInArc(double angle, const Blob& blob) {
 }
 
 /**
+ * Check if LED index is within blob's current radial extent
+ */
+bool isLedInBlob(uint16_t ledIndex, const Blob& blob) {
+    if (!blob.active) return false;
+
+    // Calculate radial range (LED indices covered by this blob)
+    float halfSize = blob.currentRadialSize / 2.0f;
+    float radialStart = blob.currentRadialCenter - halfSize;
+    float radialEnd = blob.currentRadialCenter + halfSize;
+
+    // Check if LED is within range (clipped to 0-9)
+    float ledFloat = static_cast<float>(ledIndex);
+    return (ledFloat >= radialStart) && (ledFloat < radialEnd);
+}
+
+/**
  * Initialize 5 blobs with random distribution across arms
  */
 void setupBlobs() {
@@ -147,14 +186,23 @@ void setupBlobs() {
 
     // Blob configuration templates for variety
     struct BlobTemplate {
-        float minSize, maxSize;
-        float driftSpeed;
-        float sizeSpeed;
-        float wanderRange;
+        // Angular parameters
+        float minAngularSize, maxAngularSize;
+        float angularDriftSpeed;
+        float angularSizeSpeed;
+        float angularWanderRange;
+        // Radial parameters
+        float minRadialSize, maxRadialSize;
+        float radialDriftSpeed;
+        float radialSizeSpeed;
+        float radialWanderRange;
     } templates[3] = {
-        {5, 30, 0.5, 0.3, 60},      // Small, fast
-        {10, 60, 0.3, 0.2, 90},     // Medium
-        {20, 90, 0.15, 0.1, 120}    // Large, slow
+        // Small, fast (angular 5-30°, radial 1-3 LEDs)
+        {5, 30, 0.5, 0.3, 60,    1, 3, 0.4, 0.25, 2.0},
+        // Medium (angular 10-60°, radial 2-5 LEDs)
+        {10, 60, 0.3, 0.2, 90,   2, 5, 0.25, 0.15, 2.5},
+        // Large, slow (angular 20-90°, radial 3-7 LEDs)
+        {20, 90, 0.15, 0.1, 120, 3, 7, 0.15, 0.1, 3.0}
     };
 
     // Distribute 5 blobs: 2 inner, 2 middle, 1 outer
@@ -172,14 +220,21 @@ void setupBlobs() {
         // Use template based on blob index (varied sizes)
         BlobTemplate& tmpl = templates[i % 3];
 
-        // Random wander center within 0-360°
+        // Angular parameters
         blobs[i].wanderCenter = (i * 72.0f);  // Spread evenly: 0, 72, 144, 216, 288
-        blobs[i].wanderRange = tmpl.wanderRange;
-        blobs[i].driftVelocity = tmpl.driftSpeed;
+        blobs[i].wanderRange = tmpl.angularWanderRange;
+        blobs[i].driftVelocity = tmpl.angularDriftSpeed;
+        blobs[i].minArcSize = tmpl.minAngularSize;
+        blobs[i].maxArcSize = tmpl.maxAngularSize;
+        blobs[i].sizeChangeRate = tmpl.angularSizeSpeed;
 
-        blobs[i].minArcSize = tmpl.minSize;
-        blobs[i].maxArcSize = tmpl.maxSize;
-        blobs[i].sizeChangeRate = tmpl.sizeSpeed;
+        // Radial parameters
+        blobs[i].radialWanderCenter = 4.5f;  // Center of LED strip (0-9)
+        blobs[i].radialWanderRange = tmpl.radialWanderRange;
+        blobs[i].radialDriftVelocity = tmpl.radialDriftSpeed;
+        blobs[i].minRadialSize = tmpl.minRadialSize;
+        blobs[i].maxRadialSize = tmpl.maxRadialSize;
+        blobs[i].radialSizeChangeRate = tmpl.radialSizeSpeed;
 
         blobs[i].birthTime = now;
         blobs[i].deathTime = 0;  // Immortal for now
@@ -271,60 +326,59 @@ void loop()
             updateBlob(blobs[i], now);
         }
 
-        // Calculate accumulated color for each arm (additive blending)
-        RgbColor innerColor(0, 0, 0);
-        RgbColor middleColor(0, 0, 0);
-        RgbColor outerColor(0, 0, 0);
+        // Render each LED individually based on angular and radial position
+        // Inner arm: LEDs 10-19
+        for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
+            RgbColor ledColor(0, 0, 0);
 
-        // Check all blobs and accumulate colors for their respective arms
-        for (int i = 0; i < MAX_BLOBS; i++) {
-            if (!blobs[i].active) continue;
-
-            bool blobActive = false;
-            double armAngle = 0;
-
-            // Determine which arm angle to check based on blob's assigned arm
-            if (blobs[i].armIndex == ARM_INNER) {
-                armAngle = angleInner;
-                blobActive = isAngleInArc(armAngle, blobs[i]);
-                if (blobActive) {
-                    innerColor.R = min(255, innerColor.R + blobs[i].color.R);
-                    innerColor.G = min(255, innerColor.G + blobs[i].color.G);
-                    innerColor.B = min(255, innerColor.B + blobs[i].color.B);
-                }
-            } else if (blobs[i].armIndex == ARM_MIDDLE) {
-                armAngle = angleMiddle;
-                blobActive = isAngleInArc(armAngle, blobs[i]);
-                if (blobActive) {
-                    middleColor.R = min(255, middleColor.R + blobs[i].color.R);
-                    middleColor.G = min(255, middleColor.G + blobs[i].color.G);
-                    middleColor.B = min(255, middleColor.B + blobs[i].color.B);
-                }
-            } else if (blobs[i].armIndex == ARM_OUTER) {
-                armAngle = angleOuter;
-                blobActive = isAngleInArc(armAngle, blobs[i]);
-                if (blobActive) {
-                    outerColor.R = min(255, outerColor.R + blobs[i].color.R);
-                    outerColor.G = min(255, outerColor.G + blobs[i].color.G);
-                    outerColor.B = min(255, outerColor.B + blobs[i].color.B);
+            // Check all blobs assigned to inner arm
+            for (int i = 0; i < MAX_BLOBS; i++) {
+                if (blobs[i].active && blobs[i].armIndex == ARM_INNER) {
+                    // Check both angular and radial position
+                    if (isAngleInArc(angleInner, blobs[i]) && isLedInBlob(ledIdx, blobs[i])) {
+                        ledColor.R = min(255, ledColor.R + blobs[i].color.R);
+                        ledColor.G = min(255, ledColor.G + blobs[i].color.G);
+                        ledColor.B = min(255, ledColor.B + blobs[i].color.B);
+                    }
                 }
             }
-        }
-
-        // Set LEDs for each arm with accumulated colors
-        // Inner arm: LEDs 10-19
-        for (uint16_t i = 0; i < LEDS_PER_ARM; i++) {
-            strip.SetPixelColor(INNER_ARM_START + i, innerColor);
+            strip.SetPixelColor(INNER_ARM_START + ledIdx, ledColor);
         }
 
         // Middle arm: LEDs 0-9
-        for (uint16_t i = 0; i < LEDS_PER_ARM; i++) {
-            strip.SetPixelColor(MIDDLE_ARM_START + i, middleColor);
+        for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
+            RgbColor ledColor(0, 0, 0);
+
+            // Check all blobs assigned to middle arm
+            for (int i = 0; i < MAX_BLOBS; i++) {
+                if (blobs[i].active && blobs[i].armIndex == ARM_MIDDLE) {
+                    // Check both angular and radial position
+                    if (isAngleInArc(angleMiddle, blobs[i]) && isLedInBlob(ledIdx, blobs[i])) {
+                        ledColor.R = min(255, ledColor.R + blobs[i].color.R);
+                        ledColor.G = min(255, ledColor.G + blobs[i].color.G);
+                        ledColor.B = min(255, ledColor.B + blobs[i].color.B);
+                    }
+                }
+            }
+            strip.SetPixelColor(MIDDLE_ARM_START + ledIdx, ledColor);
         }
 
         // Outer arm: LEDs 20-29
-        for (uint16_t i = 0; i < LEDS_PER_ARM; i++) {
-            strip.SetPixelColor(OUTER_ARM_START + i, outerColor);
+        for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
+            RgbColor ledColor(0, 0, 0);
+
+            // Check all blobs assigned to outer arm
+            for (int i = 0; i < MAX_BLOBS; i++) {
+                if (blobs[i].active && blobs[i].armIndex == ARM_OUTER) {
+                    // Check both angular and radial position
+                    if (isAngleInArc(angleOuter, blobs[i]) && isLedInBlob(ledIdx, blobs[i])) {
+                        ledColor.R = min(255, ledColor.R + blobs[i].color.R);
+                        ledColor.G = min(255, ledColor.G + blobs[i].color.G);
+                        ledColor.B = min(255, ledColor.B + blobs[i].color.B);
+                    }
+                }
+            }
+            strip.SetPixelColor(OUTER_ARM_START + ledIdx, ledColor);
         }
 
         // Update the strip
