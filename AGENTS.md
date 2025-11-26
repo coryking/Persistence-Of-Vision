@@ -13,10 +13,14 @@ The ultimate goal is a spinning LED display with three arms arranged 120° apart
 
 **The Timing Challenge:**
 
-- At 8000 RPM = 133.33 rev/sec
-- Revolution period = 7500 microseconds
-- Time per 1° column = 20.8 microseconds
-- Need to update 10 LEDs in <20μs per arm
+- Operating range: 1200-1940 RPM (measured)
+- At 1940 RPM (high end) = 32.33 rev/sec
+- Revolution period = 30,928 microseconds (~31ms)
+- Time per 1° column = 85.9 microseconds
+- At 1200 RPM (low end) = 20 rev/sec
+- Revolution period = 50,000 microseconds (50ms)
+- Time per 1° column = 138.9 microseconds
+- Current SPI update time: ~44μs (well within timing budget)
 
 ### Why SK9822/APA102?
 

@@ -12,7 +12,7 @@ A persistence of vision (POV) display — a spinning disc with LED strips that t
 
 **Physical structure:**
 
-- A disc spins at 3000–4000+ RPM driven by a brushed motor (speed is software-controllable)
+- A disc spins at 1200–1940 RPM driven by a brushed motor (speed is software-controllable)
 - Three arms extend outward, each carrying 10 LEDs
 - The arms are spaced 120° apart
 - A hall effect sensor provides one timing pulse per revolution
@@ -33,7 +33,7 @@ A persistence of vision (POV) display — a spinning disc with LED strips that t
 
 When spinning, the 30 LEDs sweep through 360° many times per second. By carefully timing when each LED turns on and what color it shows, we paint images in the air.
 
-**Why 3000–4000 RPM?** That range produces a stable image without excessive flicker. We can go faster, but beyond that things might start flying off, and nobody wants that.
+**Why 1200–1940 RPM?** This is the current measured operating range. At 1940 RPM (32 rev/sec), we get good image persistence with minimal flicker. At 1200 RPM (20 rev/sec), images are still visible but may show more flicker. The slower speeds are mechanically safer during development and give plenty of timing margin (85-139μs per degree vs 44μs SPI update time).
 
 ---
 
@@ -52,9 +52,9 @@ This is a **polar coordinate** display. Every point is defined by (r, θ):
 
 - SPI transfer time (~44μs currently)
 - LED PWM frequency
-- Rotation speed (3000–4000+ RPM)
+- Rotation speed (1200–1940 RPM measured)
 
-At 4000 RPM with 44μs SPI, resolution is ~1°. Floats give us room to optimize without refactoring.
+At 1940 RPM with 44μs SPI, resolution is ~0.5° (44μs / 85.9μs per degree). At 1200 RPM it's ~0.3° (44μs / 138.9μs per degree). Floats give us room to optimize without refactoring.
 
 ### Angular: Arcs, Not Pixels
 
