@@ -1,13 +1,11 @@
 #include "effects.h"
-#include <NeoPixelBus.h>
-#include <NeoPixelBusLg.h>
+#include <FastLED.h>
 #include "blob_types.h"
 #include "esp_timer.h"
 #include "pixel_utils.h"
 #include "hardware_config.h"
 
 // External references to globals from main.cpp
-extern NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip;
 extern Blob blobs[MAX_BLOBS];
 
 /**
@@ -63,7 +61,7 @@ void setupPerArmBlobs() {
     for (int i = 0; i < MAX_BLOBS; i++) {
         blobs[i].active = true;
         blobs[i].armIndex = armAssignments[i];
-        blobs[i].color = RgbColor(citrusPalette[i]);  // Convert HSL to RGB
+        blobs[i].color = citrusPalette[i];  // CHSV to CRGB conversion automatic
 
         // Use template based on blob index (varied sizes)
         BlobTemplate& tmpl = templates[i % 3];
@@ -93,9 +91,6 @@ void setupPerArmBlobs() {
  * Render per-arm blobs effect
  */
 void renderPerArmBlobs(const RenderContext& ctx) {
-    // Get direct buffer access for fast pixel writes
-    uint8_t* buffer = strip.Pixels();
-
     // Pre-compute which blobs are visible on inner arm (OPTIMIZATION: hoist angle checks)
     bool blobVisibleOnInnerArm[MAX_BLOBS];
     for (int i = 0; i < MAX_BLOBS; i++) {
@@ -105,15 +100,15 @@ void renderPerArmBlobs(const RenderContext& ctx) {
 
     // Inner arm: LEDs 10-19
     for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
-        uint8_t r = 0, g = 0, b = 0;
+        CRGB color = CRGB::Black;
 
         // Check all blobs assigned to inner arm (using pre-computed visibility)
         for (int i = 0; i < MAX_BLOBS; i++) {
             if (blobVisibleOnInnerArm[i] && isLedInBlob(ledIdx, blobs[i])) {
-                blendAdditive(r, g, b, blobs[i].color.R, blobs[i].color.G, blobs[i].color.B);
+                color += CRGB(blobs[i].color.r, blobs[i].color.g, blobs[i].color.b);
             }
         }
-        setPixelColorDirect(buffer, HardwareConfig::INNER_ARM_START + ledIdx, r, g, b);
+        ctx.leds[HardwareConfig::INNER_ARM_START + ledIdx] = color;
     }
 
     // Pre-compute which blobs are visible on middle arm (OPTIMIZATION: hoist angle checks)
@@ -125,15 +120,15 @@ void renderPerArmBlobs(const RenderContext& ctx) {
 
     // Middle arm: LEDs 0-9
     for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
-        uint8_t r = 0, g = 0, b = 0;
+        CRGB color = CRGB::Black;
 
         // Check all blobs assigned to middle arm (using pre-computed visibility)
         for (int i = 0; i < MAX_BLOBS; i++) {
             if (blobVisibleOnMiddleArm[i] && isLedInBlob(ledIdx, blobs[i])) {
-                blendAdditive(r, g, b, blobs[i].color.R, blobs[i].color.G, blobs[i].color.B);
+                color += CRGB(blobs[i].color.r, blobs[i].color.g, blobs[i].color.b);
             }
         }
-        setPixelColorDirect(buffer, HardwareConfig::MIDDLE_ARM_START + ledIdx, r, g, b);
+        ctx.leds[HardwareConfig::MIDDLE_ARM_START + ledIdx] = color;
     }
 
     // Pre-compute which blobs are visible on outer arm (OPTIMIZATION: hoist angle checks)
@@ -145,17 +140,14 @@ void renderPerArmBlobs(const RenderContext& ctx) {
 
     // Outer arm: LEDs 20-29
     for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
-        uint8_t r = 0, g = 0, b = 0;
+        CRGB color = CRGB::Black;
 
         // Check all blobs assigned to outer arm (using pre-computed visibility)
         for (int i = 0; i < MAX_BLOBS; i++) {
             if (blobVisibleOnOuterArm[i] && isLedInBlob(ledIdx, blobs[i])) {
-                blendAdditive(r, g, b, blobs[i].color.R, blobs[i].color.G, blobs[i].color.B);
+                color += CRGB(blobs[i].color.r, blobs[i].color.g, blobs[i].color.b);
             }
         }
-        setPixelColorDirect(buffer, HardwareConfig::OUTER_ARM_START + ledIdx, r, g, b);
+        ctx.leds[HardwareConfig::OUTER_ARM_START + ledIdx] = color;
     }
-
-    // Mark buffer as dirty so NeoPixelBus knows to send it on next Show()
-    strip.Dirty();
 }

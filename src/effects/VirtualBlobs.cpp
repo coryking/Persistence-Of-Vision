@@ -1,13 +1,10 @@
 #include "effects.h"
-#include <NeoPixelBus.h>
-#include <NeoPixelBusLg.h>
+#include <FastLED.h>
 #include "blob_types.h"
 #include "esp_timer.h"
-#include "pixel_utils.h"
 #include "hardware_config.h"
 
 // External references to globals from main.cpp
-extern NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip;
 extern Blob blobs[MAX_BLOBS];
 extern const uint8_t PHYSICAL_TO_VIRTUAL[30];
 
@@ -75,7 +72,7 @@ void setupVirtualBlobs() {
     for (int i = 0; i < MAX_BLOBS; i++) {
         blobs[i].active = true;
         blobs[i].armIndex = 0;  // Unused for virtual blobs
-        blobs[i].color = RgbColor(citrusPalette[i]);  // Convert HSL to RGB
+        blobs[i].color = citrusPalette[i];  // CHSV to CRGB conversion automatic
 
         // Use template based on blob index (varied sizes)
         BlobTemplate& tmpl = templates[i % 3];
@@ -106,9 +103,6 @@ void setupVirtualBlobs() {
  */
 void renderVirtualBlobs(const RenderContext& ctx) {
     // Render using virtual addressing - each LED checks against all blobs
-
-    // Get direct buffer access for fast pixel writes
-    uint8_t* buffer = strip.Pixels();
 
 #ifdef ENABLE_DETAILED_TIMING
     // Track cumulative time for different operations
@@ -152,7 +146,7 @@ void renderVirtualBlobs(const RenderContext& ctx) {
 
         int64_t rgbStart = esp_timer_get_time();
 #endif
-        uint8_t r = 0, g = 0, b = 0;
+        CRGB color = CRGB::Black;
 #ifdef ENABLE_DETAILED_TIMING
         totalRgbConstructTime += esp_timer_get_time() - rgbStart;
 #endif
@@ -174,7 +168,7 @@ void renderVirtualBlobs(const RenderContext& ctx) {
 #ifdef ENABLE_DETAILED_TIMING
                     int64_t blendStart = esp_timer_get_time();
 #endif
-                    blendAdditive(r, g, b, blobs[i].color.R, blobs[i].color.G, blobs[i].color.B);
+                    color += blobs[i].color;
 #ifdef ENABLE_DETAILED_TIMING
                     int64_t blendEnd = esp_timer_get_time();
                     totalColorBlendTime += blendEnd - blendStart;
@@ -186,7 +180,7 @@ void renderVirtualBlobs(const RenderContext& ctx) {
 #ifdef ENABLE_DETAILED_TIMING
         int64_t setPixelStart = esp_timer_get_time();
 #endif
-        setPixelColorDirect(buffer, physicalLed, r, g, b);
+        ctx.leds[physicalLed] = color;
 #ifdef ENABLE_DETAILED_TIMING
         totalSetPixelTime += esp_timer_get_time() - setPixelStart;
 #endif
@@ -221,7 +215,7 @@ void renderVirtualBlobs(const RenderContext& ctx) {
         totalArrayLookupTime += esp_timer_get_time() - lookupStart;
         int64_t rgbStart = esp_timer_get_time();
 #endif
-        uint8_t r = 0, g = 0, b = 0;
+        CRGB color = CRGB::Black;
 #ifdef ENABLE_DETAILED_TIMING
         totalRgbConstructTime += esp_timer_get_time() - rgbStart;
 #endif
@@ -243,7 +237,7 @@ void renderVirtualBlobs(const RenderContext& ctx) {
 #ifdef ENABLE_DETAILED_TIMING
                     int64_t blendStart = esp_timer_get_time();
 #endif
-                    blendAdditive(r, g, b, blobs[i].color.R, blobs[i].color.G, blobs[i].color.B);
+                    color += blobs[i].color;
 #ifdef ENABLE_DETAILED_TIMING
                     int64_t blendEnd = esp_timer_get_time();
                     totalColorBlendTime += blendEnd - blendStart;
@@ -255,7 +249,7 @@ void renderVirtualBlobs(const RenderContext& ctx) {
 #ifdef ENABLE_DETAILED_TIMING
         int64_t setPixelStart = esp_timer_get_time();
 #endif
-        setPixelColorDirect(buffer, physicalLed, r, g, b);
+        ctx.leds[physicalLed] = color;
 #ifdef ENABLE_DETAILED_TIMING
         totalSetPixelTime += esp_timer_get_time() - setPixelStart;
 #endif
@@ -290,7 +284,7 @@ void renderVirtualBlobs(const RenderContext& ctx) {
         totalArrayLookupTime += esp_timer_get_time() - lookupStart;
         int64_t rgbStart = esp_timer_get_time();
 #endif
-        uint8_t r = 0, g = 0, b = 0;
+        CRGB color = CRGB::Black;
 #ifdef ENABLE_DETAILED_TIMING
         totalRgbConstructTime += esp_timer_get_time() - rgbStart;
 #endif
@@ -312,7 +306,7 @@ void renderVirtualBlobs(const RenderContext& ctx) {
 #ifdef ENABLE_DETAILED_TIMING
                     int64_t blendStart = esp_timer_get_time();
 #endif
-                    blendAdditive(r, g, b, blobs[i].color.R, blobs[i].color.G, blobs[i].color.B);
+                    color += blobs[i].color;
 #ifdef ENABLE_DETAILED_TIMING
                     int64_t blendEnd = esp_timer_get_time();
                     totalColorBlendTime += blendEnd - blendStart;
@@ -324,14 +318,11 @@ void renderVirtualBlobs(const RenderContext& ctx) {
 #ifdef ENABLE_DETAILED_TIMING
         int64_t setPixelStart = esp_timer_get_time();
 #endif
-        setPixelColorDirect(buffer, physicalLed, r, g, b);
+        ctx.leds[physicalLed] = color;
 #ifdef ENABLE_DETAILED_TIMING
         totalSetPixelTime += esp_timer_get_time() - setPixelStart;
 #endif
     }
-
-    // Mark buffer as dirty so NeoPixelBus knows to send it on next Show()
-    strip.Dirty();
 
 #ifdef ENABLE_DETAILED_TIMING
     int64_t outerArmTime = esp_timer_get_time() - outerArmStart;

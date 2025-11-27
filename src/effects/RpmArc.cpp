@@ -1,13 +1,10 @@
 #include "effects.h"
-#include <NeoPixelBus.h>
-#include <NeoPixelBusLg.h>
+#include <FastLED.h>
 #include <cmath>
 #include "types.h"
-#include "pixel_utils.h"
 #include "hardware_config.h"
 
 // External references to globals from main.cpp
-extern NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip;
 extern const uint8_t PHYSICAL_TO_VIRTUAL[30];
 
 // RPM Arc Effect Configuration
@@ -17,7 +14,7 @@ constexpr float ARC_WIDTH_DEGREES = 20.0f;  // Arc width in degrees
 constexpr float ARC_CENTER_DEGREES = 0.0f;  // Arc center position (hall sensor)
 
 // Colors
-static const RgbColor OFF_COLOR(0, 0, 0);
+static const CRGB OFF_COLOR = CRGB::Black;
 
 /**
  * Calculate RPM from microseconds per revolution
@@ -50,16 +47,15 @@ static uint8_t rpmToPixelCount(float rpm) {
  * Get color for a virtual pixel based on radial position (green to red gradient)
  * virtualPos: 0-29 (0 = innermost/green, 29 = outermost/red)
  */
-static RgbColor getGradientColor(uint8_t virtualPos) {
+static CRGB getGradientColor(uint8_t virtualPos) {
     // Normalize position to 0.0-1.0
     float t = static_cast<float>(virtualPos) / 29.0f;
 
     // HSV: Green (H=120°) to Red (H=0°)
-    // We go from 120° to 0°, which means 120 * (1-t)
-    float hue = 120.0f * (1.0f - t) / 360.0f;  // Convert to 0.0-1.0 range
+    // FastLED uses 0-255 for hue, where 0=red, 85=green
+    uint8_t hue = 85 * (1.0f - t);  // Green (85) to Red (0)
 
-    HslColor hsl(hue, 1.0f, 0.5f);
-    return RgbColor(hsl);
+    return CHSV(hue, 255, 255);  // Full saturation, full brightness
 }
 
 /**
@@ -92,9 +88,6 @@ static bool isAngleInRpmArc(double angle) {
  * Render RPM-based growing arc effect
  */
 void renderRpmArc(const RenderContext& ctx) {
-    // Get direct buffer access for fast pixel writes
-    uint8_t* buffer = strip.Pixels();
-
     // Calculate current RPM and map to pixel count
     float currentRPM = calculateRPM(ctx.microsecondsPerRev);
     uint8_t pixelCount = rpmToPixelCount(currentRPM);
@@ -110,16 +103,15 @@ void renderRpmArc(const RenderContext& ctx) {
 
                 // Only light pixels within the RPM-based range
                 if (virtualPos < pixelCount) {
-                    RgbColor color = getGradientColor(virtualPos);
-                    setPixelColorDirect(buffer, physicalLed, color.R, color.G, color.B);
+                    ctx.leds[physicalLed] = getGradientColor(virtualPos);
                 } else {
-                    setPixelColorDirect(buffer, physicalLed, OFF_COLOR.R, OFF_COLOR.G, OFF_COLOR.B);
+                    ctx.leds[physicalLed] = OFF_COLOR;
                 }
             }
         } else {
             // Outside arc - turn all LEDs off
             for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
-                setPixelColorDirect(buffer, armStart + ledIdx, OFF_COLOR.R, OFF_COLOR.G, OFF_COLOR.B);
+                ctx.leds[armStart + ledIdx] = OFF_COLOR;
             }
         }
     };
@@ -128,7 +120,4 @@ void renderRpmArc(const RenderContext& ctx) {
     renderRpmArm(ctx.innerArmDegrees, HardwareConfig::INNER_ARM_START);
     renderRpmArm(ctx.middleArmDegrees, HardwareConfig::MIDDLE_ARM_START);
     renderRpmArm(ctx.outerArmDegrees, HardwareConfig::OUTER_ARM_START);
-
-    // Mark buffer as dirty so NeoPixelBus knows to send it on next Show()
-    strip.Dirty();
 }

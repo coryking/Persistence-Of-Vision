@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <cmath>
 #include "esp_timer.h"
-#include <NeoPixelBus.h>
+#include <FastLED.h>
 #include "types.h"
 
 // Arm indices
@@ -19,7 +19,7 @@
 struct Blob {
     bool active;                  // Is this blob alive?
     uint8_t armIndex;             // Which arm (0-2) this blob belongs to (unused for virtual blobs)
-    RgbColor color;               // Blob's color
+    CRGB color;                   // Blob's color
 
     // Angular position (where the arc is)
     float currentStartAngle;      // 0-360°, current position
@@ -51,13 +51,13 @@ struct Blob {
 };
 
 // Color palette: Citrus (oranges to greens)
-// HSL: Hue (0-1), Saturation (0-1), Lightness (0-1)
-inline HslColor citrusPalette[MAX_BLOBS] = {
-    HslColor(0.08f, 1.0f, 0.5f),    // Orange (30°)
-    HslColor(0.15f, 0.9f, 0.5f),    // Yellow-orange (55°)
-    HslColor(0.25f, 0.85f, 0.5f),   // Yellow-green (90°)
-    HslColor(0.33f, 0.9f, 0.45f),   // Green (120°)
-    HslColor(0.40f, 0.85f, 0.4f)    // Blue-green (145°)
+// CHSV: Hue (0-255), Saturation (0-255), Value (0-255)
+inline CHSV citrusPalette[MAX_BLOBS] = {
+    CHSV(20, 255, 255),    // Orange (30° × 255/360 ≈ 20)
+    CHSV(39, 230, 255),    // Yellow-orange (55° × 255/360 ≈ 39)
+    CHSV(64, 217, 255),    // Yellow-green (90° × 255/360 ≈ 64)
+    CHSV(85, 230, 230),    // Green (120° × 255/360 ≈ 85)
+    CHSV(102, 217, 204)    // Blue-green (145° × 255/360 ≈ 102)
 };
 
 /**

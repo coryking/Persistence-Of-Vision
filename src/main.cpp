@@ -15,6 +15,7 @@
 #include "RenderContext.h"
 #include "effects.h"
 #include "timing_utils.h"
+#include "pixel_utils.h"
 
 // Hardware Configuration
 #define NUM_LEDS 30
@@ -336,6 +337,13 @@ void loop()
             case 3:
                 renderRpmArc(ctx);
                 break;
+        }
+
+        // Convert CRGB buffer to NeoPixelBus format
+        uint8_t* buffer = strip.Pixels();
+        for (int i = 0; i < 30; i++) {
+            CRGB& src = ctx.leds[i];
+            setPixelColorDirect(buffer, i, src.r, src.g, src.b);
         }
 
 #if ENABLE_TIMING_INSTRUMENTATION
