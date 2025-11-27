@@ -22,11 +22,10 @@
 #define HALL_PIN D1
 
 // ===== TIMING INSTRUMENTATION CONFIGURATION =====
-#define ENABLE_TIMING_INSTRUMENTATION true  // Set false to disable all timing output
-#define TEST_MODE false                      // Set true to simulate rotation without hardware
+#define ENABLE_TIMING_INSTRUMENTATION false // Set true to enable CSV timing output
+#define TEST_MODE true                       // Set true to simulate rotation without hardware
 #define TEST_RPM 2800.0                      // Simulated RPM (try 700, 1200, 1940, 2800)
 #define TEST_VARY_RPM false                  // Oscillate between 700-2800 RPM
-#define TIMING_REPORT_INTERVAL 10            // Print stats every N revolutions
 // ===============================================
 
 // Physical arm layout (from center outward): Inner, Middle, Outer
@@ -179,6 +178,7 @@ void setup()
 {
     Serial.begin(115200);
     delay(2000); // Give serial time to initialize
+
     Serial.println("POV Display Initializing...");
 
     // Initialize LED strip
