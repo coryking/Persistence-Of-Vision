@@ -14,11 +14,20 @@
 #include "EffectManager.h"
 #include "RenderContext.h"
 #include "effects.h"
+#include "timing_utils.h"
 
 // Hardware Configuration
 #define NUM_LEDS 30
 #define LEDS_PER_ARM 10
 #define HALL_PIN D1
+
+// ===== TIMING INSTRUMENTATION CONFIGURATION =====
+#define ENABLE_TIMING_INSTRUMENTATION true  // Set false to disable all timing output
+#define TEST_MODE false                      // Set true to simulate rotation without hardware
+#define TEST_RPM 2800.0                      // Simulated RPM (try 700, 1200, 1940, 2800)
+#define TEST_VARY_RPM false                  // Oscillate between 700-2800 RPM
+#define TIMING_REPORT_INTERVAL 10            // Print stats every N revolutions
+// ===============================================
 
 // Physical arm layout (from center outward): Inner, Middle, Outer
 // LED index mapping (based on wiring observation)
@@ -92,6 +101,58 @@ Blob blobs[MAX_BLOBS];
 // Effect manager
 EffectManager effectManager;
 
+// Timing instrumentation
+#if ENABLE_TIMING_INSTRUMENTATION
+uint32_t instrumentationFrameCount = 0;
+bool csvHeaderPrinted = false;
+#endif
+
+// Test mode: simulated rotation
+#if TEST_MODE
+double simulatedAngle = 0.0;
+timestamp_t lastSimUpdate = 0;
+interval_t simulatedMicrosecondsPerRev = 0;
+
+/**
+ * Simulate rotation based on time and configured RPM
+ * Returns current angle (0-360) and updates simulatedMicrosecondsPerRev
+ */
+double simulateRotation() {
+    timestamp_t now = esp_timer_get_time();
+
+    if (lastSimUpdate == 0) {
+        lastSimUpdate = now;
+        simulatedAngle = 0.0;
+    }
+
+    // Calculate time delta
+    timestamp_t elapsed = now - lastSimUpdate;
+    lastSimUpdate = now;
+
+    // Calculate current RPM (possibly varying)
+    double rpm = TEST_RPM;
+    if (TEST_VARY_RPM) {
+        // Oscillate: 700 + 1050 * (1 + sin(t))
+        double timeSec = now / 1000000.0;
+        rpm = 700.0 + 1050.0 * (1.0 + sin(timeSec * 0.5));
+    }
+
+    // Calculate microseconds per revolution
+    simulatedMicrosecondsPerRev = static_cast<interval_t>(60000000.0 / rpm);
+
+    // Calculate angle advancement
+    double degreesPerMicrosecond = (rpm * 360.0) / 60000000.0;
+    simulatedAngle += degreesPerMicrosecond * elapsed;
+
+    // Wrap at 360
+    while (simulatedAngle >= 360.0) {
+        simulatedAngle -= 360.0;
+    }
+
+    return simulatedAngle;
+}
+#endif
+
 /**
  * FreeRTOS task for processing hall sensor events
  * Runs at high priority to process timestamps immediately
@@ -123,7 +184,7 @@ void setup()
     // Initialize LED strip
     Serial.println("Initializing LED strip...");
     strip.Begin();
-    strip.SetLuminance(LED_LUMINANCE);  // 25% brightness
+    strip.SetLuminance(LED_LUMINANCE);
     strip.ClearTo(OFF_COLOR);           // Clear strip to black
     strip.Show();
     Serial.println("Strip initialized");
@@ -184,6 +245,21 @@ void loop()
 {
     static bool wasRotating = false;
 
+#if TEST_MODE
+    // === TEST MODE: Simulated Rotation ===
+    // Simulate rotation and bypass hall sensor
+    double angleMiddle = simulateRotation();
+    double angleInner = fmod(angleMiddle + INNER_ARM_PHASE, 360.0);
+    double angleOuter = fmod(angleMiddle + OUTER_ARM_PHASE, 360.0);
+    interval_t microsecondsPerRev = simulatedMicrosecondsPerRev;
+    timestamp_t now = esp_timer_get_time();
+
+    // Force warm-up complete
+    bool isRotating = true;
+    bool isWarmupComplete = true;
+
+#else
+    // === REAL HARDWARE MODE ===
     // Detect motor stop/start transitions
     bool isRotating = revTimer.isCurrentlyRotating();
     if (!wasRotating && isRotating) {
@@ -193,25 +269,34 @@ void loop()
     }
     wasRotating = isRotating;
 
+    bool isWarmupComplete = revTimer.isWarmupComplete();
+
+    // Get timing from hall sensor
+    timestamp_t now = esp_timer_get_time();
+    timestamp_t lastHallTime = revTimer.getLastTimestamp();
+    interval_t microsecondsPerRev = revTimer.getMicrosecondsPerRevolution();
+
+    // Calculate elapsed time since hall trigger
+    timestamp_t elapsed = now - lastHallTime;
+    double microsecondsPerDegree = static_cast<double>(microsecondsPerRev) / 360.0;
+
+    // Calculate arm angles
+    double angleMiddle = fmod(static_cast<double>(elapsed) / microsecondsPerDegree, 360.0);
+    double angleInner = fmod(angleMiddle + INNER_ARM_PHASE, 360.0);
+    double angleOuter = fmod(angleMiddle + OUTER_ARM_PHASE, 360.0);
+#endif
+
     // Only display if warm-up complete and currently rotating
-    if (revTimer.isWarmupComplete() && isRotating) {
-        // Get current time and timing parameters
-        timestamp_t now = esp_timer_get_time();
-        timestamp_t lastHallTime = revTimer.getLastTimestamp();
-        interval_t microsecondsPerRev = revTimer.getMicrosecondsPerRevolution();
+    if (isWarmupComplete && isRotating) {
+#if ENABLE_TIMING_INSTRUMENTATION
+        // Print CSV header once
+        if (!csvHeaderPrinted) {
+            Serial.println("frame,effect,gen_us,xfer_us,total_us,angle_deg,rpm");
+            csvHeaderPrinted = true;
+        }
 
-        // Calculate elapsed time since hall trigger (middle arm at 0°)
-        timestamp_t elapsed = now - lastHallTime;
-
-        // Calculate microseconds per degree
-        double microsecondsPerDegree = static_cast<double>(microsecondsPerRev) / 360.0;
-
-        // Calculate middle arm's current angle (0-359) - it triggers the hall sensor
-        double angleMiddle = fmod(static_cast<double>(elapsed) / microsecondsPerDegree, 360.0);
-
-        // Calculate inner and outer arm angles (phase offset from middle)
-        double angleInner = fmod(angleMiddle + INNER_ARM_PHASE, 360.0);
-        double angleOuter = fmod(angleMiddle + OUTER_ARM_PHASE, 360.0);
+        int64_t frameStart = timingStart();
+#endif
 
         // Create rendering context
         RenderContext ctx = {
@@ -226,6 +311,10 @@ void loop()
         for (int i = 0; i < MAX_BLOBS; i++) {
             updateBlob(blobs[i], now);
         }
+
+#if ENABLE_TIMING_INSTRUMENTATION
+        int64_t genStart = timingStart();
+#endif
 
         // Dispatch to current effect
         switch(effectManager.getCurrentEffect()) {
@@ -243,8 +332,33 @@ void loop()
                 break;
         }
 
+#if ENABLE_TIMING_INSTRUMENTATION
+        int64_t genTime = timingEnd(genStart);
+        int64_t xferStart = timingStart();
+#endif
+
         // Update the strip
         strip.Show();
+
+#if ENABLE_TIMING_INSTRUMENTATION
+        int64_t xferTime = timingEnd(xferStart);
+        int64_t totalTime = timingEnd(frameStart);
+
+        // Calculate RPM
+        double rpm = (microsecondsPerRev > 0) ? (60000000.0 / microsecondsPerRev) : 0.0;
+
+        // Output raw CSV: frame,effect,gen_us,xfer_us,total_us,angle_deg,rpm
+        Serial.printf("%u,%u,%lld,%lld,%lld,%.2f,%.1f\n",
+                      instrumentationFrameCount,
+                      effectManager.getCurrentEffect(),
+                      genTime,
+                      xferTime,
+                      totalTime,
+                      angleMiddle,
+                      rpm);
+
+        instrumentationFrameCount++;
+#endif
 
     } else {
         // Not ready yet - keep all LEDs off
