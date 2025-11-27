@@ -52,7 +52,7 @@ struct Blob {
 
 // Color palette: Citrus (oranges to greens)
 // HSL: Hue (0-1), Saturation (0-1), Lightness (0-1)
-HslColor citrusPalette[MAX_BLOBS] = {
+inline HslColor citrusPalette[MAX_BLOBS] = {
     HslColor(0.08f, 1.0f, 0.5f),    // Orange (30°)
     HslColor(0.15f, 0.9f, 0.5f),    // Yellow-orange (55°)
     HslColor(0.25f, 0.85f, 0.5f),   // Yellow-green (90°)
@@ -63,7 +63,7 @@ HslColor citrusPalette[MAX_BLOBS] = {
 /**
  * Update blob animation state using time-based sine waves
  */
-void updateBlob(Blob& blob, timestamp_t now) {
+inline void updateBlob(Blob& blob, timestamp_t now) {
     if (!blob.active) return;
 
     float timeInSeconds = now / 1000000.0f;
@@ -94,7 +94,7 @@ void updateBlob(Blob& blob, timestamp_t now) {
 /**
  * Check if angle is within blob's current arc (handles 360° wraparound)
  */
-bool isAngleInArc(double angle, const Blob& blob) {
+inline bool isAngleInArc(double angle, const Blob& blob) {
     if (!blob.active) return false;
 
     double arcEnd = blob.currentStartAngle + blob.currentArcSize;

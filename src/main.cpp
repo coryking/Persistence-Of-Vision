@@ -7,12 +7,9 @@
 #include "types.h"
 #include "RevolutionTimer.h"
 #include "blob_types.h"
-
-// Effect selection - comment/uncomment to switch effects
-//#define EFFECT_PER_ARM_BLOBS  // Original per-arm blobs
-//#define EFFECT_VIRTUAL_BLOBS  // Virtual display blobs
-//#define EFFECT_SOLID_ARMS     // Diagnostic: solid colors per arm
-#define EFFECT_RPM_ARC          // RPM-based growing arc with gradient (active)
+#include "EffectManager.h"
+#include "RenderContext.h"
+#include "effects.h"
 
 // Hardware Configuration
 #define NUM_LEDS 30
@@ -66,7 +63,8 @@ const RgbColor OUTER_ARM_COLOR(0, 0, 255);    // Blue (outer)
 const RgbColor OFF_COLOR(0, 0, 0);
 
 // Virtual display mapping (from POV_DISPLAY.md)
-const uint8_t VIRTUAL_TO_PHYSICAL[30] = {
+// Note: Could use PROGMEM to save RAM, but keeping in RAM for simpler access
+uint8_t VIRTUAL_TO_PHYSICAL[30] = {
      0, 10, 20,  // virtual 0-2
      1, 11, 21,  // virtual 3-5
      2, 12, 22,  // virtual 6-8
@@ -79,7 +77,7 @@ const uint8_t VIRTUAL_TO_PHYSICAL[30] = {
      9, 19, 29   // virtual 27-29
 };
 
-const uint8_t PHYSICAL_TO_VIRTUAL[30] = {
+uint8_t PHYSICAL_TO_VIRTUAL[30] = {
      0,  3,  6,  9, 12, 15, 18, 21, 24, 27,  // physical 0-9 (Arm A/Middle)
      1,  4,  7, 10, 13, 16, 19, 22, 25, 28,  // physical 10-19 (Arm B/Inner)
      2,  5,  8, 11, 14, 17, 20, 23, 26, 29   // physical 20-29 (Arm C/Outer)
@@ -87,6 +85,9 @@ const uint8_t PHYSICAL_TO_VIRTUAL[30] = {
 
 // Blob pool
 Blob blobs[MAX_BLOBS];
+
+// Effect manager
+EffectManager effectManager;
 
 /**
  * ISR handler for hall effect sensor
@@ -96,265 +97,6 @@ void IRAM_ATTR hallSensorISR(void* arg) {
     isrTimestamp = esp_timer_get_time();
     newRevolutionDetected = true;
 }
-
-// ============================================================================
-// RPM ARC EFFECT HELPERS
-// ============================================================================
-#ifdef EFFECT_RPM_ARC
-
-/**
- * Calculate RPM from microseconds per revolution
- */
-float calculateRPM(interval_t microsecondsPerRev) {
-    if (microsecondsPerRev == 0) return 0.0f;
-    return 60000000.0f / static_cast<float>(microsecondsPerRev);
-}
-
-/**
- * Map RPM to number of virtual pixels (1-30)
- */
-uint8_t rpmToPixelCount(float rpm) {
-    // Clamp RPM to valid range
-    if (rpm < RPM_MIN) rpm = RPM_MIN;
-    if (rpm > RPM_MAX) rpm = RPM_MAX;
-
-    // Linear mapping: 800 RPM = 1 pixel, 2500 RPM = 30 pixels
-    float normalized = (rpm - RPM_MIN) / (RPM_MAX - RPM_MIN);
-    uint8_t pixels = static_cast<uint8_t>(1.0f + normalized * 29.0f);
-
-    // Ensure we're in valid range
-    if (pixels < 1) pixels = 1;
-    if (pixels > 30) pixels = 30;
-
-    return pixels;
-}
-
-/**
- * Get color for a virtual pixel based on radial position (green to red gradient)
- * virtualPos: 0-29 (0 = innermost/green, 29 = outermost/red)
- */
-RgbColor getGradientColor(uint8_t virtualPos) {
-    // Normalize position to 0.0-1.0
-    float t = static_cast<float>(virtualPos) / 29.0f;
-
-    // HSV: Green (H=120°) to Red (H=0°)
-    // We go from 120° to 0°, which means 120 * (1-t)
-    float hue = 120.0f * (1.0f - t) / 360.0f;  // Convert to 0.0-1.0 range
-
-    HslColor hsl(hue, 1.0f, 0.5f);
-    return RgbColor(hsl);
-}
-
-/**
- * Check if angle is within the arc (handles 360° wraparound)
- * Arc is centered at ARC_CENTER_DEGREES with width ARC_WIDTH_DEGREES
- */
-bool isAngleInRpmArc(double angle) {
-    double halfWidth = ARC_WIDTH_DEGREES / 2.0;
-    double arcStart = ARC_CENTER_DEGREES - halfWidth;
-    double arcEnd = ARC_CENTER_DEGREES + halfWidth;
-
-    // Normalize angle to 0-360
-    angle = fmod(angle, 360.0);
-    if (angle < 0) angle += 360.0;
-
-    // Handle wraparound
-    if (arcStart < 0) {
-        // Arc wraps around 0 (e.g., 350° to 10°)
-        return (angle >= (arcStart + 360.0)) || (angle < arcEnd);
-    } else if (arcEnd > 360.0) {
-        // Arc wraps around 360
-        return (angle >= arcStart) || (angle < (arcEnd - 360.0));
-    } else {
-        // No wraparound
-        return (angle >= arcStart) && (angle < arcEnd);
-    }
-}
-
-#endif // EFFECT_RPM_ARC
-
-// ============================================================================
-// PER-ARM BLOBS EFFECT
-// ============================================================================
-#ifdef EFFECT_PER_ARM_BLOBS
-
-/**
- * Check if LED index is within blob's current radial extent (per-arm version)
- */
-bool isLedInBlob(uint16_t ledIndex, const Blob& blob) {
-    if (!blob.active) return false;
-
-    // Calculate radial range (LED indices covered by this blob)
-    float halfSize = blob.currentRadialSize / 2.0f;
-    float radialStart = blob.currentRadialCenter - halfSize;
-    float radialEnd = blob.currentRadialCenter + halfSize;
-
-    // Check if LED is within range (clipped to 0-9)
-    float ledFloat = static_cast<float>(ledIndex);
-    return (ledFloat >= radialStart) && (ledFloat < radialEnd);
-}
-
-/**
- * Initialize 5 blobs with random distribution across arms (per-arm version)
- */
-void setupPerArmBlobs() {
-    timestamp_t now = esp_timer_get_time();
-
-    // Blob configuration templates for variety
-    struct BlobTemplate {
-        // Angular parameters
-        float minAngularSize, maxAngularSize;
-        float angularDriftSpeed;
-        float angularSizeSpeed;
-        float angularWanderRange;
-        // Radial parameters
-        float minRadialSize, maxRadialSize;
-        float radialDriftSpeed;
-        float radialSizeSpeed;
-        float radialWanderRange;
-    } templates[3] = {
-        // Small, fast (angular 5-30°, radial 1-3 LEDs)
-        {5, 30, 0.5, 0.3, 60,    1, 3, 0.4, 0.25, 2.0},
-        // Medium (angular 10-60°, radial 2-5 LEDs)
-        {10, 60, 0.3, 0.2, 90,   2, 5, 0.25, 0.15, 2.5},
-        // Large, slow (angular 20-90°, radial 3-7 LEDs)
-        {20, 90, 0.15, 0.1, 120, 3, 7, 0.15, 0.1, 3.0}
-    };
-
-    // Distribute 5 blobs: 2 inner, 2 middle, 1 outer
-    uint8_t armAssignments[MAX_BLOBS] = {
-        ARM_INNER, ARM_INNER,
-        ARM_MIDDLE, ARM_MIDDLE,
-        ARM_OUTER
-    };
-
-    for (int i = 0; i < MAX_BLOBS; i++) {
-        blobs[i].active = true;
-        blobs[i].armIndex = armAssignments[i];
-        blobs[i].color = RgbColor(citrusPalette[i]);  // Convert HSL to RGB
-
-        // Use template based on blob index (varied sizes)
-        BlobTemplate& tmpl = templates[i % 3];
-
-        // Angular parameters
-        blobs[i].wanderCenter = (i * 72.0f);  // Spread evenly: 0, 72, 144, 216, 288
-        blobs[i].wanderRange = tmpl.angularWanderRange;
-        blobs[i].driftVelocity = tmpl.angularDriftSpeed;
-        blobs[i].minArcSize = tmpl.minAngularSize;
-        blobs[i].maxArcSize = tmpl.maxAngularSize;
-        blobs[i].sizeChangeRate = tmpl.angularSizeSpeed;
-
-        // Radial parameters
-        blobs[i].radialWanderCenter = 4.5f;  // Center of LED strip (0-9)
-        blobs[i].radialWanderRange = tmpl.radialWanderRange;
-        blobs[i].radialDriftVelocity = tmpl.radialDriftSpeed;
-        blobs[i].minRadialSize = tmpl.minRadialSize;
-        blobs[i].maxRadialSize = tmpl.maxRadialSize;
-        blobs[i].radialSizeChangeRate = tmpl.radialSizeSpeed;
-
-        blobs[i].birthTime = now;
-        blobs[i].deathTime = 0;  // Immortal for now
-    }
-}
-
-#endif // EFFECT_PER_ARM_BLOBS
-
-// ============================================================================
-// VIRTUAL DISPLAY BLOBS EFFECT
-// ============================================================================
-#ifdef EFFECT_VIRTUAL_BLOBS
-
-/**
- * Check if virtual LED position is within blob's current radial extent
- * (with wraparound support for 0-29 range)
- */
-bool isVirtualLedInBlob(uint8_t virtualPos, const Blob& blob) {
-    if (!blob.active) return false;
-
-    // Calculate radial range (virtual positions covered by this blob)
-    float halfSize = blob.currentRadialSize / 2.0f;
-    float radialStart = blob.currentRadialCenter - halfSize;
-    float radialEnd = blob.currentRadialCenter + halfSize;
-
-    // Check with wraparound handling
-    float pos = static_cast<float>(virtualPos);
-
-    // If range doesn't wrap around, simple check
-    if (radialStart >= 0 && radialEnd < 30) {
-        return (pos >= radialStart) && (pos < radialEnd);
-    }
-
-    // Handle wraparound (blob spans 29 → 0 boundary)
-    if (radialStart < 0) {
-        // Blob extends below 0, wraps to high end
-        return (pos >= (radialStart + 30)) || (pos < radialEnd);
-    }
-
-    if (radialEnd >= 30) {
-        // Blob extends above 29, wraps to low end
-        return (pos >= radialStart) || (pos < (radialEnd - 30));
-    }
-
-    return false;
-}
-
-/**
- * Initialize 5 blobs for virtual display (0-29 radial range)
- */
-void setupVirtualBlobs() {
-    timestamp_t now = esp_timer_get_time();
-
-    // Blob configuration templates for variety
-    struct BlobTemplate {
-        // Angular parameters
-        float minAngularSize, maxAngularSize;
-        float angularDriftSpeed;
-        float angularSizeSpeed;
-        float angularWanderRange;
-        // Radial parameters
-        float minRadialSize, maxRadialSize;
-        float radialDriftSpeed;
-        float radialSizeSpeed;
-        float radialWanderRange;
-    } templates[3] = {
-        // Small, fast (angular 5-30°, radial 2-6 LEDs)
-        {5, 30, 0.5, 0.3, 60,    2, 6, 0.4, 0.25, 4.0},
-        // Medium (angular 10-60°, radial 4-10 LEDs)
-        {10, 60, 0.3, 0.2, 90,   4, 10, 0.25, 0.15, 6.0},
-        // Large, slow (angular 20-90°, radial 6-14 LEDs)
-        {20, 90, 0.15, 0.1, 120, 6, 14, 0.15, 0.1, 8.0}
-    };
-
-    for (int i = 0; i < MAX_BLOBS; i++) {
-        blobs[i].active = true;
-        blobs[i].armIndex = 0;  // Unused for virtual blobs
-        blobs[i].color = RgbColor(citrusPalette[i]);  // Convert HSL to RGB
-
-        // Use template based on blob index (varied sizes)
-        BlobTemplate& tmpl = templates[i % 3];
-
-        // Angular parameters
-        blobs[i].wanderCenter = (i * 72.0f);  // Spread evenly: 0, 72, 144, 216, 288
-        blobs[i].wanderRange = tmpl.angularWanderRange;
-        blobs[i].driftVelocity = tmpl.angularDriftSpeed;
-        blobs[i].minArcSize = tmpl.minAngularSize;
-        blobs[i].maxArcSize = tmpl.maxAngularSize;
-        blobs[i].sizeChangeRate = tmpl.angularSizeSpeed;
-
-        // Radial parameters - now use full 0-29 range
-        blobs[i].radialWanderCenter = 14.5f;  // Center of virtual display (0-29)
-        blobs[i].radialWanderRange = tmpl.radialWanderRange;
-        blobs[i].radialDriftVelocity = tmpl.radialDriftSpeed;
-        blobs[i].minRadialSize = tmpl.minRadialSize;
-        blobs[i].maxRadialSize = tmpl.maxRadialSize;
-        blobs[i].radialSizeChangeRate = tmpl.radialSizeSpeed;
-
-        blobs[i].birthTime = now;
-        blobs[i].deathTime = 0;  // Immortal for now
-    }
-}
-
-#endif // EFFECT_VIRTUAL_BLOBS
 
 void setup()
 {
@@ -386,16 +128,24 @@ void setup()
     gpio_isr_handler_add(hallPin, hallSensorISR, nullptr);
     Serial.println("Hall effect sensor initialized on D1");
 
-    // Initialize blobs
-    Serial.println("Setting up blob animations...");
-#ifdef EFFECT_PER_ARM_BLOBS
+    // Initialize effect manager and load current effect
+    Serial.println("Initializing effect manager...");
+    effectManager.begin();
+    uint8_t currentEffect = effectManager.getCurrentEffect();
+    Serial.printf("Current effect: %d\n", currentEffect);
+
+    // Initialize all effects (all need to be ready for runtime switching)
+    Serial.println("Setting up all effects...");
     setupPerArmBlobs();
-    Serial.println("Per-arm blobs configured");
-#endif
-#ifdef EFFECT_VIRTUAL_BLOBS
+    Serial.println("  - Per-arm blobs configured");
     setupVirtualBlobs();
-    Serial.println("Virtual display blobs configured");
-#endif
+    Serial.println("  - Virtual blobs configured");
+    Serial.println("  - Solid arms diagnostic ready");
+    Serial.println("  - RPM arc effect ready");
+
+    // Save next effect for next boot/motor restart
+    effectManager.saveNextEffect();
+    Serial.println("Next effect queued for next power cycle");
 
     Serial.println("\n=== POV Display Ready ===");
     Serial.println("Configuration:");
@@ -411,6 +161,8 @@ void setup()
 
 void loop()
 {
+    static bool wasRotating = false;
+
     // Process new revolution detection from ISR
     if (newRevolutionDetected) {
         newRevolutionDetected = false;
@@ -422,8 +174,17 @@ void loop()
         }
     }
 
+    // Detect motor stop/start transitions
+    bool isRotating = revTimer.isCurrentlyRotating();
+    if (!wasRotating && isRotating) {
+        // Motor just started - switch to next effect
+        Serial.println("Motor started - switching to next effect");
+        effectManager.saveNextEffect();
+    }
+    wasRotating = isRotating;
+
     // Only display if warm-up complete and currently rotating
-    if (revTimer.isWarmupComplete() && revTimer.isCurrentlyRotating()) {
+    if (revTimer.isWarmupComplete() && isRotating) {
         // Get current time and timing parameters
         timestamp_t now = esp_timer_get_time();
         timestamp_t lastHallTime = revTimer.getLastTimestamp();
@@ -442,315 +203,38 @@ void loop()
         double angleInner = fmod(angleMiddle + INNER_ARM_PHASE, 360.0);
         double angleOuter = fmod(angleMiddle + OUTER_ARM_PHASE, 360.0);
 
-        // Update all blob animations
+        // Create rendering context
+        RenderContext ctx = {
+            .currentMicros = static_cast<unsigned long>(now),
+            .innerArmDegrees = static_cast<float>(angleInner),
+            .middleArmDegrees = static_cast<float>(angleMiddle),
+            .outerArmDegrees = static_cast<float>(angleOuter),
+            .microsecondsPerRev = microsecondsPerRev
+        };
+
+        // Update all blob animations (used by blob effects)
         for (int i = 0; i < MAX_BLOBS; i++) {
             updateBlob(blobs[i], now);
         }
 
-#ifdef EFFECT_PER_ARM_BLOBS
-        // ====================================================================
-        // PER-ARM RENDERING
-        // ====================================================================
-        // Render each LED individually based on angular and radial position
-        // Inner arm: LEDs 10-19
-        for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
-            RgbColor ledColor(0, 0, 0);
-
-            // Check all blobs assigned to inner arm
-            for (int i = 0; i < MAX_BLOBS; i++) {
-                if (blobs[i].active && blobs[i].armIndex == ARM_INNER) {
-                    // Check both angular and radial position
-                    if (isAngleInArc(angleInner, blobs[i]) && isLedInBlob(ledIdx, blobs[i])) {
-                        ledColor.R = min(255, ledColor.R + blobs[i].color.R);
-                        ledColor.G = min(255, ledColor.G + blobs[i].color.G);
-                        ledColor.B = min(255, ledColor.B + blobs[i].color.B);
-                    }
-                }
-            }
-            strip.SetPixelColor(INNER_ARM_START + ledIdx, ledColor);
-        }
-
-        // Middle arm: LEDs 0-9
-        for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
-            RgbColor ledColor(0, 0, 0);
-
-            // Check all blobs assigned to middle arm
-            for (int i = 0; i < MAX_BLOBS; i++) {
-                if (blobs[i].active && blobs[i].armIndex == ARM_MIDDLE) {
-                    // Check both angular and radial position
-                    if (isAngleInArc(angleMiddle, blobs[i]) && isLedInBlob(ledIdx, blobs[i])) {
-                        ledColor.R = min(255, ledColor.R + blobs[i].color.R);
-                        ledColor.G = min(255, ledColor.G + blobs[i].color.G);
-                        ledColor.B = min(255, ledColor.B + blobs[i].color.B);
-                    }
-                }
-            }
-            strip.SetPixelColor(MIDDLE_ARM_START + ledIdx, ledColor);
-        }
-
-        // Outer arm: LEDs 20-29
-        for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
-            RgbColor ledColor(0, 0, 0);
-
-            // Check all blobs assigned to outer arm
-            for (int i = 0; i < MAX_BLOBS; i++) {
-                if (blobs[i].active && blobs[i].armIndex == ARM_OUTER) {
-                    // Check both angular and radial position
-                    if (isAngleInArc(angleOuter, blobs[i]) && isLedInBlob(ledIdx, blobs[i])) {
-                        ledColor.R = min(255, ledColor.R + blobs[i].color.R);
-                        ledColor.G = min(255, ledColor.G + blobs[i].color.G);
-                        ledColor.B = min(255, ledColor.B + blobs[i].color.B);
-                    }
-                }
-            }
-            strip.SetPixelColor(OUTER_ARM_START + ledIdx, ledColor);
+        // Dispatch to current effect
+        switch(effectManager.getCurrentEffect()) {
+            case 0:
+                renderPerArmBlobs(ctx);
+                break;
+            case 1:
+                renderVirtualBlobs(ctx);
+                break;
+            case 2:
+                renderSolidArms(ctx);
+                break;
+            case 3:
+                renderRpmArc(ctx);
+                break;
         }
 
         // Update the strip
         strip.Show();
-
-#endif // EFFECT_PER_ARM_BLOBS
-
-#ifdef EFFECT_VIRTUAL_BLOBS
-        // ====================================================================
-        // VIRTUAL DISPLAY RENDERING
-        // ====================================================================
-        // Render using virtual addressing - each LED checks against all blobs
-
-        // Inner arm: LEDs 10-19
-        for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
-            uint16_t physicalLed = INNER_ARM_START + ledIdx;
-            uint8_t virtualPos = PHYSICAL_TO_VIRTUAL[physicalLed];
-            RgbColor ledColor(0, 0, 0);
-
-            // Check ALL blobs (no arm filtering)
-            for (int i = 0; i < MAX_BLOBS; i++) {
-                if (blobs[i].active &&
-                    isAngleInArc(angleInner, blobs[i]) &&
-                    isVirtualLedInBlob(virtualPos, blobs[i])) {
-                    ledColor.R = min(255, ledColor.R + blobs[i].color.R);
-                    ledColor.G = min(255, ledColor.G + blobs[i].color.G);
-                    ledColor.B = min(255, ledColor.B + blobs[i].color.B);
-                }
-            }
-            strip.SetPixelColor(physicalLed, ledColor);
-        }
-
-        // Middle arm: LEDs 0-9
-        for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
-            uint16_t physicalLed = MIDDLE_ARM_START + ledIdx;
-            uint8_t virtualPos = PHYSICAL_TO_VIRTUAL[physicalLed];
-            RgbColor ledColor(0, 0, 0);
-
-            // Check ALL blobs (no arm filtering)
-            for (int i = 0; i < MAX_BLOBS; i++) {
-                if (blobs[i].active &&
-                    isAngleInArc(angleMiddle, blobs[i]) &&
-                    isVirtualLedInBlob(virtualPos, blobs[i])) {
-                    ledColor.R = min(255, ledColor.R + blobs[i].color.R);
-                    ledColor.G = min(255, ledColor.G + blobs[i].color.G);
-                    ledColor.B = min(255, ledColor.B + blobs[i].color.B);
-                }
-            }
-            strip.SetPixelColor(physicalLed, ledColor);
-        }
-
-        // Outer arm: LEDs 20-29
-        for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
-            uint16_t physicalLed = OUTER_ARM_START + ledIdx;
-            uint8_t virtualPos = PHYSICAL_TO_VIRTUAL[physicalLed];
-            RgbColor ledColor(0, 0, 0);
-
-            // Check ALL blobs (no arm filtering)
-            for (int i = 0; i < MAX_BLOBS; i++) {
-                if (blobs[i].active &&
-                    isAngleInArc(angleOuter, blobs[i]) &&
-                    isVirtualLedInBlob(virtualPos, blobs[i])) {
-                    ledColor.R = min(255, ledColor.R + blobs[i].color.R);
-                    ledColor.G = min(255, ledColor.G + blobs[i].color.G);
-                    ledColor.B = min(255, ledColor.B + blobs[i].color.B);
-                }
-            }
-            strip.SetPixelColor(physicalLed, ledColor);
-        }
-
-        // Update the strip
-        strip.Show();
-
-#endif // EFFECT_VIRTUAL_BLOBS
-
-#ifdef EFFECT_SOLID_ARMS
-        // ====================================================================
-        // DIAGNOSTIC TEST PATTERN - 20 Discrete Tests
-        // ====================================================================
-        // 360° divided into 20 patterns of 18° each:
-        //
-        // Patterns 0-3 (0-71°): Full RGB Combination Tests (all LEDs)
-        // Patterns 4-7 (72-143°): Striped Alignment Tests (positions 0,4,9)
-        // Patterns 8-11 (144-215°): Arm A (Inner) individual color tests
-        // Patterns 12-15 (216-287°): Arm B (Middle) individual color tests
-        // Patterns 16-19 (288-359°): Arm C (Outer) individual color tests
-
-        const RgbColor WHITE(255, 255, 255);
-
-        // Lambda to render one arm based on its current angle
-        auto renderArm = [&](double angle, uint16_t armStart, uint8_t armIndex) {
-            // Normalize angle to 0-359
-            double normAngle = fmod(angle, 360.0);
-            if (normAngle < 0) normAngle += 360.0;
-
-            // Determine pattern (0-19)
-            uint8_t pattern = (uint8_t)(normAngle / 18.0);
-            if (pattern > 19) pattern = 19; // Safety clamp
-
-            // Determine what this arm should show
-            RgbColor armColor = OFF_COLOR;
-            bool fullLeds = true; // true = all LEDs, false = only 0,4,9
-
-            if (pattern <= 3) {
-                // ====== Patterns 0-3: Full RGB Combinations ======
-                fullLeds = true;
-                RgbColor colors[4][3] = {
-                    // Pattern 0: A=red, B=green, C=blue
-                    {RgbColor(255, 0, 0), RgbColor(0, 255, 0), RgbColor(0, 0, 255)},
-                    // Pattern 1: A=green, B=blue, C=red
-                    {RgbColor(0, 255, 0), RgbColor(0, 0, 255), RgbColor(255, 0, 0)},
-                    // Pattern 2: A=blue, B=red, C=green
-                    {RgbColor(0, 0, 255), RgbColor(255, 0, 0), RgbColor(0, 255, 0)},
-                    // Pattern 3: All white
-                    {WHITE, WHITE, WHITE}
-                };
-                armColor = colors[pattern][armIndex];
-            }
-            else if (pattern <= 7) {
-                // ====== Patterns 4-7: Striped Alignment Tests ======
-                fullLeds = false;
-                RgbColor colors[4][3] = {
-                    // Pattern 4: A=red, B=green, C=blue (striped)
-                    {RgbColor(255, 0, 0), RgbColor(0, 255, 0), RgbColor(0, 0, 255)},
-                    // Pattern 5: A=green, B=blue, C=red (striped)
-                    {RgbColor(0, 255, 0), RgbColor(0, 0, 255), RgbColor(255, 0, 0)},
-                    // Pattern 6: A=blue, B=red, C=green (striped)
-                    {RgbColor(0, 0, 255), RgbColor(255, 0, 0), RgbColor(0, 255, 0)},
-                    // Pattern 7: All white (striped)
-                    {WHITE, WHITE, WHITE}
-                };
-                armColor = colors[pattern - 4][armIndex];
-            }
-            else if (pattern <= 11) {
-                // ====== Patterns 8-11: Arm A (Inner) Individual Tests ======
-                fullLeds = true;
-                if (armIndex == 0) { // Arm A only
-                    RgbColor colors[4] = {
-                        RgbColor(255, 0, 0),   // Pattern 8: red
-                        RgbColor(0, 255, 0),   // Pattern 9: green
-                        RgbColor(0, 0, 255),   // Pattern 10: blue
-                        WHITE                  // Pattern 11: white
-                    };
-                    armColor = colors[pattern - 8];
-                }
-                // Other arms stay off
-            }
-            else if (pattern <= 15) {
-                // ====== Patterns 12-15: Arm B (Middle) Individual Tests ======
-                fullLeds = true;
-                if (armIndex == 1) { // Arm B only
-                    RgbColor colors[4] = {
-                        RgbColor(255, 0, 0),   // Pattern 12: red
-                        RgbColor(0, 255, 0),   // Pattern 13: green
-                        RgbColor(0, 0, 255),   // Pattern 14: blue
-                        WHITE                  // Pattern 15: white
-                    };
-                    armColor = colors[pattern - 12];
-                }
-                // Other arms stay off
-            }
-            else {
-                // ====== Patterns 16-19: Arm C (Outer) Individual Tests ======
-                fullLeds = true;
-                if (armIndex == 2) { // Arm C only
-                    RgbColor colors[4] = {
-                        RgbColor(255, 0, 0),   // Pattern 16: red
-                        RgbColor(0, 255, 0),   // Pattern 17: green
-                        RgbColor(0, 0, 255),   // Pattern 18: blue
-                        WHITE                  // Pattern 19: white
-                    };
-                    armColor = colors[pattern - 16];
-                }
-                // Other arms stay off
-            }
-
-            // Render LEDs
-            for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
-                if (fullLeds) {
-                    // Light all LEDs
-                    strip.SetPixelColor(armStart + ledIdx, armColor);
-                } else {
-                    // Striped pattern - only positions 0, 4, 9
-                    if (ledIdx == 0 || ledIdx == 4 || ledIdx == 9) {
-                        strip.SetPixelColor(armStart + ledIdx, armColor);
-                    } else {
-                        strip.SetPixelColor(armStart + ledIdx, OFF_COLOR);
-                    }
-                }
-            }
-        };
-
-        // Render each arm based on its current angle
-        // Arm A = Inner (index 0, LEDs 10-19)
-        renderArm(angleInner, INNER_ARM_START, 0);
-        // Arm B = Middle (index 1, LEDs 0-9)
-        renderArm(angleMiddle, MIDDLE_ARM_START, 1);
-        // Arm C = Outer (index 2, LEDs 20-29)
-        renderArm(angleOuter, OUTER_ARM_START, 2);
-
-        // Update the strip
-        strip.Show();
-
-#endif // EFFECT_SOLID_ARMS
-
-#ifdef EFFECT_RPM_ARC
-        // ====================================================================
-        // RPM-BASED GROWING ARC EFFECT
-        // ====================================================================
-        // Calculate current RPM and map to pixel count
-        float currentRPM = calculateRPM(microsecondsPerRev);
-        uint8_t pixelCount = rpmToPixelCount(currentRPM);
-
-        // Render each arm independently
-        auto renderRpmArm = [&](double angle, uint16_t armStart) {
-            // Check if this arm is in the 20-degree arc centered at 0°
-            if (isAngleInRpmArc(angle)) {
-                // Light up pixels from innermost (virtual 0) to pixelCount-1
-                for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
-                    uint16_t physicalLed = armStart + ledIdx;
-                    uint8_t virtualPos = PHYSICAL_TO_VIRTUAL[physicalLed];
-
-                    // Only light pixels within the RPM-based range
-                    if (virtualPos < pixelCount) {
-                        RgbColor color = getGradientColor(virtualPos);
-                        strip.SetPixelColor(physicalLed, color);
-                    } else {
-                        strip.SetPixelColor(physicalLed, OFF_COLOR);
-                    }
-                }
-            } else {
-                // Outside arc - turn all LEDs off
-                for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
-                    strip.SetPixelColor(armStart + ledIdx, OFF_COLOR);
-                }
-            }
-        };
-
-        // Render all three arms
-        renderRpmArm(angleInner, INNER_ARM_START);
-        renderRpmArm(angleMiddle, MIDDLE_ARM_START);
-        renderRpmArm(angleOuter, OUTER_ARM_START);
-
-        // Update the strip
-        strip.Show();
-
-#endif // EFFECT_RPM_ARC
 
     } else {
         // Not ready yet - keep all LEDs off
