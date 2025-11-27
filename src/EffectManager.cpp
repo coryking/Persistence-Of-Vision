@@ -16,6 +16,12 @@ uint8_t EffectManager::getCurrentEffect() const {
     return currentEffect;
 }
 
+void EffectManager::setCurrentEffect(uint8_t effect) {
+    if (effect < NUM_EFFECTS) {
+        currentEffect = effect;
+    }
+}
+
 void EffectManager::saveNextEffect() {
     // Increment effect counter, wrap around at NUM_EFFECTS
     uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;

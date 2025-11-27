@@ -22,7 +22,7 @@
 #define HALL_PIN D1
 
 // ===== TIMING INSTRUMENTATION CONFIGURATION =====
-#define ENABLE_TIMING_INSTRUMENTATION false // Set true to enable CSV timing output
+#define ENABLE_TIMING_INSTRUMENTATION true  // Set true to enable CSV timing output
 #define TEST_MODE true                       // Set true to simulate rotation without hardware
 #define TEST_RPM 2800.0                      // Simulated RPM (try 700, 1200, 1940, 2800)
 #define TEST_VARY_RPM false                  // Oscillate between 700-2800 RPM
@@ -213,6 +213,13 @@ void setup()
     // Initialize effect manager and load current effect
     Serial.println("Initializing effect manager...");
     effectManager.begin();
+
+#ifdef ENABLE_DETAILED_TIMING
+    // Override to force VirtualBlobs (effect 1) for profiling
+    effectManager.setCurrentEffect(1);
+    Serial.println("PROFILING MODE: Forcing effect 1 (VirtualBlobs)");
+#endif
+
     uint8_t currentEffect = effectManager.getCurrentEffect();
     Serial.printf("Current effect: %d\n", currentEffect);
 

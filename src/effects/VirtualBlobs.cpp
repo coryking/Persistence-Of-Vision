@@ -111,60 +111,267 @@ void setupVirtualBlobs() {
 void renderVirtualBlobs(const RenderContext& ctx) {
     // Render using virtual addressing - each LED checks against all blobs
 
+#ifdef ENABLE_DETAILED_TIMING
+    // Track cumulative time for different operations
+    int64_t totalAngleCheckTime = 0;
+    int64_t totalRadialCheckTime = 0;
+    int64_t totalColorBlendTime = 0;
+    int64_t totalArrayLookupTime = 0;
+    int64_t totalRgbConstructTime = 0;
+    int64_t totalSetPixelTime = 0;
+    int64_t totalTimingOverhead = 0;
+    int64_t innerArmStart = esp_timer_get_time();
+
+    // Measure the cost of measurement itself
+    int64_t timingTest1 = esp_timer_get_time();
+    int64_t timingTest2 = esp_timer_get_time();
+    int64_t singleTimingCallCost = timingTest2 - timingTest1;
+#endif
+
     // Inner arm: LEDs 10-19
     for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
+#ifdef ENABLE_DETAILED_TIMING
+        int64_t lookupStart = esp_timer_get_time();
+#endif
         uint16_t physicalLed = INNER_ARM_START + ledIdx;
         uint8_t virtualPos = PHYSICAL_TO_VIRTUAL[physicalLed];
+#ifdef ENABLE_DETAILED_TIMING
+        totalArrayLookupTime += esp_timer_get_time() - lookupStart;
+
+        int64_t rgbStart = esp_timer_get_time();
+#endif
         RgbColor ledColor(0, 0, 0);
+#ifdef ENABLE_DETAILED_TIMING
+        totalRgbConstructTime += esp_timer_get_time() - rgbStart;
+#endif
 
         // Check ALL blobs (no arm filtering)
         for (int i = 0; i < MAX_BLOBS; i++) {
-            if (blobs[i].active &&
-                isAngleInArc(ctx.innerArmDegrees, blobs[i]) &&
-                isVirtualLedInBlob(virtualPos, blobs[i])) {
-                ledColor.R = min(255, ledColor.R + blobs[i].color.R);
-                ledColor.G = min(255, ledColor.G + blobs[i].color.G);
-                ledColor.B = min(255, ledColor.B + blobs[i].color.B);
+#ifdef ENABLE_DETAILED_TIMING
+            int64_t angleStart = esp_timer_get_time();
+#endif
+            bool angleInArc = blobs[i].active && isAngleInArc(ctx.innerArmDegrees, blobs[i]);
+#ifdef ENABLE_DETAILED_TIMING
+            int64_t angleEnd = esp_timer_get_time();
+            totalAngleCheckTime += angleEnd - angleStart;
+            totalTimingOverhead += singleTimingCallCost * 2; // Two get_time calls
+#endif
+
+            if (angleInArc) {
+#ifdef ENABLE_DETAILED_TIMING
+                int64_t radialStart = esp_timer_get_time();
+#endif
+                bool radialMatch = isVirtualLedInBlob(virtualPos, blobs[i]);
+#ifdef ENABLE_DETAILED_TIMING
+                int64_t radialEnd = esp_timer_get_time();
+                totalRadialCheckTime += radialEnd - radialStart;
+                totalTimingOverhead += singleTimingCallCost * 2;
+#endif
+
+                if (radialMatch) {
+#ifdef ENABLE_DETAILED_TIMING
+                    int64_t blendStart = esp_timer_get_time();
+#endif
+                    ledColor.R = min(255, ledColor.R + blobs[i].color.R);
+                    ledColor.G = min(255, ledColor.G + blobs[i].color.G);
+                    ledColor.B = min(255, ledColor.B + blobs[i].color.B);
+#ifdef ENABLE_DETAILED_TIMING
+                    int64_t blendEnd = esp_timer_get_time();
+                    totalColorBlendTime += blendEnd - blendStart;
+                    totalTimingOverhead += singleTimingCallCost * 2;
+#endif
+                }
             }
         }
+#ifdef ENABLE_DETAILED_TIMING
+        int64_t setPixelStart = esp_timer_get_time();
+#endif
         strip.SetPixelColor(physicalLed, ledColor);
+#ifdef ENABLE_DETAILED_TIMING
+        totalSetPixelTime += esp_timer_get_time() - setPixelStart;
+#endif
     }
+
+#ifdef ENABLE_DETAILED_TIMING
+    int64_t innerArmTime = esp_timer_get_time() - innerArmStart;
+    int64_t middleArmStart = esp_timer_get_time();
+#endif
 
     // Middle arm: LEDs 0-9
     for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
+#ifdef ENABLE_DETAILED_TIMING
+        int64_t lookupStart = esp_timer_get_time();
+#endif
         uint16_t physicalLed = MIDDLE_ARM_START + ledIdx;
         uint8_t virtualPos = PHYSICAL_TO_VIRTUAL[physicalLed];
+#ifdef ENABLE_DETAILED_TIMING
+        totalArrayLookupTime += esp_timer_get_time() - lookupStart;
+        int64_t rgbStart = esp_timer_get_time();
+#endif
         RgbColor ledColor(0, 0, 0);
+#ifdef ENABLE_DETAILED_TIMING
+        totalRgbConstructTime += esp_timer_get_time() - rgbStart;
+#endif
 
         // Check ALL blobs (no arm filtering)
         for (int i = 0; i < MAX_BLOBS; i++) {
-            if (blobs[i].active &&
-                isAngleInArc(ctx.middleArmDegrees, blobs[i]) &&
-                isVirtualLedInBlob(virtualPos, blobs[i])) {
-                ledColor.R = min(255, ledColor.R + blobs[i].color.R);
-                ledColor.G = min(255, ledColor.G + blobs[i].color.G);
-                ledColor.B = min(255, ledColor.B + blobs[i].color.B);
+#ifdef ENABLE_DETAILED_TIMING
+            int64_t angleStart = esp_timer_get_time();
+#endif
+            bool angleInArc = blobs[i].active && isAngleInArc(ctx.middleArmDegrees, blobs[i]);
+#ifdef ENABLE_DETAILED_TIMING
+            int64_t angleEnd = esp_timer_get_time();
+            totalAngleCheckTime += angleEnd - angleStart;
+            totalTimingOverhead += singleTimingCallCost * 2;
+#endif
+
+            if (angleInArc) {
+#ifdef ENABLE_DETAILED_TIMING
+                int64_t radialStart = esp_timer_get_time();
+#endif
+                bool radialMatch = isVirtualLedInBlob(virtualPos, blobs[i]);
+#ifdef ENABLE_DETAILED_TIMING
+                int64_t radialEnd = esp_timer_get_time();
+                totalRadialCheckTime += radialEnd - radialStart;
+                totalTimingOverhead += singleTimingCallCost * 2;
+#endif
+
+                if (radialMatch) {
+#ifdef ENABLE_DETAILED_TIMING
+                    int64_t blendStart = esp_timer_get_time();
+#endif
+                    ledColor.R = min(255, ledColor.R + blobs[i].color.R);
+                    ledColor.G = min(255, ledColor.G + blobs[i].color.G);
+                    ledColor.B = min(255, ledColor.B + blobs[i].color.B);
+#ifdef ENABLE_DETAILED_TIMING
+                    int64_t blendEnd = esp_timer_get_time();
+                    totalColorBlendTime += blendEnd - blendStart;
+                    totalTimingOverhead += singleTimingCallCost * 2;
+#endif
+                }
             }
         }
+#ifdef ENABLE_DETAILED_TIMING
+        int64_t setPixelStart = esp_timer_get_time();
+#endif
         strip.SetPixelColor(physicalLed, ledColor);
+#ifdef ENABLE_DETAILED_TIMING
+        totalSetPixelTime += esp_timer_get_time() - setPixelStart;
+#endif
     }
+
+#ifdef ENABLE_DETAILED_TIMING
+    int64_t middleArmTime = esp_timer_get_time() - middleArmStart;
+    int64_t outerArmStart = esp_timer_get_time();
+#endif
 
     // Outer arm: LEDs 20-29
     for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
+#ifdef ENABLE_DETAILED_TIMING
+        int64_t lookupStart = esp_timer_get_time();
+#endif
         uint16_t physicalLed = OUTER_ARM_START + ledIdx;
         uint8_t virtualPos = PHYSICAL_TO_VIRTUAL[physicalLed];
+#ifdef ENABLE_DETAILED_TIMING
+        totalArrayLookupTime += esp_timer_get_time() - lookupStart;
+        int64_t rgbStart = esp_timer_get_time();
+#endif
         RgbColor ledColor(0, 0, 0);
+#ifdef ENABLE_DETAILED_TIMING
+        totalRgbConstructTime += esp_timer_get_time() - rgbStart;
+#endif
 
         // Check ALL blobs (no arm filtering)
         for (int i = 0; i < MAX_BLOBS; i++) {
-            if (blobs[i].active &&
-                isAngleInArc(ctx.outerArmDegrees, blobs[i]) &&
-                isVirtualLedInBlob(virtualPos, blobs[i])) {
-                ledColor.R = min(255, ledColor.R + blobs[i].color.R);
-                ledColor.G = min(255, ledColor.G + blobs[i].color.G);
-                ledColor.B = min(255, ledColor.B + blobs[i].color.B);
+#ifdef ENABLE_DETAILED_TIMING
+            int64_t angleStart = esp_timer_get_time();
+#endif
+            bool angleInArc = blobs[i].active && isAngleInArc(ctx.outerArmDegrees, blobs[i]);
+#ifdef ENABLE_DETAILED_TIMING
+            int64_t angleEnd = esp_timer_get_time();
+            totalAngleCheckTime += angleEnd - angleStart;
+            totalTimingOverhead += singleTimingCallCost * 2;
+#endif
+
+            if (angleInArc) {
+#ifdef ENABLE_DETAILED_TIMING
+                int64_t radialStart = esp_timer_get_time();
+#endif
+                bool radialMatch = isVirtualLedInBlob(virtualPos, blobs[i]);
+#ifdef ENABLE_DETAILED_TIMING
+                int64_t radialEnd = esp_timer_get_time();
+                totalRadialCheckTime += radialEnd - radialStart;
+                totalTimingOverhead += singleTimingCallCost * 2;
+#endif
+
+                if (radialMatch) {
+#ifdef ENABLE_DETAILED_TIMING
+                    int64_t blendStart = esp_timer_get_time();
+#endif
+                    ledColor.R = min(255, ledColor.R + blobs[i].color.R);
+                    ledColor.G = min(255, ledColor.G + blobs[i].color.G);
+                    ledColor.B = min(255, ledColor.B + blobs[i].color.B);
+#ifdef ENABLE_DETAILED_TIMING
+                    int64_t blendEnd = esp_timer_get_time();
+                    totalColorBlendTime += blendEnd - blendStart;
+                    totalTimingOverhead += singleTimingCallCost * 2;
+#endif
+                }
             }
         }
+#ifdef ENABLE_DETAILED_TIMING
+        int64_t setPixelStart = esp_timer_get_time();
+#endif
         strip.SetPixelColor(physicalLed, ledColor);
+#ifdef ENABLE_DETAILED_TIMING
+        totalSetPixelTime += esp_timer_get_time() - setPixelStart;
+#endif
     }
+
+#ifdef ENABLE_DETAILED_TIMING
+    int64_t outerArmTime = esp_timer_get_time() - outerArmStart;
+
+    // Print detailed breakdown (only every ~100 frames to avoid serial spam)
+    static uint32_t detailFrameCount = 0;
+    if (++detailFrameCount % 100 == 0) {
+        int64_t totalTime = innerArmTime + middleArmTime + outerArmTime;
+        int64_t measuredTime = totalAngleCheckTime + totalRadialCheckTime + totalColorBlendTime +
+                               totalArrayLookupTime + totalRgbConstructTime + totalSetPixelTime +
+                               totalTimingOverhead;
+        int64_t unmeasuredOverhead = totalTime - measuredTime;
+
+        Serial.println("\n=== VirtualBlobs Profiling Report (Single Frame) ===");
+        Serial.println("UNITS: All times in microseconds (μs), percentages of total render time");
+        Serial.println();
+
+        Serial.println("--- Per-Arm Timing ---");
+        Serial.printf("Inner Arm:  %4lld μs  (%5.1f%%)\n", innerArmTime, (innerArmTime * 100.0) / totalTime);
+        Serial.printf("Middle Arm: %4lld μs  (%5.1f%%)\n", middleArmTime, (middleArmTime * 100.0) / totalTime);
+        Serial.printf("Outer Arm:  %4lld μs  (%5.1f%%)\n", outerArmTime, (outerArmTime * 100.0) / totalTime);
+        Serial.printf("TOTAL:      %4lld μs\n", totalTime);
+        Serial.println();
+
+        Serial.println("--- Detailed Operation Breakdown ---");
+        Serial.printf("Angle checks (isAngleInArc):        %4lld μs  (%5.1f%%)  [~150 calls]\n",
+                      totalAngleCheckTime, (totalAngleCheckTime * 100.0) / totalTime);
+        Serial.printf("Radial checks (isVirtualLedInBlob): %4lld μs  (%5.1f%%)\n",
+                      totalRadialCheckTime, (totalRadialCheckTime * 100.0) / totalTime);
+        Serial.printf("Color blends (RGB addition):        %4lld μs  (%5.1f%%)\n",
+                      totalColorBlendTime, (totalColorBlendTime * 100.0) / totalTime);
+        Serial.printf("Array lookups (PHYSICAL_TO_VIRTUAL): %4lld μs  (%5.1f%%)  [30 calls]\n",
+                      totalArrayLookupTime, (totalArrayLookupTime * 100.0) / totalTime);
+        Serial.printf("RgbColor construction:              %4lld μs  (%5.1f%%)  [30 calls]\n",
+                      totalRgbConstructTime, (totalRgbConstructTime * 100.0) / totalTime);
+        Serial.printf("SetPixelColor calls:                %4lld μs  (%5.1f%%)  [30 calls]\n",
+                      totalSetPixelTime, (totalSetPixelTime * 100.0) / totalTime);
+        Serial.printf("Timing instrumentation overhead:    %4lld μs  (%5.1f%%)\n",
+                      totalTimingOverhead, (totalTimingOverhead * 100.0) / totalTime);
+        Serial.printf("Unmeasured (loop/other overhead):   %4lld μs  (%5.1f%%)\n",
+                      unmeasuredOverhead, (unmeasuredOverhead * 100.0) / totalTime);
+        Serial.println();
+
+        Serial.printf("Measurement overhead per esp_timer_get_time() call: %lld μs\n", singleTimingCallCost);
+        Serial.println("====================================================\n");
+    }
+#endif
 }

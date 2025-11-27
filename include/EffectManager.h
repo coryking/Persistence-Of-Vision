@@ -32,6 +32,13 @@ public:
     uint8_t getCurrentEffect() const;
 
     /**
+     * @brief Set the currently active effect (for testing/profiling)
+     *
+     * @param effect Effect index to set (0-3)
+     */
+    void setCurrentEffect(uint8_t effect);
+
+    /**
      * @brief Increment to next effect and save to NVS for next power cycle
      *
      * Increments the effect counter (wrapping from 3 back to 0) and persists
