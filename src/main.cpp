@@ -4,8 +4,12 @@
 #include <NeoPixelBus.h>
 #include <NeoPixelBusLg.h>
 #include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 #include "types.h"
 #include "RevolutionTimer.h"
+#include "HallEffectDriver.h"
 #include "blob_types.h"
 #include "EffectManager.h"
 #include "RenderContext.h"
@@ -52,9 +56,8 @@ NeoPixelBusLg<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(NUM_LEDS);
 // Revolution timing
 RevolutionTimer revTimer(WARMUP_REVOLUTIONS, ROLLING_AVERAGE_SIZE, ROTATION_TIMEOUT_US);
 
-// ISR state
-volatile bool newRevolutionDetected = false;
-volatile timestamp_t isrTimestamp = 0;
+// Hall effect sensor driver
+HallEffectDriver hallDriver(HALL_PIN);
 
 // Arm colors (solid RGB for visibility)
 const RgbColor INNER_ARM_COLOR(255, 0, 0);    // Red (inner)
@@ -90,12 +93,25 @@ Blob blobs[MAX_BLOBS];
 EffectManager effectManager;
 
 /**
- * ISR handler for hall effect sensor
- * Captures timestamp immediately and sets flag for processing in main loop
+ * FreeRTOS task for processing hall sensor events
+ * Runs at high priority to process timestamps immediately
  */
-void IRAM_ATTR hallSensorISR(void* arg) {
-    isrTimestamp = esp_timer_get_time();
-    newRevolutionDetected = true;
+void hallProcessingTask(void* pvParameters) {
+    HallEffectEvent event;
+    QueueHandle_t queue = hallDriver.getEventQueue();
+
+    while (1) {
+        // Block waiting for hall sensor event
+        if (xQueueReceive(queue, &event, portMAX_DELAY) == pdPASS) {
+            // Process timestamp immediately
+            revTimer.addTimestamp(event.triggerTimestamp);
+
+            // Print warm-up complete message once
+            if (revTimer.isWarmupComplete() && revTimer.getRevolutionCount() == WARMUP_REVOLUTIONS) {
+                Serial.println("Warm-up complete! Display active.");
+            }
+        }
+    }
 }
 
 void setup()
@@ -112,21 +128,26 @@ void setup()
     strip.Show();
     Serial.println("Strip initialized");
 
-    // Setup hall effect sensor GPIO and ISR
+    // Setup hall effect sensor driver
     Serial.println("Setting up hall effect sensor...");
-    gpio_num_t hallPin = static_cast<gpio_num_t>(HALL_PIN);
-
-    gpio_config_t io_conf;
-    io_conf.intr_type = GPIO_INTR_NEGEDGE;          // Triggers on FALLING EDGE
-    io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pin_bit_mask = (1ULL << HALL_PIN);
-    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;        // Pull-up enabled
-    gpio_config(&io_conf);
-
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add(hallPin, hallSensorISR, nullptr);
+    hallDriver.start();
     Serial.println("Hall effect sensor initialized on D1");
+
+    // Start hall processing task (priority 3 = higher than loop which runs at priority 1)
+    BaseType_t taskCreated = xTaskCreate(
+        hallProcessingTask,     // Task function
+        "hallProcessor",        // Task name
+        2048,                   // Stack size (bytes)
+        nullptr,                // Task parameters
+        3,                      // Priority (higher than loop's default priority 1)
+        nullptr                 // Task handle (not needed)
+    );
+
+    if (taskCreated != pdPASS) {
+        Serial.println("ERROR: Failed to create hall processing task");
+        while (1) { delay(1000); } // Halt
+    }
+    Serial.println("Hall processing task started (priority 3)");
 
     // Initialize effect manager and load current effect
     Serial.println("Initializing effect manager...");
@@ -162,17 +183,6 @@ void setup()
 void loop()
 {
     static bool wasRotating = false;
-
-    // Process new revolution detection from ISR
-    if (newRevolutionDetected) {
-        newRevolutionDetected = false;
-        revTimer.addTimestamp(isrTimestamp);
-
-        // Optional: Print status after warm-up complete
-        if (revTimer.isWarmupComplete() && revTimer.getRevolutionCount() == WARMUP_REVOLUTIONS) {
-            Serial.println("Warm-up complete! Display active.");
-        }
-    }
 
     // Detect motor stop/start transitions
     bool isRotating = revTimer.isCurrentlyRotating();
