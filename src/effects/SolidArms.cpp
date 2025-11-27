@@ -2,15 +2,11 @@
 #include <NeoPixelBus.h>
 #include <NeoPixelBusLg.h>
 #include <cmath>
+#include "pixel_utils.h"
+#include "hardware_config.h"
 
 // External references to globals from main.cpp
-extern NeoPixelBusLg<DotStarBgrFeature, DotStarSpi40MhzMethod> strip;
-
-// Hardware configuration (from main.cpp)
-constexpr uint16_t LEDS_PER_ARM = 10;
-constexpr uint16_t INNER_ARM_START = 10;
-constexpr uint16_t MIDDLE_ARM_START = 0;
-constexpr uint16_t OUTER_ARM_START = 20;
+extern NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip;
 
 // Colors
 static const RgbColor OFF_COLOR(0, 0, 0);
@@ -28,6 +24,9 @@ static const RgbColor WHITE(255, 255, 255);
  * Patterns 16-19 (288-359°): Arm C (Outer) individual color tests
  */
 void renderSolidArms(const RenderContext& ctx) {
+    // Get direct buffer access for fast pixel writes
+    uint8_t* buffer = strip.Pixels();
+
     // Lambda to render one arm based on its current angle
     auto renderArm = [&](double angle, uint16_t armStart, uint8_t armIndex) {
         // Normalize angle to 0-359
@@ -116,16 +115,16 @@ void renderSolidArms(const RenderContext& ctx) {
         }
 
         // Render LEDs
-        for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
+        for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
             if (fullLeds) {
                 // Light all LEDs
-                strip.SetPixelColor(armStart + ledIdx, armColor);
+                setPixelColorDirect(buffer, armStart + ledIdx, armColor.R, armColor.G, armColor.B);
             } else {
                 // Striped pattern - only positions 0, 4, 9
                 if (ledIdx == 0 || ledIdx == 4 || ledIdx == 9) {
-                    strip.SetPixelColor(armStart + ledIdx, armColor);
+                    setPixelColorDirect(buffer, armStart + ledIdx, armColor.R, armColor.G, armColor.B);
                 } else {
-                    strip.SetPixelColor(armStart + ledIdx, OFF_COLOR);
+                    setPixelColorDirect(buffer, armStart + ledIdx, OFF_COLOR.R, OFF_COLOR.G, OFF_COLOR.B);
                 }
             }
         }
@@ -133,9 +132,12 @@ void renderSolidArms(const RenderContext& ctx) {
 
     // Render each arm based on its current angle
     // Arm A = Inner (index 0, LEDs 10-19)
-    renderArm(ctx.innerArmDegrees, INNER_ARM_START, 0);
+    renderArm(ctx.innerArmDegrees, HardwareConfig::INNER_ARM_START, 0);
     // Arm B = Middle (index 1, LEDs 0-9)
-    renderArm(ctx.middleArmDegrees, MIDDLE_ARM_START, 1);
+    renderArm(ctx.middleArmDegrees, HardwareConfig::MIDDLE_ARM_START, 1);
     // Arm C = Outer (index 2, LEDs 20-29)
-    renderArm(ctx.outerArmDegrees, OUTER_ARM_START, 2);
+    renderArm(ctx.outerArmDegrees, HardwareConfig::OUTER_ARM_START, 2);
+
+    // Mark buffer as dirty so NeoPixelBus knows to send it on next Show()
+    strip.Dirty();
 }

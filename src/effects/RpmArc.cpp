@@ -3,16 +3,12 @@
 #include <NeoPixelBusLg.h>
 #include <cmath>
 #include "types.h"
+#include "pixel_utils.h"
+#include "hardware_config.h"
 
 // External references to globals from main.cpp
-extern NeoPixelBusLg<DotStarBgrFeature, DotStarSpi40MhzMethod> strip;
+extern NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip;
 extern const uint8_t PHYSICAL_TO_VIRTUAL[30];
-
-// Hardware configuration (from main.cpp)
-constexpr uint16_t LEDS_PER_ARM = 10;
-constexpr uint16_t INNER_ARM_START = 10;
-constexpr uint16_t MIDDLE_ARM_START = 0;
-constexpr uint16_t OUTER_ARM_START = 20;
 
 // RPM Arc Effect Configuration
 constexpr float RPM_MIN = 800.0f;           // Minimum RPM (1 virtual pixel)
@@ -96,6 +92,9 @@ static bool isAngleInRpmArc(double angle) {
  * Render RPM-based growing arc effect
  */
 void renderRpmArc(const RenderContext& ctx) {
+    // Get direct buffer access for fast pixel writes
+    uint8_t* buffer = strip.Pixels();
+
     // Calculate current RPM and map to pixel count
     float currentRPM = calculateRPM(ctx.microsecondsPerRev);
     uint8_t pixelCount = rpmToPixelCount(currentRPM);
@@ -105,28 +104,31 @@ void renderRpmArc(const RenderContext& ctx) {
         // Check if this arm is in the 20-degree arc centered at 0°
         if (isAngleInRpmArc(angle)) {
             // Light up pixels from innermost (virtual 0) to pixelCount-1
-            for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
+            for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
                 uint16_t physicalLed = armStart + ledIdx;
                 uint8_t virtualPos = PHYSICAL_TO_VIRTUAL[physicalLed];
 
                 // Only light pixels within the RPM-based range
                 if (virtualPos < pixelCount) {
                     RgbColor color = getGradientColor(virtualPos);
-                    strip.SetPixelColor(physicalLed, color);
+                    setPixelColorDirect(buffer, physicalLed, color.R, color.G, color.B);
                 } else {
-                    strip.SetPixelColor(physicalLed, OFF_COLOR);
+                    setPixelColorDirect(buffer, physicalLed, OFF_COLOR.R, OFF_COLOR.G, OFF_COLOR.B);
                 }
             }
         } else {
             // Outside arc - turn all LEDs off
-            for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
-                strip.SetPixelColor(armStart + ledIdx, OFF_COLOR);
+            for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
+                setPixelColorDirect(buffer, armStart + ledIdx, OFF_COLOR.R, OFF_COLOR.G, OFF_COLOR.B);
             }
         }
     };
 
     // Render all three arms
-    renderRpmArm(ctx.innerArmDegrees, INNER_ARM_START);
-    renderRpmArm(ctx.middleArmDegrees, MIDDLE_ARM_START);
-    renderRpmArm(ctx.outerArmDegrees, OUTER_ARM_START);
+    renderRpmArm(ctx.innerArmDegrees, HardwareConfig::INNER_ARM_START);
+    renderRpmArm(ctx.middleArmDegrees, HardwareConfig::MIDDLE_ARM_START);
+    renderRpmArm(ctx.outerArmDegrees, HardwareConfig::OUTER_ARM_START);
+
+    // Mark buffer as dirty so NeoPixelBus knows to send it on next Show()
+    strip.Dirty();
 }

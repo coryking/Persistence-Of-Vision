@@ -59,7 +59,7 @@
 // ESP32-S3 hardware SPI for SK9822/APA102 (DotStar)
 // Uses GPIO 7 (data) and GPIO 9 (clock) via hardware SPI
 // Using 40MHz SPI (fastest for this LED count)
-NeoPixelBusLg<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(NUM_LEDS);
+NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(NUM_LEDS);
 
 // Revolution timing
 RevolutionTimer revTimer(WARMUP_REVOLUTIONS, ROLLING_AVERAGE_SIZE, ROTATION_TIMEOUT_US);
@@ -184,7 +184,6 @@ void setup()
     // Initialize LED strip
     Serial.println("Initializing LED strip...");
     strip.Begin();
-    strip.SetLuminance(LED_LUMINANCE);
     strip.ClearTo(OFF_COLOR);           // Clear strip to black
     strip.Show();
     Serial.println("Strip initialized");

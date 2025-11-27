@@ -3,16 +3,12 @@
 #include <NeoPixelBusLg.h>
 #include "blob_types.h"
 #include "esp_timer.h"
+#include "pixel_utils.h"
+#include "hardware_config.h"
 
 // External references to globals from main.cpp
-extern NeoPixelBusLg<DotStarBgrFeature, DotStarSpi40MhzMethod> strip;
+extern NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip;
 extern Blob blobs[MAX_BLOBS];
-
-// Hardware configuration (from main.cpp)
-constexpr uint16_t LEDS_PER_ARM = 10;
-constexpr uint16_t INNER_ARM_START = 10;
-constexpr uint16_t MIDDLE_ARM_START = 0;
-constexpr uint16_t OUTER_ARM_START = 20;
 
 /**
  * Check if LED index is within blob's current radial extent (per-arm version)
@@ -97,58 +93,69 @@ void setupPerArmBlobs() {
  * Render per-arm blobs effect
  */
 void renderPerArmBlobs(const RenderContext& ctx) {
-    // Render each LED individually based on angular and radial position
-    // Inner arm: LEDs 10-19
-    for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
-        RgbColor ledColor(0, 0, 0);
+    // Get direct buffer access for fast pixel writes
+    uint8_t* buffer = strip.Pixels();
 
-        // Check all blobs assigned to inner arm
+    // Pre-compute which blobs are visible on inner arm (OPTIMIZATION: hoist angle checks)
+    bool blobVisibleOnInnerArm[MAX_BLOBS];
+    for (int i = 0; i < MAX_BLOBS; i++) {
+        blobVisibleOnInnerArm[i] = blobs[i].active && blobs[i].armIndex == ARM_INNER &&
+                                   isAngleInArc(ctx.innerArmDegrees, blobs[i]);
+    }
+
+    // Inner arm: LEDs 10-19
+    for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
+        uint8_t r = 0, g = 0, b = 0;
+
+        // Check all blobs assigned to inner arm (using pre-computed visibility)
         for (int i = 0; i < MAX_BLOBS; i++) {
-            if (blobs[i].active && blobs[i].armIndex == ARM_INNER) {
-                // Check both angular and radial position
-                if (isAngleInArc(ctx.innerArmDegrees, blobs[i]) && isLedInBlob(ledIdx, blobs[i])) {
-                    ledColor.R = min(255, ledColor.R + blobs[i].color.R);
-                    ledColor.G = min(255, ledColor.G + blobs[i].color.G);
-                    ledColor.B = min(255, ledColor.B + blobs[i].color.B);
-                }
+            if (blobVisibleOnInnerArm[i] && isLedInBlob(ledIdx, blobs[i])) {
+                blendAdditive(r, g, b, blobs[i].color.R, blobs[i].color.G, blobs[i].color.B);
             }
         }
-        strip.SetPixelColor(INNER_ARM_START + ledIdx, ledColor);
+        setPixelColorDirect(buffer, HardwareConfig::INNER_ARM_START + ledIdx, r, g, b);
+    }
+
+    // Pre-compute which blobs are visible on middle arm (OPTIMIZATION: hoist angle checks)
+    bool blobVisibleOnMiddleArm[MAX_BLOBS];
+    for (int i = 0; i < MAX_BLOBS; i++) {
+        blobVisibleOnMiddleArm[i] = blobs[i].active && blobs[i].armIndex == ARM_MIDDLE &&
+                                    isAngleInArc(ctx.middleArmDegrees, blobs[i]);
     }
 
     // Middle arm: LEDs 0-9
-    for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
-        RgbColor ledColor(0, 0, 0);
+    for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
+        uint8_t r = 0, g = 0, b = 0;
 
-        // Check all blobs assigned to middle arm
+        // Check all blobs assigned to middle arm (using pre-computed visibility)
         for (int i = 0; i < MAX_BLOBS; i++) {
-            if (blobs[i].active && blobs[i].armIndex == ARM_MIDDLE) {
-                // Check both angular and radial position
-                if (isAngleInArc(ctx.middleArmDegrees, blobs[i]) && isLedInBlob(ledIdx, blobs[i])) {
-                    ledColor.R = min(255, ledColor.R + blobs[i].color.R);
-                    ledColor.G = min(255, ledColor.G + blobs[i].color.G);
-                    ledColor.B = min(255, ledColor.B + blobs[i].color.B);
-                }
+            if (blobVisibleOnMiddleArm[i] && isLedInBlob(ledIdx, blobs[i])) {
+                blendAdditive(r, g, b, blobs[i].color.R, blobs[i].color.G, blobs[i].color.B);
             }
         }
-        strip.SetPixelColor(MIDDLE_ARM_START + ledIdx, ledColor);
+        setPixelColorDirect(buffer, HardwareConfig::MIDDLE_ARM_START + ledIdx, r, g, b);
+    }
+
+    // Pre-compute which blobs are visible on outer arm (OPTIMIZATION: hoist angle checks)
+    bool blobVisibleOnOuterArm[MAX_BLOBS];
+    for (int i = 0; i < MAX_BLOBS; i++) {
+        blobVisibleOnOuterArm[i] = blobs[i].active && blobs[i].armIndex == ARM_OUTER &&
+                                   isAngleInArc(ctx.outerArmDegrees, blobs[i]);
     }
 
     // Outer arm: LEDs 20-29
-    for (uint16_t ledIdx = 0; ledIdx < LEDS_PER_ARM; ledIdx++) {
-        RgbColor ledColor(0, 0, 0);
+    for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
+        uint8_t r = 0, g = 0, b = 0;
 
-        // Check all blobs assigned to outer arm
+        // Check all blobs assigned to outer arm (using pre-computed visibility)
         for (int i = 0; i < MAX_BLOBS; i++) {
-            if (blobs[i].active && blobs[i].armIndex == ARM_OUTER) {
-                // Check both angular and radial position
-                if (isAngleInArc(ctx.outerArmDegrees, blobs[i]) && isLedInBlob(ledIdx, blobs[i])) {
-                    ledColor.R = min(255, ledColor.R + blobs[i].color.R);
-                    ledColor.G = min(255, ledColor.G + blobs[i].color.G);
-                    ledColor.B = min(255, ledColor.B + blobs[i].color.B);
-                }
+            if (blobVisibleOnOuterArm[i] && isLedInBlob(ledIdx, blobs[i])) {
+                blendAdditive(r, g, b, blobs[i].color.R, blobs[i].color.G, blobs[i].color.B);
             }
         }
-        strip.SetPixelColor(OUTER_ARM_START + ledIdx, ledColor);
+        setPixelColorDirect(buffer, HardwareConfig::OUTER_ARM_START + ledIdx, r, g, b);
     }
+
+    // Mark buffer as dirty so NeoPixelBus knows to send it on next Show()
+    strip.Dirty();
 }
