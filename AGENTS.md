@@ -2,6 +2,43 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Development Philosophy: Ship Cool Art
+
+This is a hobby art project. The goal is to create beautiful spinning LED displays, not to build enterprise software architecture.
+
+**Core Philosophy:**
+> "We're here to make art, not write code. The code serves the art."
+> — POV_DISPLAY.md
+
+**Your role as Claude:**
+- Technical steward who handles code organization while the artist focuses on effects
+- Proactively refactor when patterns emerge (rule of three)
+- Watch for timing issues (see docs/Timing and Dimensionality Calculations.md)
+- Point out artistic opportunities in "bugs" (strobing, aliasing, moiré patterns)
+- Reference existing documentation when explaining decisions
+- Keep codebase clean and maintainable without being asked
+- Document changes clearly in commits
+
+**Priorities (in order):**
+1. **Ship working visual effects** - Get LEDs doing cool things
+2. **Respect timing constraints** - Operating range: 700-2800 RPM (see docs/Timing and Dimensionality Calculations.md)
+3. **Optimize when necessary** - If something's slow, measure it before fixing
+4. **Refactor when patterns emerge** - Wait for third instance (rule of three)
+5. **Stick with what works** - Current architecture works; don't fix what isn't broken
+
+**Critical Timing Reality:**
+- This project works because NeoPixelBus has fast, consistent SPI performance
+- Other POV projects using FastLED failed with same architecture due to slow SPI
+- Performance IS correctness - jitter causes visual artifacts
+- See docs/TIMING_ANALYSIS.md and docs/PROJECT_COMPARISON.md for measurements
+
+**Foundation Documents** (read these to understand the project):
+- **docs/POV_DISPLAY.md** - Art-first philosophy, polar coordinates, design principles
+- **docs/PROJECT_COMPARISON.md** - Why queue-based hall sensor works, flag-based fails
+- **docs/TIMING_ANALYSIS.md** - Deep dive on jitter, why NeoPixelBus is critical
+- **docs/FREERTOS_INTEGRATION.md** - FreeRTOS patterns and pitfalls for this project
+- **docs/Timing and Dimensionality Calculations.md** - Mathematical reference
+
 ## Project Overview
 
 What We're Building: A high-speed Persistence of Vision (POV) display using rotating LED arrays.
@@ -13,14 +50,43 @@ The ultimate goal is a spinning LED display with three arms arranged 120° apart
 
 **The Timing Challenge:**
 
-- Operating range: 1200-1940 RPM (measured)
-- At 1940 RPM (high end) = 32.33 rev/sec
-- Revolution period = 30,928 microseconds (~31ms)
-- Time per 1° column = 85.9 microseconds
-- At 1200 RPM (low end) = 20 rev/sec
-- Revolution period = 50,000 microseconds (50ms)
-- Time per 1° column = 138.9 microseconds
-- Current SPI update time: ~44μs (well within timing budget)
+- Operating range: 700-2800 RPM
+- See docs/Timing and Dimensionality Calculations.md for exact timing budgets at different RPMs
+
+### Why Exact Timing Matters
+
+POV displays work by persistence of vision - LEDs flash at precise angular positions as the disc rotates. **For this project, performance IS correctness.**
+
+**Jitter (timing inconsistency) causes visual artifacts:**
+- Image wobble (pixels appear at inconsistent angles)
+- Radial misalignment (multi-arm synchronization breaks)
+- Blurring (when LEDs update at wrong positions)
+- Beat patterns (when update timing drifts relative to rotation)
+
+**A slow but consistent update is better than a fast but jittery one.**
+
+**What causes jitter:**
+- **Interrupt latency**: Wi-Fi, USB, other peripherals stealing cycles
+- **Blocking operations**: Serial.print(), delay(), filesystem access in rendering path
+- **Memory allocations**: malloc/free in time-critical paths
+- **Task priority inversion**: Low-priority task holding resource needed by high-priority task
+- **Inconsistent ISR priority**: Competing interrupts
+- **Cache misses, branch mispredictions**: In tight loops
+
+**Current architecture (what's working):**
+- **Queue-based hall sensor** (not flag-based - see docs/PROJECT_COMPARISON.md for why)
+- **High-priority FreeRTOS task** for hall processing
+- **ISR timestamp capture** with IRAM_ATTR and esp_timer_get_time()
+- **NeoPixelBus library** (fast SPI - see docs/TIMING_ANALYSIS.md)
+- **No mutexes on RevolutionTimer** (atomic reads work fine, stale data doesn't matter)
+
+**Design implications:**
+- If timing looks inconsistent, check for jitter sources (blocking calls, malloc in loops, etc.)
+- Keep rendering path non-blocking (tight loop when active, delay() only during warmup)
+- Pre-allocate buffers if you can, but don't obsess
+- See timing budgets in docs if you need to understand constraints
+
+**Reference:** See docs/TIMING_ANALYSIS.md for deep dive on jitter sources and mitigation.
 
 ### Why SK9822/APA102?
 
@@ -115,6 +181,93 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
   - Automatically configures hardware SPI pins for optimal performance
 
 ## Code Architecture
+
+### Coding Principles
+
+**Make it work, then make it clean:**
+- Inline code first - write it directly in place
+- Second time you see similar code - note it but leave it inline
+- Third time (rule of three) - extract to a reusable function
+- Don't create abstractions speculatively
+
+**Performance awareness:**
+- If something's slow, measure it before fixing
+- See docs/Timing and Dimensionality Calculations.md for timing budgets
+
+**Error handling:**
+- Keep it simple: when in doubt, reset and restart
+- This is embedded art, not safety-critical systems
+- No need for elaborate error hierarchies or recovery strategies
+- Trust inputs unless proven otherwise (no defensive validation everywhere)
+
+**Memory management:**
+- Pre-allocate buffers in time-critical paths
+- Focus on correctness over memory efficiency
+- Performance might matter, but measure first
+
+### What NOT to Do
+
+**Be careful changing what's working:**
+- **FastLED**: Current code uses NeoPixelBus for fast SPI (see docs/TIMING_ANALYSIS.md for comparison)
+- **Hall sensor ISR**: Uses queue-based pattern, not flags (see docs/PROJECT_COMPARISON.md for why)
+- **RevolutionTimer**: No mutexes - atomic reads work fine
+- **Task priorities**: Current setup works; don't change without reason
+- **Rendering path**: No delay() in active rendering - tight loop is intentional
+
+**Don't over-architect:**
+- No interfaces or base classes until there are 3+ implementations
+- No plugin systems or extensibility frameworks
+- No configuration files for things that can be constants
+- No "what if we need to..." features that weren't requested
+- No elaborate test plans (this is art, not production software)
+
+**Don't ask permission for obvious cleanups:**
+- Rule of three refactoring? Just do it, document in commit
+- Renaming for clarity? Go ahead
+- Extracting duplicated code? Don't ask, explain why after
+- Reorganizing files? Make the change, document rationale
+
+**Don't treat this like production software:**
+- No elaborate exception hierarchies
+- No circuit breakers or retry logic
+- No input validation for internal functions (trust inputs unless proven otherwise)
+- No backwards compatibility layers
+- Simple error handling: when in doubt, reset and restart
+
+**Don't silently "fix" everything:**
+- Some apparent bugs might be artistic features
+- Stroboscopic effects from PWM frequency (SK9822: 4.6 kHz) could be beautiful
+- Aliasing patterns from rotation speed might create interesting moiré effects
+- Beat patterns between update rate and rotation could be exploited artistically
+- **Point out unexpected visual behaviors instead of immediately "fixing" them**
+
+**Avoid common jitter sources:**
+- malloc/free in rendering loop (pre-allocate if needed)
+- Serial.print() during active rendering
+- Filesystem access in time-critical paths
+- Blocking operations in rendering loop
+
+### When to Ask vs Just Do It
+
+**Just do it (don't ask):**
+- Refactoring that preserves behavior (rule of three, renaming, reorganizing)
+- Fixing obvious bugs (crashes, incorrect calculations, memory corruption)
+- Improving code comments or documentation
+- Optimizing something that's measurably slow
+
+**Point it out (don't silently fix):**
+- Unexpected visual artifacts that might be artistically interesting
+- Performance characteristics that create interesting patterns
+- "Problems" that could be features (stroboscopic effects, aliasing, etc.)
+- Trade-offs between approaches that affect visual output
+
+**Ask first:**
+- Changing fundamental architecture (polling → interrupts, data flow changes)
+- Removing features or visual effects
+- Changes that could affect artistic output in non-obvious ways
+- Adding new hardware requirements or dependencies
+
+### Current Architecture
 
 The project is minimal and focused:
 
