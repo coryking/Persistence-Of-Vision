@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <WiFi.h>
 #include <cmath>
 #include "esp_timer.h"
 #include <NeoPixelBus.h>
@@ -144,6 +145,10 @@ void setup() {
     Serial.begin(115200);
     delay(2000);
 
+    // Disable WiFi to reduce jitter - WiFi interrupts steal cycles
+    WiFi.mode(WIFI_OFF);
+    btStop();  // Also disable Bluetooth
+
     Serial.println("POV Display Initializing...");
 
     // Initialize LED strip
@@ -214,25 +219,90 @@ void loop() {
     bool isRotating = true;
     bool isWarmupComplete = true;
 #else
-    bool isRotating = revTimer.isCurrentlyRotating();
-    bool isWarmupComplete = revTimer.isWarmupComplete();
-
+    // Get atomic snapshot of timing values to avoid race condition
+    // between main loop and hall processing task
     timestamp_t now = esp_timer_get_time();
-    timestamp_t lastHallTime = revTimer.getLastTimestamp();
-    interval_t microsecondsPerRev = revTimer.getMicrosecondsPerRevolution();
+    TimingSnapshot timing = revTimer.getTimingSnapshot();
+
+    bool isRotating = timing.isRotating;
+    bool isWarmupComplete = timing.warmupComplete;
+    timestamp_t lastHallTime = timing.lastTimestamp;
+    interval_t microsecondsPerRev = timing.microsecondsPerRev;
 
     timestamp_t elapsed = now - lastHallTime;
+
+#ifdef ENABLE_DETAILED_TIMING
+    // Detect race condition: elapsed should never be > ~1.5 revolutions
+    // or suspiciously large (wraparound from negative)
+    static uint32_t raceDetectCount = 0;
+    static double prevAngleMiddle = -1.0;
+    if (microsecondsPerRev > 0) {
+        // Check for wraparound (elapsed would be huge if now < lastHallTime)
+        if (elapsed > 1000000000ULL) {  // > 1000 seconds = definitely wraparound
+            Serial.printf("RACE_WRAPAROUND: elapsed=%llu lastHall=%llu now=%llu\n",
+                          elapsed, lastHallTime, now);
+            raceDetectCount++;
+        }
+        // Check for elapsed > 1.5 revolutions (might indicate missed hall or race)
+        else if (elapsed > (microsecondsPerRev * 3 / 2)) {
+            Serial.printf("RACE_LARGE_ELAPSED: elapsed=%llu expected<%llu\n",
+                          elapsed, microsecondsPerRev);
+            raceDetectCount++;
+        }
+    }
+#endif
+
     double microsecondsPerDegree = static_cast<double>(microsecondsPerRev) / 360.0;
 
     double angleMiddle = fmod(static_cast<double>(elapsed) / microsecondsPerDegree, 360.0);
+
+#ifdef ENABLE_DETAILED_TIMING
+    // Detect large angle jumps (potential race condition symptom)
+    if (prevAngleMiddle >= 0.0) {
+        double angleDiff = angleMiddle - prevAngleMiddle;
+        // Normalize to -180 to +180
+        if (angleDiff > 180.0) angleDiff -= 360.0;
+        if (angleDiff < -180.0) angleDiff += 360.0;
+        // At 2800 RPM, expect ~0.84° per frame. Flag jumps > 90°
+        if (fabs(angleDiff) > 90.0) {
+            Serial.printf("ANGLE_JUMP: prev=%.2f curr=%.2f diff=%.2f\n",
+                          prevAngleMiddle, angleMiddle, angleDiff);
+        }
+    }
+    prevAngleMiddle = angleMiddle;
+#endif
+
     double angleInner = fmod(angleMiddle + INNER_ARM_PHASE, 360.0);
     double angleOuter = fmod(angleMiddle + OUTER_ARM_PHASE, 360.0);
 #endif
 
     if (isWarmupComplete && isRotating) {
+        // Angle-slot gating: only render when we've moved to a new angular position
+        // Resolution adapts to RPM and render performance, updated once per revolution
+        // All valid resolutions evenly divide 360° for clean 0° alignment
+#ifdef TEST_MODE
+        static constexpr float slotSize = 3.0f;  // Fixed for test mode
+#else
+        float slotSize = timing.angularResolution;
+#endif
+        static int lastSlot = -1;
+
+        int currentSlot = static_cast<int>(angleMiddle / slotSize);
+
+        // Check if we've moved to a new slot (handles wraparound at 360°)
+        bool shouldRender = (currentSlot != lastSlot);
+
+        if (!shouldRender) {
+            return;  // Skip this iteration - we're still in the same angular slot
+        }
+        lastSlot = currentSlot;
+
+        // Start render timing measurement
+        revTimer.startRender();
+
 #if ENABLE_TIMING_INSTRUMENTATION
         if (!csvHeaderPrinted) {
-            Serial.println("frame,effect,total_us,angle_deg,rpm");
+            Serial.println("frame,effect,total_us,angle_deg,rpm,resolution");
             csvHeaderPrinted = true;
         }
         int64_t frameStart = timingStart();
@@ -265,15 +335,19 @@ void loop() {
 
         strip.Show();
 
+        // End render timing measurement
+        revTimer.endRender();
+
 #if ENABLE_TIMING_INSTRUMENTATION
         int64_t totalTime = timingEnd(frameStart);
         double rpm = (microsecondsPerRev > 0) ? (60000000.0 / microsecondsPerRev) : 0.0;
-        Serial.printf("%u,%u,%lld,%.2f,%.1f\n",
+        Serial.printf("%u,%u,%lld,%.2f,%.1f,%.1f\n",
                       instrumentationFrameCount++,
                       effectRegistry.getCurrentIndex(),
                       totalTime,
                       angleMiddle,
-                      rpm);
+                      rpm,
+                      slotSize);
 #endif
 
     } else {
