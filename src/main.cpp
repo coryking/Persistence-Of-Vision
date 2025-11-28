@@ -12,6 +12,7 @@
 #include "HallEffectDriver.h"
 #include "RenderContext.h"
 #include "EffectRegistry.h"
+#include "EffectScheduler.h"
 #include "effects/NoiseField.h"
 #include "effects/SolidArms.h"
 #include "effects/RpmArc.h"
@@ -60,6 +61,9 @@ VirtualBlobs virtualBlobsEffect;
 
 // Effect registry
 EffectRegistry effectRegistry;
+
+// Effect scheduler (manages NVS persistence)
+EffectScheduler effectScheduler;
 
 // Render context (reused each frame)
 RenderContext renderCtx;
@@ -112,10 +116,18 @@ double simulateRotation() {
 void hallProcessingTask(void* pvParameters) {
     HallEffectEvent event;
     QueueHandle_t queue = hallDriver.getEventQueue();
+    bool wasRotating = false;  // Track motor state
 
     while (1) {
         if (xQueueReceive(queue, &event, portMAX_DELAY) == pdPASS) {
             revTimer.addTimestamp(event.triggerTimestamp);
+
+            // Detect motor start (stopped → rotating transition)
+            bool isRotating = revTimer.isCurrentlyRotating();
+            if (!wasRotating && isRotating) {
+                effectScheduler.onMotorStart();  // Advance effect, save to NVS
+            }
+            wasRotating = isRotating;
 
             // Notify current effect of revolution
             float rpm = 60000000.0f / static_cast<float>(revTimer.getMicrosecondsPerRevolution());
@@ -161,14 +173,18 @@ void setup() {
     Serial.println("Hall processing task started");
 
     // Register effects
-    effectRegistry.registerEffect(&noiseFieldEffect);
+    //effectRegistry.registerEffect(&noiseFieldEffect);
     effectRegistry.registerEffect(&solidArmsEffect);
-    effectRegistry.registerEffect(&rpmArcEffect);
-    effectRegistry.registerEffect(&perArmBlobsEffect);
-    effectRegistry.registerEffect(&virtualBlobsEffect);
-    effectRegistry.begin();
+    //effectRegistry.registerEffect(&rpmArcEffect);
+    //effectRegistry.registerEffect(&perArmBlobsEffect);
+    //effectRegistry.registerEffect(&virtualBlobsEffect);
 
-    Serial.printf("Registered %d effects, starting with effect 0\n", effectRegistry.getEffectCount());
+    // Initialize scheduler (loads NVS, advances effect, saves, starts registry)
+    effectScheduler.begin(&effectRegistry);
+
+    Serial.printf("Registered %d effects, starting with effect %u\n",
+                  effectRegistry.getEffectCount(),
+                  effectRegistry.getCurrentIndex());
 
     Serial.println("\n=== POV Display Ready ===");
     Serial.println("Effects: NoiseField, SolidArms, RpmArc, PerArmBlobs, VirtualBlobs");
@@ -176,8 +192,6 @@ void setup() {
 }
 
 void loop() {
-    static bool wasRotating = false;
-
 #ifdef TEST_MODE
     double angleMiddle = simulateRotation();
     double angleInner = fmod(angleMiddle + INNER_ARM_PHASE, 360.0);
@@ -188,12 +202,6 @@ void loop() {
     bool isWarmupComplete = true;
 #else
     bool isRotating = revTimer.isCurrentlyRotating();
-    if (!wasRotating && isRotating) {
-        Serial.println("Motor started - switching to next effect");
-        effectRegistry.next();
-    }
-    wasRotating = isRotating;
-
     bool isWarmupComplete = revTimer.isWarmupComplete();
 
     timestamp_t now = esp_timer_get_time();
