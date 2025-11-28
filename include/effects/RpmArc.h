@@ -27,18 +27,17 @@ public:
 
 private:
     // Configuration
-    static constexpr float RPM_MIN = 800.0f;
-    static constexpr float RPM_MAX = 2500.0f;
-    static constexpr float BASE_ARC_WIDTH = 20.0f;
-    static constexpr float ARC_CENTER = 0.0f;
+    static constexpr angle_t BASE_ARC_WIDTH_UNITS = 200;      // 20 degrees base
+    static constexpr angle_t MAX_EXTRA_WIDTH_UNITS = 100;     // up to 10 degrees extra at max speed
+    static constexpr angle_t ARC_CENTER_UNITS = 0;             // 0 degrees = 0 units
 
     // State
     CRGB gradient[30];
-    float arcWidth = BASE_ARC_WIDTH;
+    angle_t arcWidthUnits;
 
     // Helpers
     void initializeGradient();
-    uint8_t rpmToPixelCount(float rpm) const;
+    uint8_t speedToPixelCount(uint8_t speedFactor) const;
 };
 
 #endif // RPM_ARC_H

@@ -2,7 +2,7 @@
 #define PIXEL_UTILS_H
 
 #include <cstdint>
-#include <algorithm>
+#include <FastLED.h>
 
 // ========== Low-Level Primitives ==========
 
@@ -74,9 +74,9 @@ inline void fillArm(uint8_t* buffer, uint16_t armStart,
  */
 inline void blendAdditive(uint8_t& dstR, uint8_t& dstG, uint8_t& dstB,
                           uint8_t srcR, uint8_t srcG, uint8_t srcB) {
-    dstR = std::min(255, dstR + srcR);
-    dstG = std::min(255, dstG + srcG);
-    dstB = std::min(255, dstB + srcB);
+    dstR = qadd8(dstR, srcR);
+    dstG = qadd8(dstG, srcG);
+    dstB = qadd8(dstB, srcB);
 }
 
 #endif

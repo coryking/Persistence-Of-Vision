@@ -76,38 +76,34 @@ bool csvHeaderPrinted = false;
 #endif
 
 // Test mode: simulated rotation
+// Feed synthetic hall timestamps into revTimer to exercise real timing logic
 #ifdef TEST_MODE
-double simulatedAngle = 0.0;
-timestamp_t lastSimUpdate = 0;
+timestamp_t lastHallTimestamp = 0;
 interval_t simulatedMicrosecondsPerRev = 0;
 
-double simulateRotation() {
+void simulateHallTrigger() {
     timestamp_t now = esp_timer_get_time();
 
-    if (lastSimUpdate == 0) {
-        lastSimUpdate = now;
-        simulatedAngle = 0.0;
-    }
-
-    timestamp_t elapsed = now - lastSimUpdate;
-    lastSimUpdate = now;
-
+    // Generate synthetic RPM
     double rpm = TEST_RPM;
     if (TEST_VARY_RPM) {
         double timeSec = now / 1000000.0;
         rpm = 700.0 + 1050.0 * (1.0 + sin(timeSec * 0.5));
     }
 
-    simulatedMicrosecondsPerRev = static_cast<interval_t>(60000000.0 / rpm);
+    interval_t microsecondsPerRev = static_cast<interval_t>(60000000.0 / rpm);
 
-    double degreesPerMicrosecond = (rpm * 360.0) / 60000000.0;
-    simulatedAngle += degreesPerMicrosecond * elapsed;
-
-    while (simulatedAngle >= 360.0) {
-        simulatedAngle -= 360.0;
+    // Inject synthetic hall trigger into revTimer at appropriate intervals
+    if (lastHallTimestamp == 0) {
+        // First trigger
+        lastHallTimestamp = now;
+        revTimer.addTimestamp(now);
+    } else if (now - lastHallTimestamp >= microsecondsPerRev) {
+        // Time for next trigger
+        lastHallTimestamp += microsecondsPerRev;
+        revTimer.addTimestamp(lastHallTimestamp);
+        simulatedMicrosecondsPerRev = microsecondsPerRev;
     }
-
-    return simulatedAngle;
 }
 #endif
 
@@ -211,16 +207,14 @@ void setup() {
 
 void loop() {
 #ifdef TEST_MODE
-    double angleMiddle = simulateRotation();
-    double angleInner = fmod(angleMiddle + INNER_ARM_PHASE, 360.0);
-    double angleOuter = fmod(angleMiddle + OUTER_ARM_PHASE, 360.0);
-    interval_t microsecondsPerRev = simulatedMicrosecondsPerRev;
-    timestamp_t now = esp_timer_get_time();
-    bool isRotating = true;
-    bool isWarmupComplete = true;
-#else
-    // Get atomic snapshot of timing values to avoid race condition
-    // between main loop and hall processing task
+    // Generate synthetic hall triggers at TEST_RPM to exercise revTimer logic
+    simulateHallTrigger();
+#endif
+
+    // Get atomic snapshot of timing values
+    // In test mode: simulateHallTrigger() feeds synthetic timestamps
+    // In real mode: hallProcessingTask feeds real ISR timestamps
+    // Rest of code path is identical
     timestamp_t now = esp_timer_get_time();
     TimingSnapshot timing = revTimer.getTimingSnapshot();
 
@@ -244,7 +238,6 @@ void loop() {
     // Detect race condition: elapsed should never be > ~1.5 revolutions
     // or suspiciously large (wraparound from negative)
     static uint32_t raceDetectCount = 0;
-    static double prevAngleMiddle = -1.0;
     if (microsecondsPerRev > 0) {
         // Check for wraparound (elapsed would be huge if now < lastHallTime)
         if (elapsed > 1000000000ULL) {  // > 1000 seconds = definitely wraparound
@@ -261,42 +254,46 @@ void loop() {
     }
 #endif
 
-    double microsecondsPerDegree = static_cast<double>(microsecondsPerRev) / 360.0;
-
-    double angleMiddle = fmod(static_cast<double>(elapsed) / microsecondsPerDegree, 360.0);
+    // Integer angle calculation - 3600 units = 360 degrees (0.1° resolution)
+    // SAFETY: Only calculate if microsecondsPerRev > 0 to avoid division by zero
+    angle_t angleMiddleUnits, angleInnerUnits, angleOuterUnits;
+    if (microsecondsPerRev > 0) {
+        angleMiddleUnits = static_cast<angle_t>(
+            (static_cast<uint32_t>(elapsed) * 3600UL / microsecondsPerRev) % 3600
+        );
+        angleInnerUnits = (angleMiddleUnits + INNER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
+        angleOuterUnits = (angleMiddleUnits + OUTER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
+    } else {
+        // Not rotating - use safe default angles (all at 0°)
+        angleMiddleUnits = angleInnerUnits = angleOuterUnits = 0;
+    }
 
 #ifdef ENABLE_DETAILED_TIMING
     // Detect large angle jumps (potential race condition symptom)
-    if (prevAngleMiddle >= 0.0) {
-        double angleDiff = angleMiddle - prevAngleMiddle;
-        // Normalize to -180 to +180
-        if (angleDiff > 180.0) angleDiff -= 360.0;
-        if (angleDiff < -180.0) angleDiff += 360.0;
-        // At 2800 RPM, expect ~0.84° per frame. Flag jumps > 90°
-        if (fabs(angleDiff) > 90.0) {
-            Serial.printf("ANGLE_JUMP: prev=%.2f curr=%.2f diff=%.2f\n",
-                          prevAngleMiddle, angleMiddle, angleDiff);
+    static angle_t prevAngleMiddleUnits = 0;
+    if (prevAngleMiddleUnits > 0) {
+        int32_t angleDiff = static_cast<int32_t>(angleMiddleUnits) - static_cast<int32_t>(prevAngleMiddleUnits);
+        // Normalize to -1800 to +1800 (±180°)
+        if (angleDiff > 1800) angleDiff -= 3600;
+        if (angleDiff < -1800) angleDiff += 3600;
+        // At 2800 RPM, expect ~8.4 units per frame. Flag jumps > 900 units (90°)
+        if (abs(angleDiff) > 900) {
+            Serial.printf("ANGLE_JUMP: prev=%u curr=%u diff=%d\n",
+                          prevAngleMiddleUnits, angleMiddleUnits, angleDiff);
         }
     }
-    prevAngleMiddle = angleMiddle;
-#endif
-
-    double angleInner = fmod(angleMiddle + INNER_ARM_PHASE, 360.0);
-    double angleOuter = fmod(angleMiddle + OUTER_ARM_PHASE, 360.0);
+    prevAngleMiddleUnits = angleMiddleUnits;
 #endif
 
     if (isWarmupComplete && isRotating) {
         // Angle-slot gating: only render when we've moved to a new angular position
         // Resolution adapts to RPM and render performance, updated once per revolution
         // All valid resolutions evenly divide 360° for clean 0° alignment
-#ifdef TEST_MODE
-        static constexpr float slotSize = 3.0f;  // Fixed for test mode
-#else
-        float slotSize = timing.angularResolution;
-#endif
+        angle_t slotSizeUnits = static_cast<angle_t>(timing.angularResolution * 10.0f);
+        if (slotSizeUnits == 0) slotSizeUnits = 30;  // 3 degrees default
         static int lastSlot = -1;
 
-        int currentSlot = static_cast<int>(angleMiddle / slotSize);
+        int currentSlot = angleMiddleUnits / slotSizeUnits;
 
         // Check if we've moved to a new slot (handles wraparound at 360°)
         bool shouldRender = (currentSlot != lastSlot);
@@ -311,7 +308,7 @@ void loop() {
 
 #if ENABLE_TIMING_INSTRUMENTATION
         if (!csvHeaderPrinted) {
-            Serial.println("frame,effect,total_us,angle_deg,rpm,resolution");
+            Serial.println("frame,effect,total_us,slot,angle_units,usec_per_rev,resolution_units,rev_count,elapsed_us,angular_res,last_interval_us");
             csvHeaderPrinted = true;
         }
         int64_t frameStart = timingStart();
@@ -322,9 +319,9 @@ void loop() {
         renderCtx.microsPerRev = microsecondsPerRev;
 
         // Set arm angles - arms[0]=inner, arms[1]=middle, arms[2]=outer
-        renderCtx.arms[0].angle = static_cast<float>(angleInner);
-        renderCtx.arms[1].angle = static_cast<float>(angleMiddle);
-        renderCtx.arms[2].angle = static_cast<float>(angleOuter);
+        renderCtx.arms[0].angleUnits = angleInnerUnits;
+        renderCtx.arms[1].angleUnits = angleMiddleUnits;
+        renderCtx.arms[2].angleUnits = angleOuterUnits;
 
         // Render current effect
         Effect* current = effectRegistry.current();
@@ -349,14 +346,18 @@ void loop() {
 
 #if ENABLE_TIMING_INSTRUMENTATION
         int64_t totalTime = timingEnd(frameStart);
-        double rpm = (microsecondsPerRev > 0) ? (60000000.0 / microsecondsPerRev) : 0.0;
-        Serial.printf("%u,%u,%lld,%.2f,%.1f,%.1f\n",
+        Serial.printf("%u,%u,%lld,%d,%u,%llu,%u,%u,%llu,%f,%llu\n",
                       instrumentationFrameCount++,
                       effectRegistry.getCurrentIndex(),
                       totalTime,
-                      angleMiddle,
-                      rpm,
-                      slotSize);
+                      currentSlot,
+                      angleMiddleUnits,
+                      microsecondsPerRev,
+                      slotSizeUnits,
+                      revTimer.getRevolutionCount(),
+                      elapsed,
+                      timing.angularResolution,
+                      timing.lastActualInterval);
 #endif
 
     } else {

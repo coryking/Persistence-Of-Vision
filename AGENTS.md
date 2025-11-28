@@ -87,6 +87,7 @@ POV displays work by persistence of vision - LEDs flash at precise angular posit
 - **ISR timestamp capture** with IRAM_ATTR and esp_timer_get_time()
 - **NeoPixelBus library** (fast SPI - see docs/TIMING_ANALYSIS.md)
 - **No mutexes on RevolutionTimer** (atomic reads work fine, stale data doesn't matter)
+- **Pure integer math** in render path (no floats - see Integer Math System below)
 
 **Design implications:**
 
@@ -323,11 +324,64 @@ The firmware outputs timing measurements for each `strip.Show()` call:
 
 # ESP32 Quick Reference
 
+## Integer Math System (IMPORTANT)
+
+**The render path uses NO floating-point math.** All angles and timing use integer types for speed and precision.
+
+### Angle Units
+
+Angles use `angle_t` (uint16_t) where **3600 units = 360 degrees** (0.1° precision):
+
+```cpp
+angle_t angleUnits = arm.angleUnits;        // 0-3599
+uint8_t pattern = angleUnits / 180;         // Exact integer division for 18° patterns
+```
+
+Key constants in `types.h`:
+- `ANGLE_FULL_CIRCLE = 3600`
+- `ANGLE_PER_PATTERN = 180` (18 degrees)
+- `INNER_ARM_PHASE = 1200` (120 degrees)
+- `OUTER_ARM_PHASE = 2400` (240 degrees)
+
+### Speed: Use microsPerRev, NOT RPM
+
+**Do NOT convert to RPM** - it requires float division. Use `microsPerRev` directly:
+
+```cpp
+// BAD - requires float division:
+float rpm = 60000000.0f / microsPerRev;
+
+// GOOD - use raw measurement:
+uint8_t speed = speedFactor8(ctx.microsPerRev);  // Returns 0-255 (faster = higher)
+```
+
+Speed ranges:
+- 700 RPM (slow) = ~85,714 µs/rev
+- 2800 RPM (fast) = ~21,428 µs/rev
+
+### FastLED Integer Helpers
+
+Use FastLED's optimized functions instead of float math:
+
+| Instead of | Use | Notes |
+|------------|-----|-------|
+| `float * float` | `scale8(val, scale)` | 8-bit multiply |
+| `std::min(255, a+b)` | `qadd8(a, b)` | Saturating add |
+| `lerp(a, b, t)` | `lerp8by8(a, b, frac)` | frac is 0-255 |
+| `sin(angle)` | `sin16(phase)` | phase 0-65535 |
+| `fmod(angle, 360)` | `angle % 3600` | Integer modulo |
+
+### Key Files
+
+- `include/types.h` - `angle_t` and constants
+- `include/polar_helpers.h` - Integer angle helpers (`isAngleInArcUnits`, `arcIntensityUnits`, `speedFactor8`)
+- `include/RenderContext.h` - `arms[].angleUnits` (not `angle`)
+
 ## ESP32-S3 Floating-Point Performance Summary
 
-The ESP32-S3 includes a single-precision hardware floating point unit (FPU) that provides decent performance for `float` operations, with single-precision multiplications taking approximately 4 CPU clock cycles. This is a significant improvement over microcontrollers without an FPU. However, even with hardware acceleration, floating-point calculations are still consistently 2× slower than integer operations on the S3. Espressif's own optimization guides recommend avoiding floating-point arithmetic when performance matters, particularly in tight loops or time-critical code.
+The ESP32-S3 includes a single-precision hardware floating point unit (FPU) that provides decent performance for `float` operations, with single-precision multiplications taking approximately 4 CPU clock cycles. However, even with hardware acceleration, floating-point calculations are still consistently 2× slower than integer operations on the S3. **This project uses pure integer math in the render path to maximize performance.**
 
-For your POV display application, the key takeaway is: use `float` when you need it (it's reasonably fast), but **never** use `double` — double-precision operations are software-emulated and extremely slow. For performance-critical calculations like LED timing and color computations, consider using integer math with fixed-point representation where possible. The FPU will handle occasional trigonometry or color blending calculations just fine, but if you're doing thousands of float operations per frame, you'll feel the performance hit compared to integer equivalents.
+Double-precision (`double`) operations are software-emulated and extremely slow - **never use double in timing-critical code**.
 
 ### Further Reading
 
@@ -387,3 +441,4 @@ uv run pio run -e seeed_xiao_esp32s3 -t compiledb
 4. IntelliSense works without spurious errors about unknown compiler flags
 
 - we are _not_ migrating to neopixelbus! we use fastled for everything but the final data transfer.
+- in general, please do not do uv run pio run to build.... let me build instead, i'll report any errors... don't you worry about that!

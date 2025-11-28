@@ -2,7 +2,6 @@
 #define BLOB_TYPES_H
 
 #include <Arduino.h>
-#include <cmath>
 #include "esp_timer.h"
 #include <FastLED.h>
 #include "types.h"
@@ -22,16 +21,16 @@ struct Blob {
     CRGB color;                   // Blob's color
 
     // Angular position (where the arc is)
-    float currentStartAngle;      // 0-360°, current position
-    float driftVelocity;          // rad/sec frequency for sine wave drift
-    float wanderCenter;           // center point for wandering
-    float wanderRange;            // +/- range from center
+    angle_t currentStartAngleUnits;  // 0-3600 (0-360°), current position
+    uint16_t driftPhaseAccum;        // FastLED beat accumulator for drift phase
+    angle_t wanderCenterUnits;       // center point for wandering (in angle units)
+    angle_t wanderRangeUnits;        // +/- range from center (in angle units)
 
     // Angular size (how big the arc is)
-    float currentArcSize;         // current size in degrees
-    float minArcSize;             // minimum wedge size
-    float maxArcSize;             // maximum wedge size
-    float sizeChangeRate;         // frequency for size oscillation
+    angle_t currentArcSizeUnits;     // current size in angle units
+    angle_t minArcSizeUnits;         // minimum wedge size in angle units
+    angle_t maxArcSizeUnits;         // maximum wedge size in angle units
+    uint16_t sizePhaseAccum;         // FastLED beat accumulator for size oscillation
 
     // Radial position (LED index along arm, 0-9 for per-arm, 0-29 for virtual)
     float currentRadialCenter;    // current LED position (can go out of bounds)
@@ -61,40 +60,54 @@ inline CHSV citrusPalette[MAX_BLOBS] = {
 };
 
 /**
- * Update blob animation state using time-based sine waves
- * Uses FastLED's sin16() for performance (fixed-point math)
+ * Update blob animation state using pure integer math
+ * Uses FastLED's sin16() for performance (no floating point!)
+ *
+ * Integer angle system: angle_t where 3600 = 360 degrees (0.1° precision)
+ * Phase accumulators increment each frame for smooth animation
  */
 inline void updateBlob(Blob& blob, timestamp_t now) {
     if (!blob.active) return;
 
-    float timeInSeconds = now / 1000000.0f;
-
     // Angular position drift: sine wave wandering around center point
     // sin16() takes 0-65535 (full circle), returns -32768 to 32767
-    uint16_t anglePhase = (uint16_t)(timeInSeconds * blob.driftVelocity * 10430.378f);  // × (65536 / (2π))
-    int16_t angleSin = sin16(anglePhase);
-    blob.currentStartAngle = blob.wanderCenter + (angleSin / 32768.0f) * blob.wanderRange;
-    blob.currentStartAngle = fmod(blob.currentStartAngle + 360.0f, 360.0f);
+    int16_t angleSin = sin16(blob.driftPhaseAccum);
+
+    // Scale sin16 output (-32768 to 32767) to wanderRange
+    // sin16 gives full scale, we need to map to +/- wanderRangeUnits
+    // scale16by8() is faster but we need signed math here
+    int32_t offset = ((int32_t)angleSin * (int32_t)blob.wanderRangeUnits) / 32768;
+
+    // Calculate current position: center + offset
+    int32_t newAngle = (int32_t)blob.wanderCenterUnits + offset;
+
+    // Wrap to 0-3600 range
+    while (newAngle < 0) newAngle += ANGLE_FULL_CIRCLE;
+    while (newAngle >= ANGLE_FULL_CIRCLE) newAngle -= ANGLE_FULL_CIRCLE;
+
+    blob.currentStartAngleUnits = (angle_t)newAngle;
 
     // Angular size breathing: sine wave oscillation between min and max
-    uint16_t sizePhase = (uint16_t)(timeInSeconds * blob.sizeChangeRate * 10430.378f);
-    int16_t sizeSin = sin16(sizePhase);
-    blob.currentArcSize = blob.minArcSize +
-                          (blob.maxArcSize - blob.minArcSize) *
-                          ((sizeSin / 32768.0f) * 0.5f + 0.5f);
+    // sin16 returns -32768 to 32767, we want 0 to range for breathing
+    int16_t sizeSin = sin16(blob.sizePhaseAccum);
+
+    // Convert -32768..32767 to 0..65535 for unipolar oscillation
+    uint16_t sizeOscillation = (uint16_t)((int32_t)sizeSin + 32768);
+
+    // Scale oscillation to size range: min + scale16(oscillation, max - min)
+    uint16_t sizeRange = blob.maxArcSizeUnits - blob.minArcSizeUnits;
+    blob.currentArcSizeUnits = blob.minArcSizeUnits + scale16(sizeOscillation, sizeRange);
 
     // Radial position drift: sine wave wandering around center point
-    uint16_t radialAnglePhase = (uint16_t)(timeInSeconds * blob.radialDriftVelocity * 10430.378f);
-    int16_t radialAngleSin = sin16(radialAnglePhase);
+    int16_t radialAngleSin = sin16(blob.radialDriftVelocity);  // TODO: needs phase accumulator too
     blob.currentRadialCenter = blob.radialWanderCenter + (radialAngleSin / 32768.0f) * blob.radialWanderRange;
     // Note: No wraparound needed - clipping happens at render time
 
     // Radial size breathing: sine wave oscillation between min and max
-    uint16_t radialSizePhase = (uint16_t)(timeInSeconds * blob.radialSizeChangeRate * 10430.378f);
-    int16_t radialSizeSin = sin16(radialSizePhase);
+    int16_t radialSizeSin = sin16(blob.radialSizeChangeRate);  // TODO: needs phase accumulator too
+    float radialSizeOscillation = (radialSizeSin / 32768.0f) * 0.5f + 0.5f;  // 0..1 range
     blob.currentRadialSize = blob.minRadialSize +
-                            (blob.maxRadialSize - blob.minRadialSize) *
-                            ((radialSizeSin / 32768.0f) * 0.5f + 0.5f);
+                            (blob.maxRadialSize - blob.minRadialSize) * radialSizeOscillation;
 }
 
 #endif // BLOB_TYPES_H

@@ -7,12 +7,12 @@ static uint8_t prevPatterns[3] = {255, 255, 255};
 static uint32_t boundaryHitCount[3] = {0, 0, 0};
 static uint32_t patternChangeCount[3] = {0, 0, 0};
 static uint32_t frameCount = 0;
-static constexpr float BOUNDARY_EPSILON = 0.5f;  // degrees from boundary to flag
+static constexpr angle_t BOUNDARY_EPSILON = 5;  // 0.5 degrees from boundary (5 units)
 
-// Check if angle is near a pattern boundary (multiple of 18°)
-static bool isNearBoundary(float angle, float* distToBoundary) {
-    float remainder = fmod(angle, 18.0f);
-    float dist = (remainder < 9.0f) ? remainder : (18.0f - remainder);
+// Check if angle is near a pattern boundary (multiple of 18° = 180 units)
+static bool isNearBoundary(angle_t angleUnits, angle_t* distToBoundary) {
+    angle_t remainder = angleUnits % ANGLE_PER_PATTERN;
+    angle_t dist = (remainder < (ANGLE_PER_PATTERN / 2)) ? remainder : (ANGLE_PER_PATTERN - remainder);
     if (distToBoundary) *distToBoundary = dist;
     return dist < BOUNDARY_EPSILON;
 }
@@ -32,15 +32,15 @@ void SolidArms::render(RenderContext& ctx) {
     for (int a = 0; a < 3; a++) {
         auto& arm = ctx.arms[a];
 
-        // Normalize angle and determine pattern (0-19)
-        float normAngle = normalizeAngle(arm.angle);
-        uint8_t pattern = static_cast<uint8_t>(normAngle / 18.0f);
+        // Pattern = angleUnits / 180 (exact integer division!)
+        // angleUnits is already normalized to 0-3599
+        uint8_t pattern = arm.angleUnits / ANGLE_PER_PATTERN;
         if (pattern > 19) pattern = 19;
 
 #ifdef ENABLE_DETAILED_TIMING
         // Detect boundary proximity
-        float distToBoundary;
-        bool nearBoundary = isNearBoundary(normAngle, &distToBoundary);
+        angle_t distToBoundary;
+        bool nearBoundary = isNearBoundary(arm.angleUnits, &distToBoundary);
 
         // Detect pattern changes (flickering)
         bool patternChanged = (prevPatterns[a] != 255 && prevPatterns[a] != pattern);
@@ -54,13 +54,13 @@ void SolidArms::render(RenderContext& ctx) {
             // Log pattern changes near the critical 288° boundary (pattern 15→16)
             if ((prevPatterns[a] == 15 && pattern == 16) ||
                 (prevPatterns[a] == 16 && pattern == 15)) {
-                Serial.printf("FLICKER@288: arm%d frame=%u angle=%.4f pat=%d->%d dist=%.4f\n",
-                              a, frameCount, normAngle, prevPatterns[a], pattern, distToBoundary);
+                Serial.printf("FLICKER@288: arm%d frame=%u angle=%u pat=%d->%d dist=%u\n",
+                              a, frameCount, arm.angleUnits, prevPatterns[a], pattern, distToBoundary);
             }
             // Also log any boundary flickering
             else if (nearBoundary) {
-                Serial.printf("BOUNDARY_FLICKER: arm%d frame=%u angle=%.4f pat=%d->%d dist=%.4f\n",
-                              a, frameCount, normAngle, prevPatterns[a], pattern, distToBoundary);
+                Serial.printf("BOUNDARY_FLICKER: arm%d frame=%u angle=%u pat=%d->%d dist=%u\n",
+                              a, frameCount, arm.angleUnits, prevPatterns[a], pattern, distToBoundary);
             }
         }
 
@@ -95,9 +95,10 @@ void SolidArms::render(RenderContext& ctx) {
 
         // Reference marker: white line at 0° for one render cycle
         // At 2800 RPM, ~3° per frame, so check within 3° of 0°
-        if (normAngle < 3.0f || normAngle > 357.0f) {
+        // 3 degrees = 30 units, 357 degrees = 3570 units
+        if (arm.angleUnits < 30 || arm.angleUnits > 3570) {
             for (int p = 0; p < 10; p++) {
-                if(normAngle < 3.0f)
+                if(arm.angleUnits < 30)
                   arm.pixels[p] = CRGB::White;
                 else
                   arm.pixels[p] = CRGB::Orange;

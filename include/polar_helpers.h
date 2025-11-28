@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <algorithm>
+#include "types.h"
 #include "RenderContext.h"
 
 /**
@@ -13,7 +14,92 @@
  */
 
 // ============================================================
-// Angular Helpers
+// Integer Angle Helpers (3600 units = 360 degrees)
+// ============================================================
+
+/**
+ * Normalize angle units to 0-3599 range
+ */
+inline angle_t normalizeAngleUnits(int32_t units) {
+    int32_t normalized = units % ANGLE_FULL_CIRCLE;
+    return normalized < 0 ? static_cast<angle_t>(normalized + ANGLE_FULL_CIRCLE) : static_cast<angle_t>(normalized);
+}
+
+/**
+ * Signed angular distance in units (-1800 to +1800)
+ *
+ * @return Distance in range -1800 to +1800
+ *         Positive = clockwise from 'from' to 'to'
+ *         Negative = counter-clockwise
+ */
+inline int16_t angularDistanceUnits(angle_t from, angle_t to) {
+    int32_t diff = static_cast<int32_t>(to) - static_cast<int32_t>(from);
+    diff = ((diff % ANGLE_FULL_CIRCLE) + ANGLE_FULL_CIRCLE) % ANGLE_FULL_CIRCLE;
+    return diff > ANGLE_HALF_CIRCLE ? static_cast<int16_t>(diff - ANGLE_FULL_CIRCLE) : static_cast<int16_t>(diff);
+}
+
+/**
+ * Absolute angular distance in units (0 to 1800)
+ *
+ * @return Distance in range 0 to 1800
+ */
+inline angle_t angularDistanceAbsUnits(angle_t a, angle_t b) {
+    int16_t dist = angularDistanceUnits(a, b);
+    return static_cast<angle_t>(dist < 0 ? -dist : dist);
+}
+
+/**
+ * Check if angle is within arc centered at 'center' with given 'width'
+ *
+ * Handles 360° wraparound correctly (e.g., arc from 3500 to 100 units)
+ *
+ * @param angle Angle to test (units)
+ * @param center Center of arc (units)
+ * @param width Total width of arc (units)
+ * @return true if angle is within arc
+ */
+inline bool isAngleInArcUnits(angle_t angle, angle_t center, angle_t width) {
+    angle_t halfWidth = width / 2;
+    angle_t dist = angularDistanceAbsUnits(center, angle);
+    return dist <= halfWidth;
+}
+
+/**
+ * Arc intensity using integer math (returns 0-255 for FastLED scale8)
+ *
+ * @param angle Angle to test (units)
+ * @param center Center of arc (units)
+ * @param width Total width of arc (units)
+ * @return 0 = outside arc, 255 = at center, linear fade between
+ */
+inline uint8_t arcIntensityUnits(angle_t angle, angle_t center, angle_t width) {
+    angle_t halfWidth = width / 2;
+    angle_t dist = angularDistanceAbsUnits(center, angle);
+    if (dist > halfWidth) return 0;
+    // Linear interpolation: 255 at center, 0 at edge
+    return static_cast<uint8_t>(255 - (static_cast<uint32_t>(dist) * 255 / halfWidth));
+}
+
+// ============================================================
+// Speed Helpers
+// ============================================================
+
+/**
+ * Map rotation speed to 0-255 (faster = higher value)
+ * Uses microsPerRev which is the raw timing measurement.
+ * Lower microsPerRev = faster rotation = higher return value.
+ */
+inline uint8_t speedFactor8(interval_t microsPerRev) {
+    if (microsPerRev >= MICROS_PER_REV_MAX) return 0;
+    if (microsPerRev <= MICROS_PER_REV_MIN) return 255;
+    return static_cast<uint8_t>(
+        (MICROS_PER_REV_MAX - microsPerRev) * 255 /
+        (MICROS_PER_REV_MAX - MICROS_PER_REV_MIN)
+    );
+}
+
+// ============================================================
+// Angular Helpers (Float - Legacy)
 // ============================================================
 
 /**
@@ -158,73 +244,11 @@ inline uint8_t armLedToVirtual(uint8_t armIndex, uint8_t ledPos) {
 // ============================================================
 // Virtual Column Helpers
 // ============================================================
-
-/**
- * Check if ALL arms are within the target arc
- *
- * Use when you want the virtual column to appear as a unit.
- * Since arms are 120° apart, this requires a wide arc (~240°+)
- * for all three to be visible simultaneously.
- */
-inline bool isVirtualColumnInArc(const RenderContext& ctx,
-                                  float arcCenter,
-                                  float arcWidth) {
-    for (int a = 0; a < 3; a++) {
-        if (!isAngleInArc(ctx.arms[a].angle, arcCenter, arcWidth)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-/**
- * Check if ANY arm is within the target arc
- *
- * Use when partial visibility is acceptable.
- */
-inline bool isAnyArmInArc(const RenderContext& ctx,
-                          float arcCenter,
-                          float arcWidth) {
-    for (int a = 0; a < 3; a++) {
-        if (isAngleInArc(ctx.arms[a].angle, arcCenter, arcWidth)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/**
- * Get intensity for each arm based on arc position
- *
- * @param ctx Render context with arm angles
- * @param arcCenter Center of arc (degrees)
- * @param arcWidth Width of arc (degrees)
- * @param intensities Output: array of 3 intensities (0.0-1.0)
- */
-inline void getArmIntensities(const RenderContext& ctx,
-                               float arcCenter,
-                               float arcWidth,
-                               float intensities[3]) {
-    for (int a = 0; a < 3; a++) {
-        intensities[a] = arcIntensity(ctx.arms[a].angle, arcCenter, arcWidth);
-    }
-}
-
-/**
- * Count how many arms are currently in the arc
- *
- * @return 0, 1, 2, or 3
- */
-inline uint8_t countArmsInArc(const RenderContext& ctx,
-                               float arcCenter,
-                               float arcWidth) {
-    uint8_t count = 0;
-    for (int a = 0; a < 3; a++) {
-        if (isAngleInArc(ctx.arms[a].angle, arcCenter, arcWidth)) {
-            count++;
-        }
-    }
-    return count;
-}
+// NOTE: Legacy float-based virtual column helpers removed.
+// These referenced ctx.arms[a].angle which no longer exists
+// (now using angleUnits for integer math).
+// If you need similar functionality, use the integer-based
+// angle helpers (isAngleInArcUnits, arcIntensityUnits, etc.)
+// and work with angleUnits directly.
 
 #endif // POLAR_HELPERS_H

@@ -16,7 +16,8 @@ void NoiseField::render(RenderContext& ctx) {
 
         // Use THIS arm's actual angle for noise X
         // inoise16() expects 0-65535 range
-        uint16_t noiseX = static_cast<uint16_t>(arm.angle * 182.0f);
+        // Map 0-3599 angleUnits to 0-65535: (angleUnits * 65536) / 3600
+        uint16_t noiseX = static_cast<uint16_t>((static_cast<uint32_t>(arm.angleUnits) * 65536UL) / 3600);
 
         for (int p = 0; p < 10; p++) {
             // Virtual position: interleaved across arms

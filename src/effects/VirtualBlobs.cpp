@@ -26,7 +26,7 @@ void VirtualBlobs::render(RenderContext& ctx) {
         for (int a = 0; a < 3; a++) {
             auto& arm = ctx.arms[a];
 
-            if (!isAngleInArc(arm.angle, blob.currentStartAngle, blob.currentArcSize)) {
+            if (!isAngleInArcUnits(arm.angleUnits, blob.currentStartAngleUnits, blob.currentArcSizeUnits)) {
                 continue;  // This arm not in blob
             }
 
@@ -74,13 +74,13 @@ void VirtualBlobs::initializeBlobs() {
         // Use template based on blob index (varied sizes)
         BlobTemplate& tmpl = templates[i % 3];
 
-        // Angular parameters
-        blobs[i].wanderCenter = (i * 72.0f);  // Spread evenly: 0, 72, 144, 216, 288
-        blobs[i].wanderRange = tmpl.angularWanderRange;
-        blobs[i].driftVelocity = tmpl.angularDriftSpeed;
-        blobs[i].minArcSize = tmpl.minAngularSize;
-        blobs[i].maxArcSize = tmpl.maxAngularSize;
-        blobs[i].sizeChangeRate = tmpl.angularSizeSpeed;
+        // Angular parameters (convert degrees to units: degrees * 10)
+        blobs[i].wanderCenterUnits = static_cast<angle_t>(i * 720);  // Spread evenly: 0, 72, 144, 216, 288 degrees
+        blobs[i].wanderRangeUnits = static_cast<angle_t>(tmpl.angularWanderRange * 10);
+        blobs[i].driftPhaseAccum = random16();  // Random starting phase
+        blobs[i].minArcSizeUnits = static_cast<angle_t>(tmpl.minAngularSize * 10);
+        blobs[i].maxArcSizeUnits = static_cast<angle_t>(tmpl.maxAngularSize * 10);
+        blobs[i].sizePhaseAccum = random16();  // Random starting phase
 
         // Radial parameters (0-29 range for virtual)
         blobs[i].radialWanderCenter = 14.5f;  // Center of virtual display (0-29)

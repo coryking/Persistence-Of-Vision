@@ -32,24 +32,15 @@ The context passed to every render call. Owns the pixel buffers.
 struct RenderContext {
     // === Timing ===
     uint32_t timeUs;              // Current timestamp (microseconds)
-    interval_t microsPerRev;      // Microseconds per revolution
+    interval_t microsPerRev;      // Microseconds per revolution (use directly, don't convert to RPM!)
 
-    // === Convenience Methods ===
-    float rpm() const {
-        return 60000000.0f / static_cast<float>(microsPerRev);
-    }
-
-    // Angular resolution: how many degrees does one render cover?
-    // At 2800 RPM with 50µs renders: ~0.84° per render
-    // At 700 RPM with 50µs renders: ~0.21° per render
-    float degreesPerRender(uint32_t renderTimeUs) const {
-        float revsPerMicro = 1.0f / static_cast<float>(microsPerRev);
-        return renderTimeUs * revsPerMicro * 360.0f;
-    }
+    // === Speed Scaling ===
+    // Use speedFactor8(microsPerRev) from polar_helpers.h for speed-based effects
+    // Returns 0-255 (faster = higher). NO float division needed.
 
     // === The Three Arms (physical reality) ===
     struct Arm {
-        float angle;              // THIS arm's current angle (0-360°)
+        angle_t angleUnits;       // THIS arm's angle in units (3600 = 360°)
         CRGB pixels[10];          // THIS arm's LEDs: [0]=hub, [9]=tip
     } arms[3];                    // [0]=inner(+120°), [1]=middle(0°), [2]=outer(+240°)
 
@@ -131,34 +122,42 @@ These helpers make common angular/radial operations easy. They handle wraparound
 
 ### Angular Helpers
 
+All angle helpers use **integer units** (3600 = 360°) for precision and speed.
+
 ```cpp
-// Normalize angle to 0-360 range
-inline float normalizeAngle(float angle) {
-    angle = fmod(angle, 360.0f);
-    return angle < 0 ? angle + 360.0f : angle;
+// Normalize angle units to 0-3599 range
+inline angle_t normalizeAngleUnits(int32_t units) {
+    int32_t normalized = units % ANGLE_FULL_CIRCLE;
+    return normalized < 0 ? normalized + ANGLE_FULL_CIRCLE : normalized;
 }
 
-// Signed angular distance from 'from' to 'to' (-180 to +180)
-inline float angularDistance(float from, float to) {
-    float diff = normalizeAngle(to - from);
-    return diff > 180.0f ? diff - 360.0f : diff;
+// Signed angular distance in units (-1800 to +1800)
+inline int16_t angularDistanceUnits(angle_t from, angle_t to) {
+    int32_t diff = static_cast<int32_t>(to) - static_cast<int32_t>(from);
+    diff = ((diff % ANGLE_FULL_CIRCLE) + ANGLE_FULL_CIRCLE) % ANGLE_FULL_CIRCLE;
+    return diff > ANGLE_HALF_CIRCLE ? diff - ANGLE_FULL_CIRCLE : diff;
 }
 
-// Is angle within arc centered at 'center' with given 'width'?
-// Handles 360° wraparound correctly
-inline bool isAngleInArc(float angle, float center, float width) {
-    float halfWidth = width / 2.0f;
-    float dist = fabsf(angularDistance(center, angle));
+// Is angle within arc? (all values in units)
+inline bool isAngleInArcUnits(angle_t angle, angle_t center, angle_t width) {
+    angle_t halfWidth = width / 2;
+    angle_t dist = angularDistanceAbsUnits(center, angle);
     return dist <= halfWidth;
 }
 
-// How far into the arc is this angle? (0.0 = edge, 1.0 = center)
-// Useful for soft-edge effects
-inline float arcIntensity(float angle, float center, float width) {
-    float halfWidth = width / 2.0f;
-    float dist = fabsf(angularDistance(center, angle));
-    if (dist > halfWidth) return 0.0f;
-    return 1.0f - (dist / halfWidth);
+// Arc intensity: returns 0-255 for FastLED scale8 (edge=0, center=255)
+inline uint8_t arcIntensityUnits(angle_t angle, angle_t center, angle_t width) {
+    angle_t halfWidth = width / 2;
+    angle_t dist = angularDistanceAbsUnits(center, angle);
+    if (dist > halfWidth) return 0;
+    return static_cast<uint8_t>(255 - (dist * 255UL / halfWidth));
+}
+
+// Speed factor: maps microsPerRev to 0-255 (faster = higher)
+inline uint8_t speedFactor8(interval_t microsPerRev) {
+    if (microsPerRev >= MICROS_PER_REV_MAX) return 0;
+    if (microsPerRev <= MICROS_PER_REV_MIN) return 255;
+    return (MICROS_PER_REV_MAX - microsPerRev) * 255 / (MICROS_PER_REV_MAX - MICROS_PER_REV_MIN);
 }
 ```
 
@@ -183,44 +182,31 @@ inline uint8_t virtualFromNormalized(float normalized) {
 
 ### Virtual Column Helpers
 
-For effects that want to think in "30-pixel virtual columns":
+For effects that want to think in "30-pixel virtual columns", iterate arms directly:
 
 ```cpp
-// Check if ALL arms are within the target arc
-// Use when you want the virtual column to appear as a unit
-inline bool isVirtualColumnInArc(const RenderContext& ctx,
-                                  float arcCenter,
-                                  float arcWidth) {
-    for (int a = 0; a < 3; a++) {
-        if (!isAngleInArc(ctx.arms[a].angle, arcCenter, arcWidth)) {
-            return false;
-        }
+// Check if ALL arms are within the target arc (units version)
+bool allArmsInArc = true;
+for (int a = 0; a < 3; a++) {
+    if (!isAngleInArcUnits(ctx.arms[a].angleUnits, arcCenterUnits, arcWidthUnits)) {
+        allArmsInArc = false;
+        break;
     }
-    return true;
 }
 
 // Check if ANY arm is within the target arc
-// Use when partial visibility is okay
-inline bool isAnyArmInArc(const RenderContext& ctx,
-                          float arcCenter,
-                          float arcWidth) {
-    for (int a = 0; a < 3; a++) {
-        if (isAngleInArc(ctx.arms[a].angle, arcCenter, arcWidth)) {
-            return true;
-        }
+bool anyArmInArc = false;
+for (int a = 0; a < 3; a++) {
+    if (isAngleInArcUnits(ctx.arms[a].angleUnits, arcCenterUnits, arcWidthUnits)) {
+        anyArmInArc = true;
+        break;
     }
-    return false;
 }
 
-// Get intensity for each arm based on arc position
-// Returns array of 3 intensities (0.0-1.0)
-inline void getArmIntensities(const RenderContext& ctx,
-                               float arcCenter,
-                               float arcWidth,
-                               float intensities[3]) {
-    for (int a = 0; a < 3; a++) {
-        intensities[a] = arcIntensity(ctx.arms[a].angle, arcCenter, arcWidth);
-    }
+// Get intensity for each arm (0-255 for FastLED scale8)
+uint8_t intensities[3];
+for (int a = 0; a < 3; a++) {
+    intensities[a] = arcIntensityUnits(ctx.arms[a].angleUnits, arcCenterUnits, arcWidthUnits);
 }
 ```
 
@@ -228,47 +214,42 @@ inline void getArmIntensities(const RenderContext& ctx,
 
 ## Example Effects
 
-### RpmArc (Shape-based, RPM-aware)
+### RpmArc (Shape-based, Speed-aware)
 
 ```cpp
 class RpmArc : public Effect {
 private:
-    static constexpr float RPM_MIN = 800.0f;
-    static constexpr float RPM_MAX = 2500.0f;
-    static constexpr float BASE_ARC_WIDTH = 20.0f;
+    // Arc width in angle units (3600 = 360°)
+    static constexpr angle_t BASE_ARC_WIDTH_UNITS = 200;   // 20°
+    static constexpr angle_t MAX_EXTRA_WIDTH_UNITS = 100;  // +10° at max speed
 
     CRGBPalette16 palette = LavaColors_p;
-    float arcWidth = BASE_ARC_WIDTH;
-
-    uint8_t rpmToRadius(float rpm) const {
-        float clamped = constrain(rpm, RPM_MIN, RPM_MAX);
-        float normalized = (clamped - RPM_MIN) / (RPM_MAX - RPM_MIN);
-        return 1 + static_cast<uint8_t>(normalized * 29.0f);
-    }
 
 public:
     void render(RenderContext& ctx) override {
         ctx.clear();
 
-        // Animate arc width based on RPM (wider at higher RPM)
-        arcWidth = BASE_ARC_WIDTH + 10.0f * (ctx.rpm() / 2800.0f);
-        uint8_t radiusLimit = rpmToRadius(ctx.rpm());
+        // Speed-based arc width: wider at higher speeds (lower microsPerRev)
+        uint8_t speed = speedFactor8(ctx.microsPerRev);  // 0-255, faster=higher
+        angle_t arcWidthUnits = BASE_ARC_WIDTH_UNITS + scale8(MAX_EXTRA_WIDTH_UNITS, speed);
+
+        // Speed-based radial extent
+        uint8_t radiusLimit = 1 + scale8(29, speed);
 
         // Process each arm independently
         for (int a = 0; a < 3; a++) {
             auto& arm = ctx.arms[a];
 
-            // Check if THIS arm is in the arc
-            float intensity = arcIntensity(arm.angle, 0.0f, arcWidth);
-            if (intensity == 0.0f) continue;  // Skip this arm entirely
+            // Check if THIS arm is in the arc (integer units)
+            uint8_t intensity = arcIntensityUnits(arm.angleUnits, 0, arcWidthUnits);
+            if (intensity == 0) continue;  // Skip this arm entirely
 
-            // Draw gradient up to RPM-based radius
+            // Draw gradient up to speed-based radius
             for (int p = 0; p < 10; p++) {
                 uint8_t virtualPos = a + p * 3;
                 if (virtualPos < radiusLimit) {
                     CRGB color = ColorFromPalette(palette, virtualPos * 8);
-                    // Optional: fade at arc edges
-                    color.nscale8(static_cast<uint8_t>(intensity * 255));
+                    color.nscale8(intensity);  // Fade at arc edges
                     arm.pixels[p] = color;
                 }
             }
@@ -292,8 +273,9 @@ public:
         for (int a = 0; a < 3; a++) {
             auto& arm = ctx.arms[a];
 
-            // Use THIS arm's actual angle for noise sampling
-            uint16_t noiseX = static_cast<uint16_t>(arm.angle * 182.0f);
+            // Use THIS arm's angle units for noise sampling
+            // angleUnits is 0-3599, scale to 0-65535 for noise: *18
+            uint16_t noiseX = arm.angleUnits * 18;
 
             for (int p = 0; p < 10; p++) {
                 uint8_t virtualPos = a + p * 3;
@@ -322,7 +304,7 @@ public:
 
     void onRevolution(float rpm) override {
         // Update blob animations once per revolution
-        uint32_t now = esp_timer_get_time();
+        timestamp_t now = esp_timer_get_time();
         for (auto& blob : blobs) {
             updateBlobAnimation(blob, now);
         }
@@ -335,11 +317,13 @@ public:
         for (const auto& blob : blobs) {
             if (!blob.active) continue;
 
-            // Check each arm against this blob's arc
+            // Check each arm against this blob's arc (integer units)
             for (int a = 0; a < 3; a++) {
                 auto& arm = ctx.arms[a];
 
-                if (!isAngleInArc(arm.angle, blob.centerAngle, blob.arcWidth)) {
+                if (!isAngleInArcUnits(arm.angleUnits,
+                                        blob.currentStartAngleUnits,
+                                        blob.currentArcSizeUnits)) {
                     continue;  // This arm isn't in the blob
                 }
 
@@ -347,7 +331,7 @@ public:
                 for (int p = 0; p < 10; p++) {
                     uint8_t virtualPos = a + p * 3;
                     if (isRadiusInRange(virtualPos, blob.radialStart, blob.radialEnd)) {
-                        arm.pixels[p] += blob.color;  // Additive blend
+                        arm.pixels[p] += blob.color;  // Additive blend with qadd8
                     }
                 }
             }
@@ -365,9 +349,9 @@ public:
         for (int a = 0; a < 3; a++) {
             auto& arm = ctx.arms[a];
 
-            // Determine pattern based on THIS arm's angle
-            float normAngle = normalizeAngle(arm.angle);
-            uint8_t pattern = static_cast<uint8_t>(normAngle / 18.0f);
+            // Determine pattern based on THIS arm's angle (integer units)
+            // Each pattern is 18° = 180 units, so divide by ANGLE_PER_PATTERN
+            uint8_t pattern = arm.angleUnits / ANGLE_PER_PATTERN;  // 0-19
             if (pattern > 19) pattern = 19;
 
             CRGB color = getPatternColor(pattern, a);

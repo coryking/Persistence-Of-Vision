@@ -3,7 +3,7 @@
 
 void RpmArc::begin() {
     initializeGradient();
-    arcWidth = BASE_ARC_WIDTH;
+    arcWidthUnits = BASE_ARC_WIDTH_UNITS;
 }
 
 void RpmArc::initializeGradient() {
@@ -15,10 +15,10 @@ void RpmArc::initializeGradient() {
     }
 }
 
-uint8_t RpmArc::rpmToPixelCount(float rpm) const {
-    float clamped = constrain(rpm, RPM_MIN, RPM_MAX);
-    float normalized = (clamped - RPM_MIN) / (RPM_MAX - RPM_MIN);
-    return 1 + static_cast<uint8_t>(normalized * 29.0f);
+uint8_t RpmArc::speedToPixelCount(uint8_t speedFactor) const {
+    // speedFactor is 0-255 (faster = higher)
+    // Map to 1-30 pixels (always show at least 1 pixel)
+    return 1 + scale8(29, speedFactor);
 }
 
 /**
@@ -30,20 +30,20 @@ uint8_t RpmArc::rpmToPixelCount(float rpm) const {
 void RpmArc::render(RenderContext& ctx) {
     ctx.clear();
 
-    // Calculate RPM-based parameters
-    float rpm = ctx.rpm();
-    uint8_t pixelCount = rpmToPixelCount(rpm);
+    // Calculate speed-based parameters
+    uint8_t speed = speedFactor8(ctx.microsPerRev);
+    uint8_t pixelCount = speedToPixelCount(speed);
 
-    // Optional: animate arc width based on RPM (wider at higher RPM)
-    // Uncomment to enable: arcWidth = BASE_ARC_WIDTH + 10.0f * (rpm / RPM_MAX);
+    // Animate arc width based on speed (wider at higher speed)
+    arcWidthUnits = BASE_ARC_WIDTH_UNITS + scale8(MAX_EXTRA_WIDTH_UNITS, speed);
 
     for (int a = 0; a < 3; a++) {
         auto& arm = ctx.arms[a];
 
-        // Get intensity for this arm (0 = outside arc, 1 = at center)
-        float intensity = arcIntensity(arm.angle, ARC_CENTER, arcWidth);
+        // Get intensity for this arm (0-255: 0 = outside arc, 255 = at center)
+        uint8_t intensity = arcIntensityUnits(arm.angleUnits, ARC_CENTER_UNITS, arcWidthUnits);
 
-        if (intensity == 0.0f) {
+        if (intensity == 0) {
             // Arm completely outside arc - already cleared
             continue;
         }
@@ -54,8 +54,8 @@ void RpmArc::render(RenderContext& ctx) {
 
             if (virtualPos < pixelCount) {
                 CRGB color = gradient[virtualPos];
-                // Apply arc edge fade
-                color.nscale8(static_cast<uint8_t>(intensity * 255));
+                // Apply arc edge fade (intensity already 0-255)
+                color.nscale8(intensity);
                 arm.pixels[p] = color;
             }
             // Pixels beyond pixelCount stay black (from clear)

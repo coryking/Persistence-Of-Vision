@@ -27,7 +27,7 @@ void PerArmBlobs::render(RenderContext& ctx) {
         auto& arm = ctx.arms[targetArm];
 
         // Check if arm is currently in blob's angular arc
-        if (!isAngleInArc(arm.angle, blob.currentStartAngle, blob.currentArcSize)) {
+        if (!isAngleInArcUnits(arm.angleUnits, blob.currentStartAngleUnits, blob.currentArcSizeUnits)) {
             continue;  // Arm not in blob's wedge - skip this blob
         }
 
@@ -78,13 +78,13 @@ void PerArmBlobs::initializeBlobs() {
         // Use template based on blob index (varied sizes)
         BlobTemplate& tmpl = templates[i % 3];
 
-        // Angular parameters
-        blobs[i].wanderCenter = (i * 72.0f);  // Spread evenly: 0, 72, 144, 216, 288
-        blobs[i].wanderRange = tmpl.angularWanderRange;
-        blobs[i].driftVelocity = tmpl.angularDriftSpeed;
-        blobs[i].minArcSize = tmpl.minAngularSize;
-        blobs[i].maxArcSize = tmpl.maxAngularSize;
-        blobs[i].sizeChangeRate = tmpl.angularSizeSpeed;
+        // Angular parameters (convert degrees to units: degrees * 10)
+        blobs[i].wanderCenterUnits = static_cast<angle_t>(i * 720);  // Spread evenly: 0, 720, 1440, 2160, 2880
+        blobs[i].wanderRangeUnits = static_cast<angle_t>(tmpl.angularWanderRange * 10);
+        blobs[i].driftPhaseAccum = random16();  // Random start for variety
+        blobs[i].minArcSizeUnits = static_cast<angle_t>(tmpl.minAngularSize * 10);
+        blobs[i].maxArcSizeUnits = static_cast<angle_t>(tmpl.maxAngularSize * 10);
+        blobs[i].sizePhaseAccum = random16();  // Random start for variety
 
         // Radial parameters (0-9 range for per-arm)
         blobs[i].radialWanderCenter = 4.5f;  // Center of LED strip (0-9)

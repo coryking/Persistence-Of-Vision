@@ -20,33 +20,17 @@ struct RenderContext {
 
     // === Convenience Methods ===
 
-    /**
-     * Current rotation speed in RPM
-     */
-    float rpm() const {
-        if (microsPerRev == 0) return 0.0f;
-        return 60000000.0f / static_cast<float>(microsPerRev);
-    }
-
-    /**
-     * Angular resolution: how many degrees does one render cover?
-     *
-     * @param renderTimeUs Time taken for one render cycle (microseconds)
-     * @return Degrees covered per render at current RPM
-     *
-     * Examples at 50µs render time:
-     *   2800 RPM: ~0.84° per render
-     *   700 RPM:  ~0.21° per render
-     */
-    float degreesPerRender(uint32_t renderTimeUs) const {
-        if (microsPerRev == 0) return 0.0f;
-        float revsPerMicro = 1.0f / static_cast<float>(microsPerRev);
-        return static_cast<float>(renderTimeUs) * revsPerMicro * 360.0f;
-    }
+    // REMOVED: rpm() and degreesPerRender() methods
+    // These used float division which is ~2x slower than integer math on ESP32-S3.
+    // Effects should use microsPerRev directly with speedFactor8() helper instead.
+    //
+    // For debug display only, you can use:
+    //   uint32_t rpm = 60000000UL / microsPerRev;
+    //   (but keep this OUT of render path!)
 
     // === The Three Arms (physical reality) ===
     struct Arm {
-        float angle;              // THIS arm's current angle (0-360 degrees)
+        angle_t angleUnits;       // THIS arm's current angle (3600 = 360 degrees)
         CRGB pixels[10];          // THIS arm's LEDs: [0]=hub, [9]=tip
     } arms[3];                    // [0]=inner(+120°), [1]=middle(0°), [2]=outer(+240°)
 

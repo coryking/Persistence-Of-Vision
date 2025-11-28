@@ -279,13 +279,13 @@ public:
      * Get current RPM
      * @return Revolutions per minute, or 0 if not rotating
      */
-    rpm_t getRPM() const {
+    uint32_t getRPM() const {
         if (smoothedInterval == 0) {
-            return 0.0f;
+            return 0;
         }
         // Convert microseconds per revolution to RPM
         // RPM = (60 seconds * 1,000,000 microseconds/second) / microseconds per revolution
-        return 60000000.0f / static_cast<float>(smoothedInterval);
+        return 60000000UL / smoothedInterval;
     }
 
     /**
