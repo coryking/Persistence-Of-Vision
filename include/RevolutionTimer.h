@@ -15,7 +15,8 @@
  */
 struct TimingSnapshot {
     timestamp_t lastTimestamp;      // When hall sensor last triggered
-    interval_t microsecondsPerRev;  // Smoothed revolution period
+    interval_t microsecondsPerRev;  // Smoothed revolution period (for display/resolution calc)
+    interval_t lastActualInterval;  // Most recent actual revolution time (for angle calc)
     bool isRotating;                // Currently rotating?
     bool warmupComplete;            // Warmup period done?
     float angularResolution;        // Current degrees per render slot
@@ -242,6 +243,7 @@ public:
         portENTER_CRITICAL(&_spinlock);
         snap.lastTimestamp = lastTimestamp;
         snap.microsecondsPerRev = smoothedInterval;
+        snap.lastActualInterval = lastInterval;  // Use this for angle calculation!
         snap.isRotating = isRotating;
         snap.warmupComplete = (revolutionCount >= warmupRevolutions) && (revolutionCount >= 20);
         snap.angularResolution = _currentAngularResolution;

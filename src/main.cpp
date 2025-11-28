@@ -227,7 +227,16 @@ void loop() {
     bool isRotating = timing.isRotating;
     bool isWarmupComplete = timing.warmupComplete;
     timestamp_t lastHallTime = timing.lastTimestamp;
-    interval_t microsecondsPerRev = timing.microsecondsPerRev;
+
+    // Use ACTUAL last interval for angle calculation (not smoothed average)
+    // This prevents drift within a revolution when motor speed varies slightly
+    // The smoothed value is still available for display/resolution calculations
+    interval_t microsecondsPerRev = timing.lastActualInterval;
+
+    // Fall back to smoothed if no actual interval yet (first revolution)
+    if (microsecondsPerRev == 0) {
+        microsecondsPerRev = timing.microsecondsPerRev;
+    }
 
     timestamp_t elapsed = now - lastHallTime;
 
