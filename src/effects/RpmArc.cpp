@@ -1,120 +1,64 @@
-#include "effects.h"
-#include <FastLED.h>
-#include <cmath>
-#include "types.h"
-#include "hardware_config.h"
-#include "arm_renderer.h"
+#include "effects/RpmArc.h"
+#include "polar_helpers.h"
 
-// External references to globals from main.cpp
-extern const uint8_t PHYSICAL_TO_VIRTUAL[30];
+void RpmArc::begin() {
+    initializeGradient();
+    arcWidth = BASE_ARC_WIDTH;
+}
 
-// RPM Arc Effect Configuration
-constexpr float RPM_MIN = 800.0f;           // Minimum RPM (1 virtual pixel)
-constexpr float RPM_MAX = 2500.0f;          // Maximum RPM (30 virtual pixels)
-constexpr float ARC_WIDTH_DEGREES = 20.0f;  // Arc width in degrees
-constexpr float ARC_CENTER_DEGREES = 0.0f;  // Arc center position (hall sensor)
-
-// Colors
-static const CRGB OFF_COLOR = CRGB::Black;
-
-// Pre-computed gradient: green (innermost) → red (outermost)
-static CRGB rpmGradient[30];
-static bool gradientInitialized = false;
-
-/**
- * Initialize static gradient table (called once)
- */
-static void initializeRpmGradient() {
-    if (gradientInitialized) return;
-
+void RpmArc::initializeGradient() {
+    // Green (innermost) → Red (outermost)
     for (uint8_t i = 0; i < 30; i++) {
         float t = static_cast<float>(i) / 29.0f;
-        uint8_t hue = 85 * (1.0f - t);  // Green (85) → Red (0)
-        rpmGradient[i] = CHSV(hue, 255, 255);
+        uint8_t hue = static_cast<uint8_t>(85.0f * (1.0f - t));  // Green (85) → Red (0)
+        gradient[i] = CHSV(hue, 255, 255);
     }
-    gradientInitialized = true;
 }
 
-/**
- * Calculate RPM from microseconds per revolution
- */
-static float calculateRPM(interval_t microsecondsPerRev) {
-    if (microsecondsPerRev == 0) return 0.0f;
-    return 60000000.0f / static_cast<float>(microsecondsPerRev);
-}
-
-/**
- * Map RPM to number of virtual pixels (1-30)
- */
-static uint8_t rpmToPixelCount(float rpm) {
-    // Clamp RPM to valid range
-    if (rpm < RPM_MIN) rpm = RPM_MIN;
-    if (rpm > RPM_MAX) rpm = RPM_MAX;
-
-    // Linear mapping: 800 RPM = 1 pixel, 2500 RPM = 30 pixels
-    float normalized = (rpm - RPM_MIN) / (RPM_MAX - RPM_MIN);
-    uint8_t pixels = static_cast<uint8_t>(1.0f + normalized * 29.0f);
-
-    // Ensure we're in valid range
-    if (pixels < 1) pixels = 1;
-    if (pixels > 30) pixels = 30;
-
-    return pixels;
-}
-
-/**
- * Check if angle is within the arc (handles 360° wraparound)
- * Arc is centered at ARC_CENTER_DEGREES with width ARC_WIDTH_DEGREES
- */
-static bool isAngleInRpmArc(double angle) {
-    double halfWidth = ARC_WIDTH_DEGREES / 2.0;
-    double arcStart = ARC_CENTER_DEGREES - halfWidth;
-    double arcEnd = ARC_CENTER_DEGREES + halfWidth;
-
-    // Normalize angle to 0-360
-    angle = fmod(angle, 360.0);
-    if (angle < 0) angle += 360.0;
-
-    // Handle wraparound
-    if (arcStart < 0) {
-        // Arc wraps around 0 (e.g., 350° to 10°)
-        return (angle >= (arcStart + 360.0)) || (angle < arcEnd);
-    } else if (arcEnd > 360.0) {
-        // Arc wraps around 360
-        return (angle >= arcStart) || (angle < (arcEnd - 360.0));
-    } else {
-        // No wraparound
-        return (angle >= arcStart) && (angle < arcEnd);
-    }
+uint8_t RpmArc::rpmToPixelCount(float rpm) const {
+    float clamped = constrain(rpm, RPM_MIN, RPM_MAX);
+    float normalized = (clamped - RPM_MIN) / (RPM_MAX - RPM_MIN);
+    return 1 + static_cast<uint8_t>(normalized * 29.0f);
 }
 
 /**
  * Render RPM-based growing arc effect
+ *
+ * Each arm is checked independently against the arc, allowing
+ * partial visibility when arms straddle the arc boundary.
  */
-void renderRpmArc(RenderContext& ctx) {
-    // One-time gradient initialization
-    initializeRpmGradient();
+void RpmArc::render(RenderContext& ctx) {
+    ctx.clear();
 
-    // Calculate current RPM and map to pixel count
-    float currentRPM = calculateRPM(ctx.microsecondsPerRev);
-    uint8_t pixelCount = rpmToPixelCount(currentRPM);
+    // Calculate RPM-based parameters
+    float rpm = ctx.rpm();
+    uint8_t pixelCount = rpmToPixelCount(rpm);
 
-    // Render all arms using helper
-    renderAllArms(ctx, [&](uint16_t physicalLed, uint16_t ledIdx, const ArmInfo& arm) {
-        // Check if this arm is in the 20-degree arc centered at 0°
-        if (isAngleInRpmArc(arm.angle)) {
-            // Light up pixels from innermost (virtual 0) to pixelCount-1
-            uint8_t virtualPos = PHYSICAL_TO_VIRTUAL[physicalLed];
+    // Optional: animate arc width based on RPM (wider at higher RPM)
+    // Uncomment to enable: arcWidth = BASE_ARC_WIDTH + 10.0f * (rpm / RPM_MAX);
 
-            // Only light pixels within the RPM-based range
-            if (virtualPos < pixelCount) {
-                ctx.leds[physicalLed] = rpmGradient[virtualPos];
-            } else {
-                ctx.leds[physicalLed] = OFF_COLOR;
-            }
-        } else {
-            // Outside arc - turn all LEDs off
-            ctx.leds[physicalLed] = OFF_COLOR;
+    for (int a = 0; a < 3; a++) {
+        auto& arm = ctx.arms[a];
+
+        // Get intensity for this arm (0 = outside arc, 1 = at center)
+        float intensity = arcIntensity(arm.angle, ARC_CENTER, arcWidth);
+
+        if (intensity == 0.0f) {
+            // Arm completely outside arc - already cleared
+            continue;
         }
-    });
+
+        // Fill radial pixels up to RPM-based limit
+        for (int p = 0; p < 10; p++) {
+            uint8_t virtualPos = a + p * 3;
+
+            if (virtualPos < pixelCount) {
+                CRGB color = gradient[virtualPos];
+                // Apply arc edge fade
+                color.nscale8(static_cast<uint8_t>(intensity * 255));
+                arm.pixels[p] = color;
+            }
+            // Pixels beyond pixelCount stay black (from clear)
+        }
+    }
 }

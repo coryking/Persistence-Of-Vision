@@ -1,37 +1,38 @@
-#include "effects.h"
-#include "arm_renderer.h"
+#include "effects/NoiseField.h"
 #include <FastLED.h>
-
-extern const uint8_t PHYSICAL_TO_VIRTUAL[30];
 
 /**
  * Render NoiseField effect - organic texture using FastLED's inoise16()
  *
  * Creates flowing lava-like patterns by mapping 2D Perlin noise to the polar display.
- * Noise coordinates are based on:
- * - X axis: arm angle (0-360°)
- * - Y axis: radial LED position (0-29)
- * - Time: animated offset for flowing motion
- *
- * Uses LavaColors_p palette for volcanic appearance.
+ * Each arm uses its actual current angle for noise sampling, creating natural flow
+ * that respects the physical reality of the spinning display.
  */
-void renderNoiseField(RenderContext& ctx) {
-    static uint16_t timeOffset = 0;
-    timeOffset += 10;  // Animation speed (higher = faster flow)
+void NoiseField::render(RenderContext& ctx) {
+    timeOffset += ANIMATION_SPEED;
 
-    renderAllArms(ctx, [&](uint16_t physicalLed, uint16_t ledIdx, const ArmInfo& arm) {
-        uint8_t virtualPos = PHYSICAL_TO_VIRTUAL[physicalLed];
+    for (int a = 0; a < 3; a++) {
+        auto& arm = ctx.arms[a];
 
-        // Map angle and radial position to 2D noise space
-        // inoise16() expects 0-65535 for full range
-        uint16_t noiseX = arm.angle * 182;      // 0-360° → 0-65535 (angle)
-        uint16_t noiseY = virtualPos * 2184;    // 0-29 → 0-65535 (radial position)
+        // Use THIS arm's actual angle for noise X
+        // inoise16() expects 0-65535 range
+        uint16_t noiseX = static_cast<uint16_t>(arm.angle * 182.0f);
 
-        // Get noise value and convert to brightness (0-255)
-        uint16_t noiseValue = inoise16(noiseX, noiseY, timeOffset);
-        uint8_t brightness = noiseValue >> 8;
+        for (int p = 0; p < 10; p++) {
+            // Virtual position: interleaved across arms
+            // virt 0 = arm0:led0, virt 1 = arm1:led0, virt 2 = arm2:led0
+            // virt 3 = arm0:led1, etc.
+            uint8_t virtualPos = a + p * 3;
 
-        // Map to lava color palette
-        ctx.leds[physicalLed] = ColorFromPalette(LavaColors_p, brightness);
-    });
+            // Map radial position to noise Y (0-29 → 0-65535)
+            uint16_t noiseY = virtualPos * 2184;
+
+            // Sample 3D noise (X=angle, Y=radius, Z=time)
+            uint16_t noiseValue = inoise16(noiseX, noiseY, timeOffset);
+            uint8_t brightness = noiseValue >> 8;
+
+            // Map through lava palette
+            arm.pixels[p] = ColorFromPalette(LavaColors_p, brightness);
+        }
+    }
 }

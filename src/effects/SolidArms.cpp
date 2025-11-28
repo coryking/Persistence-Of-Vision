@@ -1,123 +1,89 @@
-#include "effects.h"
-#include <FastLED.h>
-#include <cmath>
-#include "hardware_config.h"
-#include "arm_renderer.h"
-
-// Colors
-static CRGB OFF_COLOR = CRGB::Black;
-static CRGB WHITE = CRGB::White;
+#include "effects/SolidArms.h"
+#include "polar_helpers.h"
 
 /**
  * Render diagnostic test pattern - 20 discrete tests
  *
- * 360° divided into 20 patterns of 18° each:
- *
- * Patterns 0-3 (0-71°): Full RGB Combination Tests (all LEDs)
- * Patterns 4-7 (72-143°): Striped Alignment Tests (positions 0,4,9)
- * Patterns 8-11 (144-215°): Arm A (Inner) individual color tests
- * Patterns 12-15 (216-287°): Arm B (Middle) individual color tests
- * Patterns 16-19 (288-359°): Arm C (Outer) individual color tests
+ * Each arm independently determines its pattern from its own angle.
+ * This means all three arms can be showing different patterns at the same time.
  */
-void renderSolidArms(RenderContext& ctx) {
-    // Render all arms using helper
-    renderAllArms(ctx, [&](uint16_t physicalLed, uint16_t ledIdx, const ArmInfo& arm) {
-        // Normalize angle to 0-359
-        double normAngle = fmod(arm.angle, 360.0);
-        if (normAngle < 0) normAngle += 360.0;
+void SolidArms::render(RenderContext& ctx) {
+    for (int a = 0; a < 3; a++) {
+        auto& arm = ctx.arms[a];
 
-        // Determine pattern (0-19)
-        uint8_t pattern = (uint8_t)(normAngle / 18.0);
-        if (pattern > 19) pattern = 19; // Safety clamp
+        // Normalize angle and determine pattern (0-19)
+        float normAngle = normalizeAngle(arm.angle);
+        uint8_t pattern = static_cast<uint8_t>(normAngle / 18.0f);
+        if (pattern > 19) pattern = 19;
 
-        // Determine what this arm should show
-        CRGB armColor = OFF_COLOR;
-        bool fullLeds = true; // true = all LEDs, false = only 0,4,9
+        // Get color for this arm in this pattern
+        CRGB armColor = getArmColor(pattern, a);
+        bool striped = isStripedPattern(pattern);
 
-        if (pattern <= 3) {
-            // ====== Patterns 0-3: Full RGB Combinations ======
-            fullLeds = true;
-            CRGB colors[4][3] = {
-                // Pattern 0: A=red, B=green, C=blue
-                {CRGB(255, 0, 0), CRGB(0, 255, 0), CRGB(0, 0, 255)},
-                // Pattern 1: A=green, B=blue, C=red
-                {CRGB(0, 255, 0), CRGB(0, 0, 255), CRGB(255, 0, 0)},
-                // Pattern 2: A=blue, B=red, C=green
-                {CRGB(0, 0, 255), CRGB(255, 0, 0), CRGB(0, 255, 0)},
-                // Pattern 3: All white
-                {WHITE, WHITE, WHITE}
-            };
-            armColor = colors[pattern][arm.armIndex];
-        }
-        else if (pattern <= 7) {
-            // ====== Patterns 4-7: Striped Alignment Tests ======
-            fullLeds = false;
-            CRGB colors[4][3] = {
-                // Pattern 4: A=red, B=green, C=blue (striped)
-                {CRGB(255, 0, 0), CRGB(0, 255, 0), CRGB(0, 0, 255)},
-                // Pattern 5: A=green, B=blue, C=red (striped)
-                {CRGB(0, 255, 0), CRGB(0, 0, 255), CRGB(255, 0, 0)},
-                // Pattern 6: A=blue, B=red, C=green (striped)
-                {CRGB(0, 0, 255), CRGB(255, 0, 0), CRGB(0, 255, 0)},
-                // Pattern 7: All white (striped)
-                {WHITE, WHITE, WHITE}
-            };
-            armColor = colors[pattern - 4][arm.armIndex];
-        }
-        else if (pattern <= 11) {
-            // ====== Patterns 8-11: Arm A (Inner) Individual Tests ======
-            fullLeds = true;
-            if (arm.armIndex == 0) { // Arm A only
-                CRGB colors[4] = {
-                    CRGB(255, 0, 0),   // Pattern 8: red
-                    CRGB(0, 255, 0),   // Pattern 9: green
-                    CRGB(0, 0, 255),   // Pattern 10: blue
-                    WHITE              // Pattern 11: white
-                };
-                armColor = colors[pattern - 8];
-            }
-            // Other arms stay off
-        }
-        else if (pattern <= 15) {
-            // ====== Patterns 12-15: Arm B (Middle) Individual Tests ======
-            fullLeds = true;
-            if (arm.armIndex == 1) { // Arm B only
-                CRGB colors[4] = {
-                    CRGB(255, 0, 0),   // Pattern 12: red
-                    CRGB(0, 255, 0),   // Pattern 13: green
-                    CRGB(0, 0, 255),   // Pattern 14: blue
-                    WHITE              // Pattern 15: white
-                };
-                armColor = colors[pattern - 12];
-            }
-            // Other arms stay off
-        }
-        else {
-            // ====== Patterns 16-19: Arm C (Outer) Individual Tests ======
-            fullLeds = true;
-            if (arm.armIndex == 2) { // Arm C only
-                CRGB colors[4] = {
-                    CRGB(255, 0, 0),   // Pattern 16: red
-                    CRGB(0, 255, 0),   // Pattern 17: green
-                    CRGB(0, 0, 255),   // Pattern 18: blue
-                    WHITE              // Pattern 19: white
-                };
-                armColor = colors[pattern - 16];
-            }
-            // Other arms stay off
-        }
-
-        // Render LED
-        if (fullLeds) {
-            // Light all LEDs
-            ctx.leds[physicalLed] = armColor;
-        } else {
-            // Striped pattern - only positions 0, 4, 9
-            if (ledIdx == 0 || ledIdx == 4 || ledIdx == 9) {
-                ctx.leds[physicalLed] = armColor;
+        // Fill arm pixels
+        for (int p = 0; p < 10; p++) {
+            if (striped) {
+                // Striped pattern - only positions 0, 4, 9
+                if (p == 0 || p == 4 || p == 9) {
+                    arm.pixels[p] = armColor;
+                } else {
+                    arm.pixels[p] = CRGB::Black;
+                }
             } else {
-                ctx.leds[physicalLed] = OFF_COLOR;
+                arm.pixels[p] = armColor;
             }
         }
-    });
+    }
+}
+
+bool SolidArms::isStripedPattern(uint8_t pattern) const {
+    return pattern >= 4 && pattern <= 7;
+}
+
+CRGB SolidArms::getArmColor(uint8_t pattern, uint8_t armIndex) const {
+    // RGB rotation for multi-arm patterns
+    static const CRGB rgbRotation[4][3] = {
+        {CRGB(255, 0, 0), CRGB(0, 255, 0), CRGB(0, 0, 255)},  // R-G-B
+        {CRGB(0, 255, 0), CRGB(0, 0, 255), CRGB(255, 0, 0)},  // G-B-R
+        {CRGB(0, 0, 255), CRGB(255, 0, 0), CRGB(0, 255, 0)},  // B-R-G
+        {CRGB::White, CRGB::White, CRGB::White}                // All white
+    };
+
+    // Single color sequence for individual arm tests
+    static const CRGB singleColors[4] = {
+        CRGB(255, 0, 0),  // Red
+        CRGB(0, 255, 0),  // Green
+        CRGB(0, 0, 255),  // Blue
+        CRGB::White       // White
+    };
+
+    if (pattern <= 3) {
+        // Patterns 0-3: Full RGB combinations (all arms lit)
+        return rgbRotation[pattern][armIndex];
+    }
+    else if (pattern <= 7) {
+        // Patterns 4-7: Striped RGB combinations
+        return rgbRotation[pattern - 4][armIndex];
+    }
+    else if (pattern <= 11) {
+        // Patterns 8-11: Arm A (index 0) only
+        if (armIndex == 0) {
+            return singleColors[pattern - 8];
+        }
+        return CRGB::Black;
+    }
+    else if (pattern <= 15) {
+        // Patterns 12-15: Arm B (index 1) only
+        if (armIndex == 1) {
+            return singleColors[pattern - 12];
+        }
+        return CRGB::Black;
+    }
+    else {
+        // Patterns 16-19: Arm C (index 2) only
+        if (armIndex == 2) {
+            return singleColors[pattern - 16];
+        }
+        return CRGB::Black;
+    }
 }
