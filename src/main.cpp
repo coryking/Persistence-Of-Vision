@@ -152,6 +152,19 @@ void setup() {
     strip.Show();
     Serial.println("Strip initialized");
 
+    // Startup blink pattern - diagnostic for reset detection
+    // If you see periodic blinks during operation, ESP32 is resetting
+    Serial.println("Startup blink sequence...");
+    for (int i = 0; i < 3; i++) {
+        strip.ClearTo(RgbColor(64, 0, 0));  // Dim red
+        strip.Show();
+        delay(100);
+        strip.ClearTo(RgbColor(0, 0, 0));
+        strip.Show();
+        delay(100);
+    }
+    Serial.println("Startup blink complete");
+
     // Setup hall effect sensor
     hallDriver.start();
     Serial.println("Hall effect sensor initialized");
@@ -245,7 +258,7 @@ void loop() {
             uint16_t start = ARM_START[a];
             for (int p = 0; p < 10; p++) {
                 CRGB color = renderCtx.arms[a].pixels[p];
-                color.nscale8(128);  // Power budget
+                color.nscale8(64);  // Power budget
                 strip.SetPixelColor(start + p, RgbColor(color.r, color.g, color.b));
             }
         }
