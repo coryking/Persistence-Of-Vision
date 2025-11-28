@@ -349,3 +349,4 @@ uv run pio run -e seeed_xiao_esp32s3 -t compiledb
 2. `.clangd` config strips out Xtensa-specific GCC flags
 3. clangd reads filtered compilation database
 4. IntelliSense works without spurious errors about unknown compiler flags
+- we are *not* migrating to neopixelbus! we use fastled for everything but the final data transfer.
