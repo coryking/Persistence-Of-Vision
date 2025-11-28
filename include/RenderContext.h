@@ -17,7 +17,7 @@ struct RenderContext {
     unsigned long microsecondsPerRev;   // Time per revolution in microseconds
 
     // FastLED buffer - effects render to this
-    mutable CRGB leds[30];              // LED buffer for effects to render into
+    CRGB* leds;                         // Pointer to external LED buffer (30 elements)
 };
 
 #endif // RENDER_CONTEXT_H

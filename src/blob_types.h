@@ -50,18 +50,19 @@ struct Blob {
     timestamp_t deathTime;        // When blob will die (0 = immortal for now)
 };
 
-// Color palette: Citrus (oranges to greens)
+// Color palette: Lava (black → deep red → orange → yellow → white hot)
 // CHSV: Hue (0-255), Saturation (0-255), Value (0-255)
 inline CHSV citrusPalette[MAX_BLOBS] = {
-    CHSV(20, 255, 255),    // Orange (30° × 255/360 ≈ 20)
-    CHSV(39, 230, 255),    // Yellow-orange (55° × 255/360 ≈ 39)
-    CHSV(64, 217, 255),    // Yellow-green (90° × 255/360 ≈ 64)
-    CHSV(85, 230, 230),    // Green (120° × 255/360 ≈ 85)
-    CHSV(102, 217, 204)    // Blue-green (145° × 255/360 ≈ 102)
+    CHSV(0, 255, 80),      // Deep red (barely glowing)
+    CHSV(0, 255, 180),     // Bright red (hot)
+    CHSV(10, 255, 255),    // Red-orange (molten)
+    CHSV(20, 200, 255),    // Orange (very hot)
+    CHSV(32, 180, 255)     // Yellow-orange (white hot)
 };
 
 /**
  * Update blob animation state using time-based sine waves
+ * Uses FastLED's sin16() for performance (fixed-point math)
  */
 inline void updateBlob(Blob& blob, timestamp_t now) {
     if (!blob.active) return;
@@ -69,26 +70,31 @@ inline void updateBlob(Blob& blob, timestamp_t now) {
     float timeInSeconds = now / 1000000.0f;
 
     // Angular position drift: sine wave wandering around center point
-    blob.currentStartAngle = blob.wanderCenter +
-                             sin(timeInSeconds * blob.driftVelocity) * blob.wanderRange;
+    // sin16() takes 0-65535 (full circle), returns -32768 to 32767
+    uint16_t anglePhase = (uint16_t)(timeInSeconds * blob.driftVelocity * 10430.378f);  // × (65536 / (2π))
+    int16_t angleSin = sin16(anglePhase);
+    blob.currentStartAngle = blob.wanderCenter + (angleSin / 32768.0f) * blob.wanderRange;
     blob.currentStartAngle = fmod(blob.currentStartAngle + 360.0f, 360.0f);
 
     // Angular size breathing: sine wave oscillation between min and max
-    float angularPhase = timeInSeconds * blob.sizeChangeRate;
+    uint16_t sizePhase = (uint16_t)(timeInSeconds * blob.sizeChangeRate * 10430.378f);
+    int16_t sizeSin = sin16(sizePhase);
     blob.currentArcSize = blob.minArcSize +
                           (blob.maxArcSize - blob.minArcSize) *
-                          (sin(angularPhase) * 0.5f + 0.5f);
+                          ((sizeSin / 32768.0f) * 0.5f + 0.5f);
 
     // Radial position drift: sine wave wandering around center point
-    blob.currentRadialCenter = blob.radialWanderCenter +
-                               sin(timeInSeconds * blob.radialDriftVelocity) * blob.radialWanderRange;
+    uint16_t radialAnglePhase = (uint16_t)(timeInSeconds * blob.radialDriftVelocity * 10430.378f);
+    int16_t radialAngleSin = sin16(radialAnglePhase);
+    blob.currentRadialCenter = blob.radialWanderCenter + (radialAngleSin / 32768.0f) * blob.radialWanderRange;
     // Note: No wraparound needed - clipping happens at render time
 
     // Radial size breathing: sine wave oscillation between min and max
-    float radialPhase = timeInSeconds * blob.radialSizeChangeRate;
+    uint16_t radialSizePhase = (uint16_t)(timeInSeconds * blob.radialSizeChangeRate * 10430.378f);
+    int16_t radialSizeSin = sin16(radialSizePhase);
     blob.currentRadialSize = blob.minRadialSize +
                             (blob.maxRadialSize - blob.minRadialSize) *
-                            (sin(radialPhase) * 0.5f + 0.5f);
+                            ((radialSizeSin / 32768.0f) * 0.5f + 0.5f);
 }
 
 /**

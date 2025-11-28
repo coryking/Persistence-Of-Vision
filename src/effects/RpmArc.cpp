@@ -3,6 +3,7 @@
 #include <cmath>
 #include "types.h"
 #include "hardware_config.h"
+#include "arm_renderer.h"
 
 // External references to globals from main.cpp
 extern const uint8_t PHYSICAL_TO_VIRTUAL[30];
@@ -15,6 +16,24 @@ constexpr float ARC_CENTER_DEGREES = 0.0f;  // Arc center position (hall sensor)
 
 // Colors
 static const CRGB OFF_COLOR = CRGB::Black;
+
+// Pre-computed gradient: green (innermost) → red (outermost)
+static CRGB rpmGradient[30];
+static bool gradientInitialized = false;
+
+/**
+ * Initialize static gradient table (called once)
+ */
+static void initializeRpmGradient() {
+    if (gradientInitialized) return;
+
+    for (uint8_t i = 0; i < 30; i++) {
+        float t = static_cast<float>(i) / 29.0f;
+        uint8_t hue = 85 * (1.0f - t);  // Green (85) → Red (0)
+        rpmGradient[i] = CHSV(hue, 255, 255);
+    }
+    gradientInitialized = true;
+}
 
 /**
  * Calculate RPM from microseconds per revolution
@@ -41,21 +60,6 @@ static uint8_t rpmToPixelCount(float rpm) {
     if (pixels > 30) pixels = 30;
 
     return pixels;
-}
-
-/**
- * Get color for a virtual pixel based on radial position (green to red gradient)
- * virtualPos: 0-29 (0 = innermost/green, 29 = outermost/red)
- */
-static CRGB getGradientColor(uint8_t virtualPos) {
-    // Normalize position to 0.0-1.0
-    float t = static_cast<float>(virtualPos) / 29.0f;
-
-    // HSV: Green (H=120°) to Red (H=0°)
-    // FastLED uses 0-255 for hue, where 0=red, 85=green
-    uint8_t hue = 85 * (1.0f - t);  // Green (85) to Red (0)
-
-    return CHSV(hue, 255, 255);  // Full saturation, full brightness
 }
 
 /**
@@ -87,37 +91,30 @@ static bool isAngleInRpmArc(double angle) {
 /**
  * Render RPM-based growing arc effect
  */
-void renderRpmArc(const RenderContext& ctx) {
+void renderRpmArc(RenderContext& ctx) {
+    // One-time gradient initialization
+    initializeRpmGradient();
+
     // Calculate current RPM and map to pixel count
     float currentRPM = calculateRPM(ctx.microsecondsPerRev);
     uint8_t pixelCount = rpmToPixelCount(currentRPM);
 
-    // Render each arm independently
-    auto renderRpmArm = [&](double angle, uint16_t armStart) {
+    // Render all arms using helper
+    renderAllArms(ctx, [&](uint16_t physicalLed, uint16_t ledIdx, const ArmInfo& arm) {
         // Check if this arm is in the 20-degree arc centered at 0°
-        if (isAngleInRpmArc(angle)) {
+        if (isAngleInRpmArc(arm.angle)) {
             // Light up pixels from innermost (virtual 0) to pixelCount-1
-            for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
-                uint16_t physicalLed = armStart + ledIdx;
-                uint8_t virtualPos = PHYSICAL_TO_VIRTUAL[physicalLed];
+            uint8_t virtualPos = PHYSICAL_TO_VIRTUAL[physicalLed];
 
-                // Only light pixels within the RPM-based range
-                if (virtualPos < pixelCount) {
-                    ctx.leds[physicalLed] = getGradientColor(virtualPos);
-                } else {
-                    ctx.leds[physicalLed] = OFF_COLOR;
-                }
+            // Only light pixels within the RPM-based range
+            if (virtualPos < pixelCount) {
+                ctx.leds[physicalLed] = rpmGradient[virtualPos];
+            } else {
+                ctx.leds[physicalLed] = OFF_COLOR;
             }
         } else {
             // Outside arc - turn all LEDs off
-            for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
-                ctx.leds[armStart + ledIdx] = OFF_COLOR;
-            }
+            ctx.leds[physicalLed] = OFF_COLOR;
         }
-    };
-
-    // Render all three arms
-    renderRpmArm(ctx.innerArmDegrees, HardwareConfig::INNER_ARM_START);
-    renderRpmArm(ctx.middleArmDegrees, HardwareConfig::MIDDLE_ARM_START);
-    renderRpmArm(ctx.outerArmDegrees, HardwareConfig::OUTER_ARM_START);
+    });
 }

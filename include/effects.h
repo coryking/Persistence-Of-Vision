@@ -5,16 +5,19 @@
 
 // Effect 0: Per-Arm Blobs
 void setupPerArmBlobs();
-void renderPerArmBlobs(const RenderContext& ctx);
+void renderPerArmBlobs(RenderContext& ctx);
 
 // Effect 1: Virtual Display Blobs
 void setupVirtualBlobs();
-void renderVirtualBlobs(const RenderContext& ctx);
+void renderVirtualBlobs(RenderContext& ctx);
 
 // Effect 2: Solid Arms Diagnostic
-void renderSolidArms(const RenderContext& ctx);
+void renderSolidArms(RenderContext& ctx);
 
 // Effect 3: RPM Arc
-void renderRpmArc(const RenderContext& ctx);
+void renderRpmArc(RenderContext& ctx);
+
+// Effect 4: Noise Field
+void renderNoiseField(RenderContext& ctx);
 
 #endif // EFFECTS_H

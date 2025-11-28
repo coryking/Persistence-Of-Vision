@@ -16,16 +16,18 @@
 #include "effects.h"
 #include "timing_utils.h"
 #include "pixel_utils.h"
+#include "blob_cache.h"
 
 // Hardware Configuration
 #define NUM_LEDS 30
 #define LEDS_PER_ARM 10
 #define HALL_PIN D1
 
-// ===== TIMING INSTRUMENTATION CONFIGURATION =====
-#define ENABLE_TIMING_INSTRUMENTATION true  // Set true to enable CSV timing output
-#define TEST_MODE true                       // Set true to simulate rotation without hardware
-#define TEST_RPM 2800.0                      // Simulated RPM (try 700, 1200, 1940, 2800)
+// ===== TEST MODE CONFIGURATION =====
+// These are NOT defined by default (production mode)
+// Define via platformio.ini build flags for profiling/testing
+// Example: -DTEST_MODE -DENABLE_TIMING_INSTRUMENTATION
+#define TEST_RPM 2800.0                      // Simulated RPM when TEST_MODE defined
 #define TEST_VARY_RPM false                  // Oscillate between 700-2800 RPM
 // ===============================================
 
@@ -215,9 +217,9 @@ void setup()
     effectManager.begin();
 
 #ifdef ENABLE_DETAILED_TIMING
-    // Override to force VirtualBlobs (effect 1) for profiling
-    effectManager.setCurrentEffect(1);
-    Serial.println("PROFILING MODE: Forcing effect 1 (VirtualBlobs)");
+    // Override to force specific effect for profiling
+    effectManager.setCurrentEffect(2);  // 2 = SolidArms (test pattern, always visible)
+    Serial.println("PROFILING MODE: Forcing effect 2 (SolidArms)");
 #endif
 
     uint8_t currentEffect = effectManager.getCurrentEffect();
@@ -305,19 +307,51 @@ void loop()
         int64_t frameStart = timingStart();
 #endif
 
+        // Create LED buffer (external to context)
+        CRGB ledBuffer[30] = {};  // Zero-initialized
+
         // Create rendering context
         RenderContext ctx = {
             .currentMicros = static_cast<unsigned long>(now),
             .innerArmDegrees = static_cast<float>(angleInner),
             .middleArmDegrees = static_cast<float>(angleMiddle),
             .outerArmDegrees = static_cast<float>(angleOuter),
-            .microsecondsPerRev = microsecondsPerRev
+            .microsecondsPerRev = microsecondsPerRev,
+            .leds = ledBuffer  // Point to external buffer
         };
 
         // Update all blob animations (used by blob effects)
         for (int i = 0; i < MAX_BLOBS; i++) {
             updateBlob(blobs[i], now);
         }
+
+#if TEST_MODE
+        // Debug: Check blob status and colors every 100 frames
+        if (instrumentationFrameCount % 100 == 0) {
+            Serial.print("Blobs: ");
+            for (int i = 0; i < MAX_BLOBS; i++) {
+                Serial.printf("B%d:%s(R%d,G%d,B%d,angle=%.1f,radial=%.1f) ",
+                    i,
+                    blobs[i].active ? "A" : "I",
+                    blobs[i].color.r, blobs[i].color.g, blobs[i].color.b,
+                    blobs[i].currentStartAngle,
+                    blobs[i].currentRadialCenter);
+            }
+            Serial.println();
+        }
+#endif
+
+        // Update blob cache after all animations (eliminates ~150 fmod calls per frame)
+        updateBlobCache(blobs, MAX_BLOBS, true);  // true = virtual range (0-29)
+
+#if TEST_MODE
+        // Debug: Check blob cache values every 100 frames
+        if (instrumentationFrameCount % 100 == 0) {
+            Serial.printf("Cache B0: angle=%.1f-%.1f wrap=%d radial=%.1f-%.1f wrap=%d\n",
+                blobCache[0].angleStart, blobCache[0].angleEnd, blobCache[0].angleWraps,
+                blobCache[0].radialStart, blobCache[0].radialEnd, blobCache[0].radialWraps);
+        }
+#endif
 
 #if ENABLE_TIMING_INSTRUMENTATION
         int64_t genStart = timingStart();
@@ -337,13 +371,27 @@ void loop()
             case 3:
                 renderRpmArc(ctx);
                 break;
+            case 4:
+                renderNoiseField(ctx);
+                break;
         }
 
-        // Convert CRGB buffer to NeoPixelBus format
-        uint8_t* buffer = strip.Pixels();
+#if TEST_MODE
+        // Debug: Check LED buffer after rendering every 100 frames
+        if (instrumentationFrameCount % 100 == 0) {
+            Serial.print("LEDs: ");
+            for (int i = 0; i < 10; i++) {  // First 10 LEDs
+                Serial.printf("[%d](%d,%d,%d) ", i, ctx.leds[i].r, ctx.leds[i].g, ctx.leds[i].b);
+            }
+            Serial.println();
+        }
+#endif
+
+        // Convert CRGB buffer to NeoPixelBus format with power budget
         for (int i = 0; i < 30; i++) {
-            CRGB& src = ctx.leds[i];
-            setPixelColorDirect(buffer, i, src.r, src.g, src.b);
+            CRGB color = ctx.leds[i];
+            color.nscale8(128);  // 50% brightness for power budget
+            strip.SetPixelColor(i, RgbColor(color.r, color.g, color.b));
         }
 
 #if ENABLE_TIMING_INSTRUMENTATION

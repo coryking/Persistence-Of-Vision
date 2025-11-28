@@ -2,6 +2,7 @@
 #include <FastLED.h>
 #include <cmath>
 #include "hardware_config.h"
+#include "arm_renderer.h"
 
 // Colors
 static CRGB OFF_COLOR = CRGB::Black;
@@ -18,11 +19,11 @@ static CRGB WHITE = CRGB::White;
  * Patterns 12-15 (216-287°): Arm B (Middle) individual color tests
  * Patterns 16-19 (288-359°): Arm C (Outer) individual color tests
  */
-void renderSolidArms(const RenderContext& ctx) {
-    // Lambda to render one arm based on its current angle
-    auto renderArm = [&](double angle, uint16_t armStart, uint8_t armIndex) {
+void renderSolidArms(RenderContext& ctx) {
+    // Render all arms using helper
+    renderAllArms(ctx, [&](uint16_t physicalLed, uint16_t ledIdx, const ArmInfo& arm) {
         // Normalize angle to 0-359
-        double normAngle = fmod(angle, 360.0);
+        double normAngle = fmod(arm.angle, 360.0);
         if (normAngle < 0) normAngle += 360.0;
 
         // Determine pattern (0-19)
@@ -46,7 +47,7 @@ void renderSolidArms(const RenderContext& ctx) {
                 // Pattern 3: All white
                 {WHITE, WHITE, WHITE}
             };
-            armColor = colors[pattern][armIndex];
+            armColor = colors[pattern][arm.armIndex];
         }
         else if (pattern <= 7) {
             // ====== Patterns 4-7: Striped Alignment Tests ======
@@ -61,12 +62,12 @@ void renderSolidArms(const RenderContext& ctx) {
                 // Pattern 7: All white (striped)
                 {WHITE, WHITE, WHITE}
             };
-            armColor = colors[pattern - 4][armIndex];
+            armColor = colors[pattern - 4][arm.armIndex];
         }
         else if (pattern <= 11) {
             // ====== Patterns 8-11: Arm A (Inner) Individual Tests ======
             fullLeds = true;
-            if (armIndex == 0) { // Arm A only
+            if (arm.armIndex == 0) { // Arm A only
                 CRGB colors[4] = {
                     CRGB(255, 0, 0),   // Pattern 8: red
                     CRGB(0, 255, 0),   // Pattern 9: green
@@ -80,7 +81,7 @@ void renderSolidArms(const RenderContext& ctx) {
         else if (pattern <= 15) {
             // ====== Patterns 12-15: Arm B (Middle) Individual Tests ======
             fullLeds = true;
-            if (armIndex == 1) { // Arm B only
+            if (arm.armIndex == 1) { // Arm B only
                 CRGB colors[4] = {
                     CRGB(255, 0, 0),   // Pattern 12: red
                     CRGB(0, 255, 0),   // Pattern 13: green
@@ -94,7 +95,7 @@ void renderSolidArms(const RenderContext& ctx) {
         else {
             // ====== Patterns 16-19: Arm C (Outer) Individual Tests ======
             fullLeds = true;
-            if (armIndex == 2) { // Arm C only
+            if (arm.armIndex == 2) { // Arm C only
                 CRGB colors[4] = {
                     CRGB(255, 0, 0),   // Pattern 16: red
                     CRGB(0, 255, 0),   // Pattern 17: green
@@ -106,27 +107,17 @@ void renderSolidArms(const RenderContext& ctx) {
             // Other arms stay off
         }
 
-        // Render LEDs
-        for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
-            if (fullLeds) {
-                // Light all LEDs
-                ctx.leds[armStart + ledIdx] = armColor;
+        // Render LED
+        if (fullLeds) {
+            // Light all LEDs
+            ctx.leds[physicalLed] = armColor;
+        } else {
+            // Striped pattern - only positions 0, 4, 9
+            if (ledIdx == 0 || ledIdx == 4 || ledIdx == 9) {
+                ctx.leds[physicalLed] = armColor;
             } else {
-                // Striped pattern - only positions 0, 4, 9
-                if (ledIdx == 0 || ledIdx == 4 || ledIdx == 9) {
-                    ctx.leds[armStart + ledIdx] = armColor;
-                } else {
-                    ctx.leds[armStart + ledIdx] = OFF_COLOR;
-                }
+                ctx.leds[physicalLed] = OFF_COLOR;
             }
         }
-    };
-
-    // Render each arm based on its current angle
-    // Arm A = Inner (index 0, LEDs 10-19)
-    renderArm(ctx.innerArmDegrees, HardwareConfig::INNER_ARM_START, 0);
-    // Arm B = Middle (index 1, LEDs 0-9)
-    renderArm(ctx.middleArmDegrees, HardwareConfig::MIDDLE_ARM_START, 1);
-    // Arm C = Outer (index 2, LEDs 20-29)
-    renderArm(ctx.outerArmDegrees, HardwareConfig::OUTER_ARM_START, 2);
+    });
 }

@@ -4,25 +4,11 @@
 #include "esp_timer.h"
 #include "pixel_utils.h"
 #include "hardware_config.h"
+#include "arm_renderer.h"
+#include "blob_cache.h"
 
 // External references to globals from main.cpp
 extern Blob blobs[MAX_BLOBS];
-
-/**
- * Check if LED index is within blob's current radial extent (per-arm version)
- */
-static bool isLedInBlob(uint16_t ledIndex, const Blob& blob) {
-    if (!blob.active) return false;
-
-    // Calculate radial range (LED indices covered by this blob)
-    float halfSize = blob.currentRadialSize / 2.0f;
-    float radialStart = blob.currentRadialCenter - halfSize;
-    float radialEnd = blob.currentRadialCenter + halfSize;
-
-    // Check if LED is within range (clipped to 0-9)
-    float ledFloat = static_cast<float>(ledIndex);
-    return (ledFloat >= radialStart) && (ledFloat < radialEnd);
-}
 
 /**
  * Initialize 5 blobs with random distribution across arms (per-arm version)
@@ -90,64 +76,20 @@ void setupPerArmBlobs() {
 /**
  * Render per-arm blobs effect
  */
-void renderPerArmBlobs(const RenderContext& ctx) {
-    // Pre-compute which blobs are visible on inner arm (OPTIMIZATION: hoist angle checks)
-    bool blobVisibleOnInnerArm[MAX_BLOBS];
-    for (int i = 0; i < MAX_BLOBS; i++) {
-        blobVisibleOnInnerArm[i] = blobs[i].active && blobs[i].armIndex == ARM_INNER &&
-                                   isAngleInArc(ctx.innerArmDegrees, blobs[i]);
-    }
-
-    // Inner arm: LEDs 10-19
-    for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
+void renderPerArmBlobs(RenderContext& ctx) {
+    renderAllArms(ctx, [&](uint16_t physicalLed, uint16_t ledIdx, const ArmInfo& arm) {
         CRGB color = CRGB::Black;
 
-        // Check all blobs assigned to inner arm (using pre-computed visibility)
+        // Check all blobs assigned to this arm
         for (int i = 0; i < MAX_BLOBS; i++) {
-            if (blobVisibleOnInnerArm[i] && isLedInBlob(ledIdx, blobs[i])) {
-                color += CRGB(blobs[i].color.r, blobs[i].color.g, blobs[i].color.b);
+            if (blobs[i].active &&
+                blobs[i].armIndex == arm.armIndex &&
+                isAngleInArcCached(arm.angle, i) &&
+                isLedInBlobCached(ledIdx, i)) {
+                color += blobs[i].color;
             }
         }
-        ctx.leds[HardwareConfig::INNER_ARM_START + ledIdx] = color;
-    }
 
-    // Pre-compute which blobs are visible on middle arm (OPTIMIZATION: hoist angle checks)
-    bool blobVisibleOnMiddleArm[MAX_BLOBS];
-    for (int i = 0; i < MAX_BLOBS; i++) {
-        blobVisibleOnMiddleArm[i] = blobs[i].active && blobs[i].armIndex == ARM_MIDDLE &&
-                                    isAngleInArc(ctx.middleArmDegrees, blobs[i]);
-    }
-
-    // Middle arm: LEDs 0-9
-    for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
-        CRGB color = CRGB::Black;
-
-        // Check all blobs assigned to middle arm (using pre-computed visibility)
-        for (int i = 0; i < MAX_BLOBS; i++) {
-            if (blobVisibleOnMiddleArm[i] && isLedInBlob(ledIdx, blobs[i])) {
-                color += CRGB(blobs[i].color.r, blobs[i].color.g, blobs[i].color.b);
-            }
-        }
-        ctx.leds[HardwareConfig::MIDDLE_ARM_START + ledIdx] = color;
-    }
-
-    // Pre-compute which blobs are visible on outer arm (OPTIMIZATION: hoist angle checks)
-    bool blobVisibleOnOuterArm[MAX_BLOBS];
-    for (int i = 0; i < MAX_BLOBS; i++) {
-        blobVisibleOnOuterArm[i] = blobs[i].active && blobs[i].armIndex == ARM_OUTER &&
-                                   isAngleInArc(ctx.outerArmDegrees, blobs[i]);
-    }
-
-    // Outer arm: LEDs 20-29
-    for (uint16_t ledIdx = 0; ledIdx < HardwareConfig::LEDS_PER_ARM; ledIdx++) {
-        CRGB color = CRGB::Black;
-
-        // Check all blobs assigned to outer arm (using pre-computed visibility)
-        for (int i = 0; i < MAX_BLOBS; i++) {
-            if (blobVisibleOnOuterArm[i] && isLedInBlob(ledIdx, blobs[i])) {
-                color += CRGB(blobs[i].color.r, blobs[i].color.g, blobs[i].color.b);
-            }
-        }
-        ctx.leds[HardwareConfig::OUTER_ARM_START + ledIdx] = color;
-    }
+        ctx.leds[physicalLed] = color;
+    });
 }
