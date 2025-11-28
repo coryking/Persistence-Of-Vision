@@ -7,10 +7,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a hobby art project. The goal is to create beautiful spinning LED displays, not to build enterprise software architecture.
 
 **Core Philosophy:**
+
 > "We're here to make art, not write code. The code serves the art."
 > — POV_DISPLAY.md
 
 **Your role as Claude:**
+
 - Technical steward who handles code organization while the artist focuses on effects
 - Proactively refactor when patterns emerge (rule of three)
 - Watch for timing issues (see docs/Timing and Dimensionality Calculations.md)
@@ -20,6 +22,7 @@ This is a hobby art project. The goal is to create beautiful spinning LED displa
 - Document changes clearly in commits
 
 **Priorities (in order):**
+
 1. **Ship working visual effects** - Get LEDs doing cool things
 2. **Respect timing constraints** - Operating range: 700-2800 RPM (see docs/Timing and Dimensionality Calculations.md)
 3. **Optimize when necessary** - If something's slow, measure it before fixing
@@ -27,12 +30,14 @@ This is a hobby art project. The goal is to create beautiful spinning LED displa
 5. **Stick with what works** - Current architecture works; don't fix what isn't broken
 
 **Critical Timing Reality:**
+
 - This project works because NeoPixelBus has fast, consistent SPI performance
 - Other POV projects using FastLED failed with same architecture due to slow SPI
 - Performance IS correctness - jitter causes visual artifacts
 - See docs/TIMING_ANALYSIS.md and docs/PROJECT_COMPARISON.md for measurements
 
 **Foundation Documents** (read these to understand the project):
+
 - **docs/POV_DISPLAY.md** - Art-first philosophy, polar coordinates, design principles
 - **docs/PROJECT_COMPARISON.md** - Why queue-based hall sensor works, flag-based fails
 - **docs/TIMING_ANALYSIS.md** - Deep dive on jitter, why NeoPixelBus is critical
@@ -58,6 +63,7 @@ The ultimate goal is a spinning LED display with three arms arranged 120° apart
 POV displays work by persistence of vision - LEDs flash at precise angular positions as the disc rotates. **For this project, performance IS correctness.**
 
 **Jitter (timing inconsistency) causes visual artifacts:**
+
 - Image wobble (pixels appear at inconsistent angles)
 - Radial misalignment (multi-arm synchronization breaks)
 - Blurring (when LEDs update at wrong positions)
@@ -66,6 +72,7 @@ POV displays work by persistence of vision - LEDs flash at precise angular posit
 **A slow but consistent update is better than a fast but jittery one.**
 
 **What causes jitter:**
+
 - **Interrupt latency**: Wi-Fi, USB, other peripherals stealing cycles
 - **Blocking operations**: Serial.print(), delay(), filesystem access in rendering path
 - **Memory allocations**: malloc/free in time-critical paths
@@ -74,6 +81,7 @@ POV displays work by persistence of vision - LEDs flash at precise angular posit
 - **Cache misses, branch mispredictions**: In tight loops
 
 **Current architecture (what's working):**
+
 - **Queue-based hall sensor** (not flag-based - see docs/PROJECT_COMPARISON.md for why)
 - **High-priority FreeRTOS task** for hall processing
 - **ISR timestamp capture** with IRAM_ATTR and esp_timer_get_time()
@@ -81,6 +89,7 @@ POV displays work by persistence of vision - LEDs flash at precise angular posit
 - **No mutexes on RevolutionTimer** (atomic reads work fine, stale data doesn't matter)
 
 **Design implications:**
+
 - If timing looks inconsistent, check for jitter sources (blocking calls, malloc in loops, etc.)
 - Keep rendering path non-blocking (tight loop when active, delay() only during warmup)
 - Pre-allocate buffers if you can, but don't obsess
@@ -185,22 +194,26 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 ### Coding Principles
 
 **Make it work, then make it clean:**
+
 - Inline code first - write it directly in place
 - Second time you see similar code - note it but leave it inline
 - Third time (rule of three) - extract to a reusable function
 - Don't create abstractions speculatively
 
 **Performance awareness:**
+
 - If something's slow, measure it before fixing
 - See docs/Timing and Dimensionality Calculations.md for timing budgets
 
 **Error handling:**
+
 - Keep it simple: when in doubt, reset and restart
 - This is embedded art, not safety-critical systems
 - No need for elaborate error hierarchies or recovery strategies
 - Trust inputs unless proven otherwise (no defensive validation everywhere)
 
 **Memory management:**
+
 - Pre-allocate buffers in time-critical paths
 - Focus on correctness over memory efficiency
 - Performance might matter, but measure first
@@ -208,6 +221,7 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 ### What NOT to Do
 
 **Be careful changing what's working:**
+
 - **FastLED**: Current code uses NeoPixelBus for fast SPI (see docs/TIMING_ANALYSIS.md for comparison)
 - **Hall sensor ISR**: Uses queue-based pattern, not flags (see docs/PROJECT_COMPARISON.md for why)
 - **RevolutionTimer**: No mutexes - atomic reads work fine
@@ -215,6 +229,7 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 - **Rendering path**: No delay() in active rendering - tight loop is intentional
 
 **Don't over-architect:**
+
 - No interfaces or base classes until there are 3+ implementations
 - No plugin systems or extensibility frameworks
 - No configuration files for things that can be constants
@@ -222,12 +237,14 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 - No elaborate test plans (this is art, not production software)
 
 **Don't ask permission for obvious cleanups:**
+
 - Rule of three refactoring? Just do it, document in commit
 - Renaming for clarity? Go ahead
 - Extracting duplicated code? Don't ask, explain why after
 - Reorganizing files? Make the change, document rationale
 
 **Don't treat this like production software:**
+
 - No elaborate exception hierarchies
 - No circuit breakers or retry logic
 - No input validation for internal functions (trust inputs unless proven otherwise)
@@ -235,6 +252,7 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 - Simple error handling: when in doubt, reset and restart
 
 **Don't silently "fix" everything:**
+
 - Some apparent bugs might be artistic features
 - Stroboscopic effects from PWM frequency (SK9822: 4.6 kHz) could be beautiful
 - Aliasing patterns from rotation speed might create interesting moiré effects
@@ -242,6 +260,7 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 - **Point out unexpected visual behaviors instead of immediately "fixing" them**
 
 **Avoid common jitter sources:**
+
 - malloc/free in rendering loop (pre-allocate if needed)
 - Serial.print() during active rendering
 - Filesystem access in time-critical paths
@@ -250,18 +269,21 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 ### When to Ask vs Just Do It
 
 **Just do it (don't ask):**
+
 - Refactoring that preserves behavior (rule of three, renaming, reorganizing)
 - Fixing obvious bugs (crashes, incorrect calculations, memory corruption)
 - Improving code comments or documentation
 - Optimizing something that's measurably slow
 
 **Point it out (don't silently fix):**
+
 - Unexpected visual artifacts that might be artistically interesting
 - Performance characteristics that create interesting patterns
 - "Problems" that could be features (stroboscopic effects, aliasing, etc.)
 - Trade-offs between approaches that affect visual output
 
 **Ask first:**
+
 - Changing fundamental architecture (polling → interrupts, data flow changes)
 - Removing features or visual effects
 - Changes that could affect artistic output in non-obvious ways
@@ -300,6 +322,20 @@ The firmware outputs timing measurements for each `strip.Show()` call:
 - Initial message: "Hello there" (after 5s delay)
 
 # ESP32 Quick Reference
+
+## ESP32-S3 Floating-Point Performance Summary
+
+The ESP32-S3 includes a single-precision hardware floating point unit (FPU) that provides decent performance for `float` operations, with single-precision multiplications taking approximately 4 CPU clock cycles. This is a significant improvement over microcontrollers without an FPU. However, even with hardware acceleration, floating-point calculations are still consistently 2× slower than integer operations on the S3. Espressif's own optimization guides recommend avoiding floating-point arithmetic when performance matters, particularly in tight loops or time-critical code.
+
+For your POV display application, the key takeaway is: use `float` when you need it (it's reasonably fast), but **never** use `double` — double-precision operations are software-emulated and extremely slow. For performance-critical calculations like LED timing and color computations, consider using integer math with fixed-point representation where possible. The FPU will handle occasional trigonometry or color blending calculations just fine, but if you're doing thousands of float operations per frame, you'll feel the performance hit compared to integer equivalents.
+
+### Further Reading
+
+- **Espressif Official Documentation**: [Speed Optimization - ESP32-S3](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/performance/speed.html) - Official performance guidelines
+- **FPU Overview**: [Floating-Point Units on Espressif SoCs](https://developer.espressif.com/blog/2025/10/cores_with_fpu/) - Explains which Espressif chips have FPUs and why they matter
+- **Benchmarking Study**: [Integer vs Float Performance on the ESP32-S3: Why TinyML Loves Quantization](https://medium.com/@sfarrukhm/integer-vs-float-performance-on-the-esp32-s3-why-tinyml-loves-quantization-227eca11bd35) - Real-world benchmarks showing 2× performance difference
+- **ESP32-S2 Comparison**: [No, the ESP32-S2 is not faster at floating point operations](https://blog.llandsmeer.com/tech/2021/04/08/esp32-s2-fpu.html) - Detailed analysis of FPU performance and optimization techniques
+- **Forum Discussion**: [FPU Documentation for S3](https://esp32.com/viewtopic.php?t=40615) - Community discussion about FPU cycle counts
 
 **IMPORTANT**: Use pioarduino fork, NOT official PlatformIO
 
@@ -349,4 +385,5 @@ uv run pio run -e seeed_xiao_esp32s3 -t compiledb
 2. `.clangd` config strips out Xtensa-specific GCC flags
 3. clangd reads filtered compilation database
 4. IntelliSense works without spurious errors about unknown compiler flags
-- we are *not* migrating to neopixelbus! we use fastled for everything but the final data transfer.
+
+- we are _not_ migrating to neopixelbus! we use fastled for everything but the final data transfer.

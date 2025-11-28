@@ -97,20 +97,4 @@ inline void updateBlob(Blob& blob, timestamp_t now) {
                             ((radialSizeSin / 32768.0f) * 0.5f + 0.5f);
 }
 
-/**
- * Check if angle is within blob's current arc (handles 360° wraparound)
- */
-inline bool isAngleInArc(double angle, const Blob& blob) {
-    if (!blob.active) return false;
-
-    double arcEnd = blob.currentStartAngle + blob.currentArcSize;
-
-    // Handle wraparound (e.g., arc from 350° to 10°)
-    if (arcEnd > 360.0f) {
-        return (angle >= blob.currentStartAngle) || (angle < fmod(arcEnd, 360.0f));
-    }
-
-    return (angle >= blob.currentStartAngle) && (angle < arcEnd);
-}
-
 #endif // BLOB_TYPES_H

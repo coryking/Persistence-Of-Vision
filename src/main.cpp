@@ -15,6 +15,8 @@
 #include "effects/NoiseField.h"
 #include "effects/SolidArms.h"
 #include "effects/RpmArc.h"
+#include "effects/PerArmBlobs.h"
+#include "effects/VirtualBlobs.h"
 #include "timing_utils.h"
 
 // Hardware Configuration
@@ -53,6 +55,8 @@ HallEffectDriver hallDriver(HALL_PIN);
 NoiseField noiseFieldEffect;
 SolidArms solidArmsEffect;
 RpmArc rpmArcEffect;
+PerArmBlobs perArmBlobsEffect;
+VirtualBlobs virtualBlobsEffect;
 
 // Effect registry
 EffectRegistry effectRegistry;
@@ -160,12 +164,14 @@ void setup() {
     effectRegistry.registerEffect(&noiseFieldEffect);
     effectRegistry.registerEffect(&solidArmsEffect);
     effectRegistry.registerEffect(&rpmArcEffect);
+    effectRegistry.registerEffect(&perArmBlobsEffect);
+    effectRegistry.registerEffect(&virtualBlobsEffect);
     effectRegistry.begin();
 
     Serial.printf("Registered %d effects, starting with effect 0\n", effectRegistry.getEffectCount());
 
     Serial.println("\n=== POV Display Ready ===");
-    Serial.println("Effects: NoiseField, SolidArms, RpmArc");
+    Serial.println("Effects: NoiseField, SolidArms, RpmArc, PerArmBlobs, VirtualBlobs");
     Serial.println("Waiting for rotation...\n");
 }
 

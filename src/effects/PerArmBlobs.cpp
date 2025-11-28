@@ -1,33 +1,59 @@
-#include "effects.h"
-#include <FastLED.h>
+#include "effects/PerArmBlobs.h"
 #include "blob_types.h"
+#include "polar_helpers.h"
 #include "esp_timer.h"
-#include "pixel_utils.h"
-#include "hardware_config.h"
-#include "arm_renderer.h"
-#include "blob_cache.h"
 
-// External references to globals from main.cpp
-extern Blob blobs[MAX_BLOBS];
+void PerArmBlobs::begin() {
+    initializeBlobs();
+}
 
-/**
- * Initialize 5 blobs with random distribution across arms (per-arm version)
- */
-void setupPerArmBlobs() {
+void PerArmBlobs::onRevolution(float rpm) {
+    // Update blob animations once per revolution (47 Hz at 2800 RPM)
+    timestamp_t now = esp_timer_get_time();
+    for (auto& blob : blobs) {
+        updateBlob(blob, now);
+    }
+}
+
+void PerArmBlobs::render(RenderContext& ctx) {
+    ctx.clear();
+
+    // Shape-first: iterate blobs, not pixels
+    for (const auto& blob : blobs) {
+        if (!blob.active) continue;
+
+        // This blob belongs to ONE specific arm
+        uint8_t targetArm = blob.armIndex;
+        auto& arm = ctx.arms[targetArm];
+
+        // Check if arm is currently in blob's angular arc
+        if (!isAngleInArc(arm.angle, blob.currentStartAngle, blob.currentArcSize)) {
+            continue;  // Arm not in blob's wedge - skip this blob
+        }
+
+        // Fill affected radial pixels on this arm (0-9 LED range)
+        float radialHalfSize = blob.currentRadialSize / 2.0f;
+        float radialStart = blob.currentRadialCenter - radialHalfSize;
+        float radialEnd = blob.currentRadialCenter + radialHalfSize;
+
+        for (int p = 0; p < 10; p++) {
+            float pixelPos = static_cast<float>(p);
+            if (pixelPos >= radialStart && pixelPos <= radialEnd) {
+                arm.pixels[p] += blob.color;  // Additive blending
+            }
+        }
+    }
+}
+
+void PerArmBlobs::initializeBlobs() {
     timestamp_t now = esp_timer_get_time();
 
     // Blob configuration templates for variety
     struct BlobTemplate {
-        // Angular parameters
         float minAngularSize, maxAngularSize;
-        float angularDriftSpeed;
-        float angularSizeSpeed;
-        float angularWanderRange;
-        // Radial parameters
+        float angularDriftSpeed, angularSizeSpeed, angularWanderRange;
         float minRadialSize, maxRadialSize;
-        float radialDriftSpeed;
-        float radialSizeSpeed;
-        float radialWanderRange;
+        float radialDriftSpeed, radialSizeSpeed, radialWanderRange;
     } templates[3] = {
         // Small, fast (angular 5-30°, radial 1-3 LEDs)
         {5, 30, 0.5, 0.3, 60,    1, 3, 0.4, 0.25, 2.0},
@@ -37,7 +63,7 @@ void setupPerArmBlobs() {
         {20, 90, 0.15, 0.1, 120, 3, 7, 0.15, 0.1, 3.0}
     };
 
-    // Distribute 5 blobs: 2 inner, 2 middle, 1 outer
+    // Distribute blobs: 2 inner, 2 middle, 1 outer
     uint8_t armAssignments[MAX_BLOBS] = {
         ARM_INNER, ARM_INNER,
         ARM_MIDDLE, ARM_MIDDLE,
@@ -60,7 +86,7 @@ void setupPerArmBlobs() {
         blobs[i].maxArcSize = tmpl.maxAngularSize;
         blobs[i].sizeChangeRate = tmpl.angularSizeSpeed;
 
-        // Radial parameters
+        // Radial parameters (0-9 range for per-arm)
         blobs[i].radialWanderCenter = 4.5f;  // Center of LED strip (0-9)
         blobs[i].radialWanderRange = tmpl.radialWanderRange;
         blobs[i].radialDriftVelocity = tmpl.radialDriftSpeed;
@@ -71,25 +97,4 @@ void setupPerArmBlobs() {
         blobs[i].birthTime = now;
         blobs[i].deathTime = 0;  // Immortal for now
     }
-}
-
-/**
- * Render per-arm blobs effect
- */
-void renderPerArmBlobs(RenderContext& ctx) {
-    renderAllArms(ctx, [&](uint16_t physicalLed, uint16_t ledIdx, const ArmInfo& arm) {
-        CRGB color = CRGB::Black;
-
-        // Check all blobs assigned to this arm
-        for (int i = 0; i < MAX_BLOBS; i++) {
-            if (blobs[i].active &&
-                blobs[i].armIndex == arm.armIndex &&
-                isAngleInArcCached(arm.angle, i) &&
-                isLedInBlobCached(ledIdx, i)) {
-                color += blobs[i].color;
-            }
-        }
-
-        ctx.leds[physicalLed] = color;
-    });
 }

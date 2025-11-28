@@ -1,33 +1,62 @@
-#include "effects.h"
-#include <FastLED.h>
+#include "effects/VirtualBlobs.h"
 #include "blob_types.h"
+#include "polar_helpers.h"
 #include "esp_timer.h"
-#include "hardware_config.h"
-#include "arm_renderer.h"
-#include "blob_cache.h"
 
-// External references to globals from main.cpp
-extern Blob blobs[MAX_BLOBS];
-extern const uint8_t PHYSICAL_TO_VIRTUAL[30];
+void VirtualBlobs::begin() {
+    initializeBlobs();
+}
 
-/**
- * Initialize 5 blobs for virtual display (0-29 radial range)
- */
-void setupVirtualBlobs() {
+void VirtualBlobs::onRevolution(float rpm) {
+    // Update blob animations once per revolution (47 Hz at 2800 RPM)
+    timestamp_t now = esp_timer_get_time();
+    for (auto& blob : blobs) {
+        updateBlob(blob, now);
+    }
+}
+
+void VirtualBlobs::render(RenderContext& ctx) {
+    ctx.clear();
+
+    // Shape-first: iterate blobs, not pixels
+    for (const auto& blob : blobs) {
+        if (!blob.active) continue;
+
+        // Check EACH arm (blob can appear on multiple arms simultaneously)
+        for (int a = 0; a < 3; a++) {
+            auto& arm = ctx.arms[a];
+
+            if (!isAngleInArc(arm.angle, blob.currentStartAngle, blob.currentArcSize)) {
+                continue;  // This arm not in blob
+            }
+
+            // Radial extent in virtual space (0-29)
+            float radialHalfSize = blob.currentRadialSize / 2.0f;
+            float radialStart = blob.currentRadialCenter - radialHalfSize;
+            float radialEnd = blob.currentRadialCenter + radialHalfSize;
+
+            // Map virtual pixels to this arm's LEDs
+            for (int p = 0; p < 10; p++) {
+                uint8_t virtualPos = a + p * 3;  // Virtual mapping
+                float vPos = static_cast<float>(virtualPos);
+
+                if (vPos >= radialStart && vPos <= radialEnd) {
+                    arm.pixels[p] += blob.color;  // Additive blending
+                }
+            }
+        }
+    }
+}
+
+void VirtualBlobs::initializeBlobs() {
     timestamp_t now = esp_timer_get_time();
 
     // Blob configuration templates for variety
     struct BlobTemplate {
-        // Angular parameters
         float minAngularSize, maxAngularSize;
-        float angularDriftSpeed;
-        float angularSizeSpeed;
-        float angularWanderRange;
-        // Radial parameters
+        float angularDriftSpeed, angularSizeSpeed, angularWanderRange;
         float minRadialSize, maxRadialSize;
-        float radialDriftSpeed;
-        float radialSizeSpeed;
-        float radialWanderRange;
+        float radialDriftSpeed, radialSizeSpeed, radialWanderRange;
     } templates[3] = {
         // Small, fast (angular 5-30°, radial 2-6 LEDs)
         {5, 30, 0.5, 0.3, 60,    2, 6, 0.4, 0.25, 4.0},
@@ -53,7 +82,7 @@ void setupVirtualBlobs() {
         blobs[i].maxArcSize = tmpl.maxAngularSize;
         blobs[i].sizeChangeRate = tmpl.angularSizeSpeed;
 
-        // Radial parameters - now use full 0-29 range
+        // Radial parameters (0-29 range for virtual)
         blobs[i].radialWanderCenter = 14.5f;  // Center of virtual display (0-29)
         blobs[i].radialWanderRange = tmpl.radialWanderRange;
         blobs[i].radialDriftVelocity = tmpl.radialDriftSpeed;
@@ -64,24 +93,4 @@ void setupVirtualBlobs() {
         blobs[i].birthTime = now;
         blobs[i].deathTime = 0;  // Immortal for now
     }
-}
-
-/**
- * Render virtual display blobs effect
- */
-void renderVirtualBlobs(RenderContext& ctx) {
-    renderAllArms(ctx, [&](uint16_t physicalLed, uint16_t ledIdx, const ArmInfo& arm) {
-        uint8_t virtualPos = PHYSICAL_TO_VIRTUAL[physicalLed];
-        CRGB color = CRGB::Black;
-
-        for (int i = 0; i < MAX_BLOBS; i++) {
-            if (blobs[i].active &&
-                isAngleInArcCached(arm.angle, i) &&
-                isLedInBlobCached(virtualPos, i)) {
-                color += blobs[i].color;
-            }
-        }
-
-        ctx.leds[physicalLed] = color;
-    });
 }
