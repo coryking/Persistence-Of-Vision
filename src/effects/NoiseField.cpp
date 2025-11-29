@@ -26,17 +26,17 @@ void NoiseField::render(RenderContext& ctx) {
 
             // Sample cylindrical noise
             // radius controls zoom (larger = coarser pattern)
-            CRGB color = fl::noiseCylinderCRGB(angleRadians, height, timeOffset, radius);
+            CHSV color = fl::noiseCylinderHSV8(angleRadians, height, noiseTimeOffsetMs, 1.0f);
             arm.pixels[led] = color;
         }
     }
 }
 
 void NoiseField::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) {
-  timeOffset += ANIMATION_SPEED;
+  noiseTimeOffsetMs  = (uint32_t)(timestamp / 1000);
 
   // Oscillate radius between RADIUS_MIN and RADIUS_MAX over DRIFT_PERIOD_SECONDS
-  float phase = 2.0f * M_PI * timestamp / DRIFT_PERIOD_US;
-  float sinValue = sin(phase);  // -1.0 to 1.0
-  radius = fl::map_range(sinValue, -1.0f, 1.0f, RADIUS_MIN, RADIUS_MAX);
+  //float phase = 2.0f * M_PI * timestamp / DRIFT_PERIOD_US;
+  //float sinValue = sin(phase);  // -1.0 to 1.0
+  //radius = fl::map_range(sinValue, -1.0f, 1.0f, RADIUS_MIN, RADIUS_MAX);
 }

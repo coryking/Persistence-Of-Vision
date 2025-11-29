@@ -15,13 +15,13 @@ public:
   void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) override;
 
 private:
-  uint16_t timeOffset = 0;
+  uint16_t noiseTimeOffsetMs = 0;
   float radius = 1.5f;
-  static constexpr float ANIMATION_SPEED = 1.0f;
+  static constexpr float ANIMATION_SPEED = 10.0f;
   static constexpr float DRIFT_PERIOD_SECONDS = 10.0f;
   static constexpr float DRIFT_PERIOD_US = SECONDS_TO_MICROS(DRIFT_PERIOD_SECONDS);
   static constexpr float RADIUS_MIN = 0.5f;
-  static constexpr float RADIUS_MAX = 5.0f;
+  static constexpr float RADIUS_MAX = 2.0f;
 };
 
 #endif // NOISE_FIELD_H
