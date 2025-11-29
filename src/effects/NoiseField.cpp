@@ -21,6 +21,9 @@ void NoiseField::render(RenderContext& ctx) {
         float angleRadians = angleUnitsToRadians(arm.angleUnits);
 
         for (int led = 0; led < 10; led++) {
+#ifdef ENABLE_TIMING_INSTRUMENTATION
+            int64_t noiseStart = esp_timer_get_time();
+#endif
             // Normalize radial position: 0.0 (hub) to 1.0 (tip)
             float height = led / 9.0f;
 
@@ -28,12 +31,23 @@ void NoiseField::render(RenderContext& ctx) {
             // radius controls zoom (larger = coarser pattern)
             CHSV color = fl::noiseCylinderHSV8(angleRadians, height, noiseTimeOffsetMs, 1.0f);
             arm.pixels[led] = color;
+#ifdef ENABLE_TIMING_INSTRUMENTATION
+            int64_t noiseEnd = esp_timer_get_time();
+            // print rotation number, arm, led, noise time using proper %llu, %d, %u, etc. formatting
+            Serial.printf("NoiseField::render: frame: %lu, arm: %d, led: %d, angle: %.4f, height: %.4f, timeOffset: %u, noise time: %lld us\n",
+                          ctx.frameCount, armIdx, led, angleRadians, height, noiseTimeOffsetMs, noiseEnd - noiseStart);
+#endif
         }
     }
 }
 
 void NoiseField::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) {
-  noiseTimeOffsetMs  = (uint32_t)(timestamp / 1000);
+  noiseTimeOffsetMs  = (timestamp_t)(timestamp / 1000);
+
+#ifdef ENABLE_TIMING_INSTRUMENTATION
+  Serial.printf("NoiseField::onRevolution: revCount: %u, timestamp: %llu us, noiseTimeOffsetMs: %u\n",
+                revolutionCount, timestamp, noiseTimeOffsetMs);
+#endif
 
   // Oscillate radius between RADIUS_MIN and RADIUS_MAX over DRIFT_PERIOD_SECONDS
   //float phase = 2.0f * M_PI * timestamp / DRIFT_PERIOD_US;
