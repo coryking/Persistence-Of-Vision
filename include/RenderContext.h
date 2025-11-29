@@ -15,8 +15,10 @@
  */
 struct RenderContext {
     // === Timing ===
+    uint32_t frameCount;          // Frame number (incremented every render)
     uint32_t timeUs;              // Current timestamp (microseconds)
     interval_t microsPerRev;      // Microseconds per revolution
+    angle_t slotSizeUnits;        // Angular resolution (angle units per slot, 10 units = 1 degree)
 
     // === Convenience Methods ===
 

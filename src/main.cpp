@@ -34,10 +34,8 @@
 // Arms: [0]=inner, [1]=middle (hall trigger), [2]=outer
 static const uint16_t ARM_START[3] = {10, 0, 20};  // Physical LED indices
 
-// Phase offsets (degrees) - middle arm triggers hall sensor at 0°
-#define MIDDLE_ARM_PHASE 0
-#define INNER_ARM_PHASE 120
-#define OUTER_ARM_PHASE 240
+// Phase offsets removed - use constants from types.h instead
+// (INNER_ARM_PHASE = 1200 units = 120°, OUTER_ARM_PHASE = 2400 units = 240°)
 
 // POV Display Configuration
 #define WARMUP_REVOLUTIONS 20
@@ -71,9 +69,11 @@ RenderContext renderCtx;
 
 // Timing instrumentation
 #if ENABLE_TIMING_INSTRUMENTATION
-uint32_t instrumentationFrameCount = 0;
 bool csvHeaderPrinted = false;
 #endif
+
+// Global frame counter (shared via RenderContext)
+uint32_t globalFrameCount = 0;
 
 // Test mode: simulated rotation
 // Feed synthetic hall timestamps into revTimer to exercise real timing logic
@@ -303,6 +303,14 @@ void loop() {
         }
         lastSlot = currentSlot;
 
+        // Snap angles to slot boundary for deterministic rendering
+        // This ensures pattern boundaries are crossed at exact, consistent angles
+        // regardless of when loop() happens to sample esp_timer_get_time()
+        angle_t slotBoundaryAngle = static_cast<angle_t>(currentSlot * slotSizeUnits);
+        angleMiddleUnits = slotBoundaryAngle;
+        angleInnerUnits = (slotBoundaryAngle + INNER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
+        angleOuterUnits = (slotBoundaryAngle + OUTER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
+
         // Start render timing measurement
         revTimer.startRender();
 
@@ -315,8 +323,10 @@ void loop() {
 #endif
 
         // Populate render context
+        renderCtx.frameCount = globalFrameCount++;
         renderCtx.timeUs = static_cast<uint32_t>(now);
         renderCtx.microsPerRev = microsecondsPerRev;
+        renderCtx.slotSizeUnits = slotSizeUnits;
 
         // Set arm angles - arms[0]=inner, arms[1]=middle, arms[2]=outer
         renderCtx.arms[0].angleUnits = angleInnerUnits;
@@ -334,7 +344,7 @@ void loop() {
             uint16_t start = ARM_START[a];
             for (int p = 0; p < 10; p++) {
                 CRGB color = renderCtx.arms[a].pixels[p];
-                color.nscale8(64);  // Power budget
+                color.nscale8(32);  // Power budget
                 strip.SetPixelColor(start + p, RgbColor(color.r, color.g, color.b));
             }
         }
@@ -347,7 +357,7 @@ void loop() {
 #if ENABLE_TIMING_INSTRUMENTATION
         int64_t totalTime = timingEnd(frameStart);
         Serial.printf("%u,%u,%lld,%d,%u,%llu,%u,%u,%llu,%f,%llu\n",
-                      instrumentationFrameCount++,
+                      renderCtx.frameCount,
                       effectRegistry.getCurrentIndex(),
                       totalTime,
                       currentSlot,

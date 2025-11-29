@@ -6,7 +6,6 @@
 static uint8_t prevPatterns[3] = {255, 255, 255};
 static uint32_t boundaryHitCount[3] = {0, 0, 0};
 static uint32_t patternChangeCount[3] = {0, 0, 0};
-static uint32_t frameCount = 0;
 static constexpr angle_t BOUNDARY_EPSILON = 5;  // 0.5 degrees from boundary (5 units)
 
 // Check if angle is near a pattern boundary (multiple of 18° = 180 units)
@@ -25,14 +24,12 @@ static bool isNearBoundary(angle_t angleUnits, angle_t* distToBoundary) {
  * This means all three arms can be showing different patterns at the same time.
  */
 void SolidArms::render(RenderContext& ctx) {
-#ifdef ENABLE_DETAILED_TIMING
-    frameCount++;
-#endif
 
     for (int a = 0; a < 3; a++) {
         auto& arm = ctx.arms[a];
 
         // Pattern = angleUnits / 180 (exact integer division!)
+        // 20 patterns * 18° each = 360° exactly
         // angleUnits is already normalized to 0-3599
         uint8_t pattern = arm.angleUnits / ANGLE_PER_PATTERN;
         if (pattern > 19) pattern = 19;
@@ -51,25 +48,25 @@ void SolidArms::render(RenderContext& ctx) {
 
         if (patternChanged) {
             patternChangeCount[a]++;
-            // Log pattern changes near the critical 288° boundary (pattern 15→16)
+            // Log pattern transitions (not flickering - just normal progression)
             if ((prevPatterns[a] == 15 && pattern == 16) ||
                 (prevPatterns[a] == 16 && pattern == 15)) {
-                Serial.printf("FLICKER@288: arm%d frame=%u angle=%u pat=%d->%d dist=%u\n",
-                              a, frameCount, arm.angleUnits, prevPatterns[a], pattern, distToBoundary);
+                Serial.printf("PATTERN_288: arm%d frame=%u angle=%u pat=%d->%d dist=%u\n",
+                              a, ctx.frameCount, arm.angleUnits, prevPatterns[a], pattern, distToBoundary);
             }
-            // Also log any boundary flickering
+            // Log any other pattern boundary transitions
             else if (nearBoundary) {
-                Serial.printf("BOUNDARY_FLICKER: arm%d frame=%u angle=%u pat=%d->%d dist=%u\n",
-                              a, frameCount, arm.angleUnits, prevPatterns[a], pattern, distToBoundary);
+                Serial.printf("PATTERN_TRANSITION: arm%d frame=%u angle=%u pat=%d->%d dist=%u\n",
+                              a, ctx.frameCount, arm.angleUnits, prevPatterns[a], pattern, distToBoundary);
             }
         }
 
         prevPatterns[a] = pattern;
 
         // Periodic summary every 10000 frames
-        if (a == 0 && frameCount % 10000 == 0) {
+        if (a == 0 && ctx.frameCount % 10000 == 0) {
             Serial.printf("BOUNDARY_STATS@%u: hits=[%u,%u,%u] changes=[%u,%u,%u]\n",
-                          frameCount,
+                          ctx.frameCount,
                           boundaryHitCount[0], boundaryHitCount[1], boundaryHitCount[2],
                           patternChangeCount[0], patternChangeCount[1], patternChangeCount[2]);
         }
@@ -93,16 +90,17 @@ void SolidArms::render(RenderContext& ctx) {
             }
         }
 
-        // Reference marker: white line at 0° for one render cycle
-        // At 2800 RPM, ~3° per frame, so check within 3° of 0°
-        // 3 degrees = 30 units, 357 degrees = 3570 units
-        if (arm.angleUnits < 30 || arm.angleUnits > 3570) {
-            for (int p = 0; p < 10; p++) {
-                if(arm.angleUnits < 30)
-                  arm.pixels[p] = CRGB::White;
-                else
-                  arm.pixels[p] = CRGB::Orange;
-            }
+    }
+
+    // Reference marker: 30-pixel radial line at physical 0° (hall sensor position)
+    // Each arm lights up when IT crosses 0°, creating one continuous radial line
+    // At 2800 RPM, ~3° per frame, so check within 3° of 0°
+    // 3 degrees = 30 units, 357 degrees = 3570 units
+    for (int a = 0; a < 3; a++) {
+        angle_t armAngle = ctx.arms[a].angleUnits;
+        if (armAngle < 30 || armAngle > 3570) {
+            CRGB color = (armAngle < 30) ? CRGB::White : CRGB::Orange;
+            fill_solid(ctx.arms[a].pixels, 10, color);
         }
     }
 }
