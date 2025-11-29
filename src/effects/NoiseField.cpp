@@ -21,16 +21,17 @@ void NoiseField::render(RenderContext& ctx) {
     for (int a = 0; a < 3; a++) {
         auto& arm = ctx.arms[a];
 
-        // Map angle to noise X - divide to zoom out
-        uint16_t noiseX = static_cast<uint16_t>((static_cast<uint32_t>(arm.angleUnits) * 65536UL) / 3600 / ANGLE_SCALE_DIVISOR);
+        // Map angle to noise X coordinate (32-bit fixed point: 16.16 format)
+        // angleUnits 0-3599 maps to full noise space
+        uint32_t noiseX = ((static_cast<uint32_t>(arm.angleUnits) * 65536UL) / ANGLE_SCALE_DIVISOR) << 4;
 
         // Sample noise at 3 key radial positions: hub, middle, tip
         uint8_t samples[3];
         const uint8_t sampleRadii[3] = {0, 15, 27};  // Virtual positions 0, 15, 27 (out of 0-29)
 
         for (int i = 0; i < 3; i++) {
-            // Map radial position to noise Y - divide to zoom out
-            uint16_t noiseY = (sampleRadii[i] * 2184) / RADIAL_SCALE_DIVISOR;
+            // Map radial position to noise Y (32-bit fixed point)
+            uint32_t noiseY = (static_cast<uint32_t>(sampleRadii[i]) * 2184UL / RADIAL_SCALE_DIVISOR) << 8;
 
             // Sample 3D noise (X=angle, Y=radius, Z=time)
             uint16_t noiseValue = inoise16(noiseX, noiseY, timeOffset);
