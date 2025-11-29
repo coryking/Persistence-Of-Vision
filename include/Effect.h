@@ -43,7 +43,7 @@ public:
      *
      * @param rpm Current revolutions per minute
      */
-    virtual void onRevolution(float rpm) { (void)rpm; }
+    virtual void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) { (void)usPerRev; }
 };
 
 #endif // EFFECT_H

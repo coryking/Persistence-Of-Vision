@@ -6,6 +6,8 @@
 #include "types.h"
 #include "RenderContext.h"
 
+
+
 /**
  * Polar coordinate helpers for POV display effects
  *
@@ -23,6 +25,10 @@
 inline angle_t normalizeAngleUnits(int32_t units) {
     int32_t normalized = units % ANGLE_FULL_CIRCLE;
     return normalized < 0 ? static_cast<angle_t>(normalized + ANGLE_FULL_CIRCLE) : static_cast<angle_t>(normalized);
+}
+
+inline float angleUnitsToRadians(angle_t units) {
+    return static_cast<float>(units) * M_PI / ANGLE_HALF_CIRCLE;
 }
 
 /**

@@ -114,6 +114,7 @@ void hallProcessingTask(void* pvParameters) {
     HallEffectEvent event;
     QueueHandle_t queue = hallDriver.getEventQueue();
     bool wasRotating = false;  // Track motor state
+    static uint16_t revolutionCount = 1;
 
     while (1) {
         if (xQueueReceive(queue, &event, portMAX_DELAY) == pdPASS) {
@@ -122,13 +123,13 @@ void hallProcessingTask(void* pvParameters) {
             // Detect motor start (stopped → rotating transition)
             bool isRotating = revTimer.isCurrentlyRotating();
             if (!wasRotating && isRotating) {
+              revolutionCount = 1;
                 effectScheduler.onMotorStart();  // Advance effect, save to NVS
             }
             wasRotating = isRotating;
 
             // Notify current effect of revolution
-            float rpm = 60000000.0f / static_cast<float>(revTimer.getMicrosecondsPerRevolution());
-            effectRegistry.onRevolution(rpm);
+            effectRegistry.onRevolution(revTimer.getMicrosecondsPerRevolution(), event.triggerTimestamp, revolutionCount++);
 
             if (revTimer.isWarmupComplete() && revTimer.getRevolutionCount() == WARMUP_REVOLUTIONS) {
                 Serial.println("Warm-up complete! Display active.");

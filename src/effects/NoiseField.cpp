@@ -1,56 +1,42 @@
 #include "effects/NoiseField.h"
 #include <FastLED.h>
+#include "fl/noise.h"  // noiseCylinderCRGB (new in master, post-3.10.3)
+#include "fl/map_range.h"
+#include "polar_helpers.h"
 
 /**
  * Render NoiseField effect - flowing lava texture
  *
- * Uses sparse sampling (3 points instead of 10) + interpolation for speed,
- * while keeping the original's smooth flowing character.
+ * Uses FastLED's noiseCylinderCRGB for seamless cylindrical noise.
+ * Maps the POV disc as a cylinder where:
+ *   - angle (θ) = position around the disc (radians)
+ *   - height = radial position (0.0 = hub, 1.0 = tip)
  *
- * Note: Has a seam at 0°/360° boundary (accepted tradeoff for simplicity)
+ * The cylinder mapping eliminates the 0°/360° seam problem.
  */
 void NoiseField::render(RenderContext& ctx) {
-    timeOffset += ANIMATION_SPEED;
 
-    // SCALE TUNING: Adjust these to change pattern size
-    // Larger divisor = bigger patterns (zoomed out)
-    // Smaller divisor = smaller patterns (zoomed in)
-    const uint8_t ANGLE_SCALE_DIVISOR = 4;   // Try: 2, 4, 8, 16
-    const uint8_t RADIAL_SCALE_DIVISOR = 4;  // Try: 2, 4, 8, 16
+    for (int armIdx = 0; armIdx < 3; armIdx++) {
+        auto& arm = ctx.arms[armIdx];
+        float angleRadians = angleUnitsToRadians(arm.angleUnits);
 
-    for (int a = 0; a < 3; a++) {
-        auto& arm = ctx.arms[a];
+        for (int led = 0; led < 10; led++) {
+            // Normalize radial position: 0.0 (hub) to 1.0 (tip)
+            float height = led / 9.0f;
 
-        // Map angle to noise X coordinate (32-bit fixed point: 16.16 format)
-        // angleUnits 0-3599 maps to full noise space
-        uint32_t noiseX = ((static_cast<uint32_t>(arm.angleUnits) * 65536UL) / ANGLE_SCALE_DIVISOR) << 4;
-
-        // Sample noise at 3 key radial positions: hub, middle, tip
-        uint8_t samples[3];
-        const uint8_t sampleRadii[3] = {0, 15, 27};  // Virtual positions 0, 15, 27 (out of 0-29)
-
-        for (int i = 0; i < 3; i++) {
-            // Map radial position to noise Y (32-bit fixed point)
-            uint32_t noiseY = (static_cast<uint32_t>(sampleRadii[i]) * 2184UL / RADIAL_SCALE_DIVISOR) << 8;
-
-            // Sample 3D noise (X=angle, Y=radius, Z=time)
-            uint16_t noiseValue = inoise16(noiseX, noiseY, timeOffset);
-            samples[i] = noiseValue >> 8;
-        }
-
-        // Interpolate all 10 pixels from the 3 samples
-        // Pixels 0-4: lerp between samples[0] and samples[1]
-        for (int p = 0; p < 5; p++) {
-            uint8_t frac = (p * 255) / 5;  // 0 → 255 over 5 pixels
-            uint8_t brightness = lerp8by8(samples[0], samples[1], frac);
-            arm.pixels[p] = ColorFromPalette(LavaColors_p, brightness);
-        }
-
-        // Pixels 5-9: lerp between samples[1] and samples[2]
-        for (int p = 5; p < 10; p++) {
-            uint8_t frac = ((p - 5) * 255) / 4;  // 0 → 255 over 4 pixels
-            uint8_t brightness = lerp8by8(samples[1], samples[2], frac);
-            arm.pixels[p] = ColorFromPalette(LavaColors_p, brightness);
+            // Sample cylindrical noise
+            // radius controls zoom (larger = coarser pattern)
+            CRGB color = fl::noiseCylinderCRGB(angleRadians, height, timeOffset, radius);
+            arm.pixels[led] = color;
         }
     }
+}
+
+void NoiseField::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) {
+  timeOffset += ANIMATION_SPEED;
+
+  // Oscillate radius between RADIUS_MIN and RADIUS_MAX over DRIFT_PERIOD_SECONDS
+  float phase = 2.0f * M_PI * timestamp / DRIFT_PERIOD_US;
+  float sinValue = sin(phase);  // -1.0 to 1.0
+  radius = fl::map_range(sinValue, -1.0f, 1.0f, RADIUS_MIN, RADIUS_MAX);
 }

@@ -7,11 +7,10 @@ void VirtualBlobs::begin() {
     initializeBlobs();
 }
 
-void VirtualBlobs::onRevolution(float rpm) {
+void VirtualBlobs::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) {
     // Update blob animations once per revolution (47 Hz at 2800 RPM)
-    timestamp_t now = esp_timer_get_time();
     for (auto& blob : blobs) {
-        updateBlob(blob, now);
+        updateBlob(blob, timestamp);
     }
 }
 

@@ -23,7 +23,7 @@ class PerArmBlobs : public Effect {
 public:
     void begin() override;
     void render(RenderContext& ctx) override;
-    void onRevolution(float rpm) override;
+    void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) override;
 
 private:
     Blob blobs[MAX_BLOBS];  // MAX_BLOBS defined in blob_types.h

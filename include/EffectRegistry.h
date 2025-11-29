@@ -131,9 +131,9 @@ public:
      *
      * @param rpm Current revolutions per minute
      */
-    void onRevolution(float rpm) {
+    void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) {
         if (currentIndex < effectCount && effects[currentIndex]) {
-            effects[currentIndex]->onRevolution(rpm);
+            effects[currentIndex]->onRevolution(usPerRev, timestamp, revolutionCount);
         }
     }
 };

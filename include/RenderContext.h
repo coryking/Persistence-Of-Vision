@@ -98,7 +98,7 @@ struct RenderContext {
      */
     void clear() {
         for (auto& arm : arms) {
-            memset(arm.pixels, 0, sizeof(arm.pixels));
+            fill_solid(arm.pixels, 10, CRGB::Black);
         }
     }
 };
