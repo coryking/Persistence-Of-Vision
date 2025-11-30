@@ -2,6 +2,7 @@
 .pio
 .cache/
 compile_commands.json
+$PROJECT_BUILD_DIR/
 
 # Python virtual environment (managed by uv)
 .venv

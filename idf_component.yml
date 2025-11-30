@@ -1,0 +1,8 @@
+## IDF Component Manager Manifest File
+## Explicitly exclude components we don't want
+
+dependencies:
+  # Explicitly declare we don't want these managed components
+  # This prevents the component manager from auto-downloading them
+
+  # We only need basic ESP-IDF, not cloud/provisioning services
