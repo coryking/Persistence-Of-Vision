@@ -1,0 +1,298 @@
+Processing seeed_xiao_esp32s3_profiling (platform: https://github.com/pioarduino/platform-espressif32/releases/download/stable/platform-espressif32.zip; board: seeed_xiao_esp32s3; framework: arduino, espidf)
+--------------------------------------------------------------------------------
+Library Manager: Installing SPI
+Verbose mode can be enabled via `-v, --verbose` option
+=== Certificate Generation Diagnostics ===
+PROJECT_DIR: /Users/coryking/projects/POV_Project
+BUILD_DIR: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling
+Found 7 certificate file(s) to convert...
+  Input cert: /Users/coryking/projects/POV_Project/managed_components/espressif__esp_rainmaker/server_certs/rmaker_claim_service_server.crt
+  Input cert: /Users/coryking/projects/POV_Project/managed_components/espressif__esp_rainmaker/server_certs/rmaker_mqtt_server.crt
+  Input cert: /Users/coryking/projects/POV_Project/managed_components/espressif__esp_rainmaker/server_certs/rmaker_ota_server.crt
+  Input cert: /Users/coryking/projects/POV_Project/managed_components/espressif__esp_insights/server_certs/https_server.crt
+  Input cert: /Users/coryking/projects/POV_Project/managed_components/espressif__esp_insights/server_certs/mqtt_server.crt
+  Input cert: /Users/coryking/projects/POV_Project/managed_components/espressif__esp_secure_cert_mgr/tools/tests/input_data/client.crt
+  Input cert: /Users/coryking/projects/POV_Project/managed_components/espressif__esp_secure_cert_mgr/examples/esp_secure_cert_app/client.crt
+
+Creating doubled directory: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/seeed_xiao_esp32s3_profiling
+
+--- Processing: rmaker_claim_service_server.crt ---
+  Output file: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/rmaker_claim_service_server.crt.S
+  Running: cmake -DDATA_FILE=/Users/coryking/projects/POV_Project/managed_components/espressif__esp_rainmaker/server_certs/rmaker_claim_service_server.crt -DSOURCE_FILE=/Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/rmaker_claim_service_server.crt.S -DFILE_TYPE=BINARY -P /Users/coryking/.platformio/packages/framework-espidf/tools/cmake/scripts/data_file_embed_asm.cmake
+  ✓ Created: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/rmaker_claim_service_server.crt.S
+  ✓ Copied to: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/seeed_xiao_esp32s3_profiling/rmaker_claim_service_server.crt.S
+
+--- Processing: rmaker_mqtt_server.crt ---
+  Output file: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/rmaker_mqtt_server.crt.S
+  Running: cmake -DDATA_FILE=/Users/coryking/projects/POV_Project/managed_components/espressif__esp_rainmaker/server_certs/rmaker_mqtt_server.crt -DSOURCE_FILE=/Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/rmaker_mqtt_server.crt.S -DFILE_TYPE=BINARY -P /Users/coryking/.platformio/packages/framework-espidf/tools/cmake/scripts/data_file_embed_asm.cmake
+  ✓ Created: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/rmaker_mqtt_server.crt.S
+  ✓ Copied to: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/seeed_xiao_esp32s3_profiling/rmaker_mqtt_server.crt.S
+
+--- Processing: rmaker_ota_server.crt ---
+  Output file: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/rmaker_ota_server.crt.S
+  Running: cmake -DDATA_FILE=/Users/coryking/projects/POV_Project/managed_components/espressif__esp_rainmaker/server_certs/rmaker_ota_server.crt -DSOURCE_FILE=/Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/rmaker_ota_server.crt.S -DFILE_TYPE=BINARY -P /Users/coryking/.platformio/packages/framework-espidf/tools/cmake/scripts/data_file_embed_asm.cmake
+  ✓ Created: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/rmaker_ota_server.crt.S
+  ✓ Copied to: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/seeed_xiao_esp32s3_profiling/rmaker_ota_server.crt.S
+
+--- Processing: https_server.crt ---
+  Output file: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/https_server.crt.S
+  Running: cmake -DDATA_FILE=/Users/coryking/projects/POV_Project/managed_components/espressif__esp_insights/server_certs/https_server.crt -DSOURCE_FILE=/Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/https_server.crt.S -DFILE_TYPE=BINARY -P /Users/coryking/.platformio/packages/framework-espidf/tools/cmake/scripts/data_file_embed_asm.cmake
+  ✓ Created: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/https_server.crt.S
+  ✓ Copied to: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/seeed_xiao_esp32s3_profiling/https_server.crt.S
+
+--- Processing: mqtt_server.crt ---
+  Output file: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/mqtt_server.crt.S
+  Running: cmake -DDATA_FILE=/Users/coryking/projects/POV_Project/managed_components/espressif__esp_insights/server_certs/mqtt_server.crt -DSOURCE_FILE=/Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/mqtt_server.crt.S -DFILE_TYPE=BINARY -P /Users/coryking/.platformio/packages/framework-espidf/tools/cmake/scripts/data_file_embed_asm.cmake
+  ✓ Created: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/mqtt_server.crt.S
+  ✓ Copied to: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/seeed_xiao_esp32s3_profiling/mqtt_server.crt.S
+
+--- Processing: client.crt ---
+  Output file: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/client.crt.S
+  Running: cmake -DDATA_FILE=/Users/coryking/projects/POV_Project/managed_components/espressif__esp_secure_cert_mgr/tools/tests/input_data/client.crt -DSOURCE_FILE=/Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/client.crt.S -DFILE_TYPE=BINARY -P /Users/coryking/.platformio/packages/framework-espidf/tools/cmake/scripts/data_file_embed_asm.cmake
+  ✓ Created: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/client.crt.S
+  ✓ Copied to: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/seeed_xiao_esp32s3_profiling/client.crt.S
+
+--- Processing: client.crt ---
+  Output file: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/client.crt.S
+  Running: cmake -DDATA_FILE=/Users/coryking/projects/POV_Project/managed_components/espressif__esp_secure_cert_mgr/examples/esp_secure_cert_app/client.crt -DSOURCE_FILE=/Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/client.crt.S -DFILE_TYPE=BINARY -P /Users/coryking/.platformio/packages/framework-espidf/tools/cmake/scripts/data_file_embed_asm.cmake
+  ✓ Created: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/client.crt.S
+  ✓ Copied to: /Users/coryking/projects/POV_Project/.pio/build/seeed_xiao_esp32s3_profiling/seeed_xiao_esp32s3_profiling/client.crt.S
+
+=== Certificate Generation Complete ===
+
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/seeed_xiao_esp32s3.html
+PLATFORM: Espressif 32 (55.3.34) > Seeed Studio XIAO ESP32S3
+HARDWARE: ESP32S3 240MHz, 320KB RAM, 8MB Flash
+DEBUG: Current (esp-builtin) External (cmsis-dap, esp-bridge, esp-builtin, esp-prog, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - contrib-piohome @ 3.4.4 
+ - framework-arduinoespressif32 @ 3.3.4 
+ - framework-arduinoespressif32-libs @ 5.5.0+sha.8410210c9a 
+ - framework-espidf @ 3.50501.0 (5.5.1) 
+ - tool-cmake @ 4.0.3 
+ - tool-dfuutil-arduino @ 1.11.0 
+ - tool-esp-rom-elfs @ 2024.10.11 
+ - tool-esptoolpy @ 5.1.0 
+ - tool-mkfatfs @ 2.0.1 
+ - tool-mklittlefs @ 3.2.0 
+ - tool-mklittlefs4 @ 4.0.2 
+ - tool-mkspiffs @ 2.230.0 (2.30) 
+ - tool-ninja @ 1.13.1 
+ - tool-scons @ 4.40801.0 (4.8.1) 
+ - toolchain-xtensa-esp-elf @ 14.2.0+20250730
+Reading CMake configuration...
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 44 compatible libraries
+Scanning dependencies...
+Dependency Graph
+|-- NeoPixelBus @ 2.8.4+sha.c0f7ec8
+|-- FastLED @ 3.10.3+sha.ac59596
+|-- WiFi @ 3.3.4
+|-- Preferences @ 3.3.4
+Building in release mode
+Added GCOV linker flags: -fprofile-arcs -ftest-coverage -lgcov
+Compiling .pio/build/seeed_xiao_esp32s3_profiling/src/main.cpp.o
+In file included from .pio/libdeps/seeed_xiao_esp32s3_profiling/NeoPixelBus/src/internal/methods/NeoEsp32RmtMethod.h:49,
+                 from .pio/libdeps/seeed_xiao_esp32s3_profiling/NeoPixelBus/src/internal/NeoMethods.h:62,
+                 from .pio/libdeps/seeed_xiao_esp32s3_profiling/NeoPixelBus/src/NeoPixelBus.h:43,
+                 from src/main.cpp:5:
+/Users/coryking/.platformio/packages/framework-espidf/components/driver/deprecated/driver/rmt.h:18:2: warning: #warning "The legacy RMT driver is deprecated, please use driver/rmt_tx.h and/or driver/rmt_rx.h" [-Wcpp]
+   18 | #warning "The legacy RMT driver is deprecated, please use driver/rmt_tx.h and/or driver/rmt_rx.h"
+      |  ^~~~~~~
+In file included from .pio/libdeps/seeed_xiao_esp32s3_profiling/NeoPixelBus/src/internal/methods/NeoEsp32LcdXMethod.h:33,
+                 from .pio/libdeps/seeed_xiao_esp32s3_profiling/NeoPixelBus/src/internal/NeoMethods.h:65:
+/Users/coryking/.platformio/packages/framework-espidf/components/driver/deprecated/driver/periph_ctrl.h:7:2: warning: #warning driver/periph_ctrl.h header is no longer used, and will be removed in future versions. [-Wcpp]
+    7 | #warning driver/periph_ctrl.h header is no longer used, and will be removed in future versions.
+      |  ^~~~~~~
+.pio/libdeps/seeed_xiao_esp32s3_profiling/NeoPixelBus/src/internal/methods/NeoEsp32LcdXMethod.h: In member function 'void NeoEspLcdMonoBuffContext<T_MUXMAP>::Construct(uint16_t)':
+.pio/libdeps/seeed_xiao_esp32s3_profiling/NeoPixelBus/src/internal/methods/NeoEsp32LcdXMethod.h:436:29: warning: 'esp_err_t gdma_new_channel(const gdma_channel_alloc_config_t*, gdma_channel_t**)' is deprecated: please use gdma_new_ahb_channel or gdma_new_axi_channel respectively [-Wdeprecated-declarations]
+  436 |             gdma_new_channel(&dma_chan_config, &_dmaChannel);
+      |             ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from .pio/libdeps/seeed_xiao_esp32s3_profiling/NeoPixelBus/src/internal/methods/NeoEsp32LcdXMethod.h:34:
+/Users/coryking/.platformio/packages/framework-espidf/components/esp_hw_support/dma/include/esp_private/gdma.h:481:11: note: declared here
+  481 | esp_err_t gdma_new_channel(const gdma_channel_alloc_config_t *config, gdma_channel_handle_t *ret_chan)
+      |           ^~~~~~~~~~~~~~~~
+.pio/libdeps/seeed_xiao_esp32s3_profiling/NeoPixelBus/src/internal/methods/NeoEsp32LcdXMethod.h: In member function 'void NeoEsp32LcdMuxBus<T_BUSCONTEXT>::Initialize(uint8_t, uint16_t, bool)':
+.pio/libdeps/seeed_xiao_esp32s3_profiling/NeoPixelBus/src/internal/methods/NeoEsp32LcdXMethod.h:546:23: warning: 'void gpio_iomux_out(uint8_t, int, bool)' is deprecated: Please use `gpio_iomux_output` instead [-Wdeprecated-declarations]
+  546 |         gpio_iomux_out(pin, PIN_FUNC_GPIO, false);
+      |         ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /Users/coryking/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp32-hal-gpio.h:30,
+                 from /Users/coryking/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp32-hal.h:88,
+                 from /Users/coryking/.platformio/packages/framework-arduinoespressif32/cores/esp32/Arduino.h:44,
+                 from src/main.cpp:1:
+/Users/coryking/.platformio/packages/framework-espidf/components/esp_driver_gpio/include/driver/gpio.h:470:6: note: declared here
+  470 | void gpio_iomux_out(uint8_t gpio_num, int func, bool out_en_inv) __attribute__((deprecated("Please use `gpio_iomux_output` instead")));
+      |      ^~~~~~~~~~~~~~
+In file included from .pio/libdeps/seeed_xiao_esp32s3_profiling/FastLED/src/platforms/clockless.h:33,
+                 from .pio/libdeps/seeed_xiao_esp32s3_profiling/FastLED/src/chipsets.h:30,
+                 from .pio/libdeps/seeed_xiao_esp32s3_profiling/FastLED/src/FastLED.h:144,
+                 from include/RenderContext.h:4,
+                 from src/main.cpp:14:
+.pio/libdeps/seeed_xiao_esp32s3_profiling/FastLED/src/platforms/esp/clockless.h: At global scope:
+.pio/libdeps/seeed_xiao_esp32s3_profiling/FastLED/src/platforms/esp/clockless.h:37:21: note: '#pragma message: ESP32: Using ClocklessIdf5 (RMT5/ESP-IDF 5.x) as default ClocklessController'
+   37 |     #pragma message "ESP32: Using ClocklessIdf5 (RMT5/ESP-IDF 5.x) as default ClocklessController"
+      |                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /Users/coryking/.platformio/packages/framework-espidf/components/app_trace/include/esp_app_trace.h:11,
+                 from src/main.cpp:23:
+/Users/coryking/.platformio/packages/framework-espidf/components/app_trace/include/esp_app_trace_util.h: In function 'void esp_apptrace_rb_init(esp_apptrace_rb_t*, uint8_t*, uint32_t)':
+/Users/coryking/.platformio/packages/framework-espidf/components/app_trace/include/esp_app_trace_util.h:117:29: warning: using value of assignment with 'volatile'-qualified left operand is deprecated [-Wvolatile]
+  117 |     rb->size = rb->cur_size = size;
+      |                ~~~~~~~~~~~~~^~~~~~
+Linking .pio/build/seeed_xiao_esp32s3_profiling/firmware.elf
+                            Memory Type Usage Summary                             
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Memory Type/Section ┃ Used [bytes] ┃ Used [%] ┃ Remain [bytes] ┃ Total [bytes] ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│ Flash Code          │       672130 │          │                │               │
+│    .text            │       672130 │          │                │               │
+│ DIRAM               │       151187 │    44.24 │         190573 │        341760 │
+│    .text            │        94043 │    27.52 │                │               │
+│    .bss             │        32440 │     9.49 │                │               │
+│    .data            │        24704 │     7.23 │                │               │
+│ Flash Data          │       140888 │          │                │               │
+│    .rodata          │       140632 │          │                │               │
+│    .appdesc         │          256 │          │                │               │
+│ IRAM                │        16384 │    100.0 │              0 │         16384 │
+│    .text            │        15356 │    93.73 │                │               │
+│    .vectors         │         1028 │     6.27 │                │               │
+└─────────────────────┴──────────────┴──────────┴────────────────┴───────────────┘
+Total image size: 948149 bytes (.bin may be padded larger)
+Note: The reported total sizes may be smaller than those in the technical reference manual due to reserved memory and application configuration. The total flash size available for the application is not included by default, as it cannot be reliably determined due to the presence of other data like the bootloader, partition table, and application partition size.
+Retrieving maximum program size .pio/build/seeed_xiao_esp32s3_profiling/firmware.elf
+Checking size .pio/build/seeed_xiao_esp32s3_profiling/firmware.elf
+Advanced Memory Usage is available via "PlatformIO Home > Project Inspect"
+RAM:   [==        ]  17.4% (used 57144 bytes from 327680 bytes)
+Flash: [=         ]  11.3% (used 947893 bytes from 8388608 bytes)
+Building .pio/build/seeed_xiao_esp32s3_profiling/firmware.bin
+esptool v5.1.0
+Creating ESP32S3 image...
+Merged 2 ELF sections.
+Successfully created ESP32S3 image.
+Configuring upload protocol...
+AVAILABLE: cmsis-dap, esp-bridge, esp-builtin, esp-prog, espota, esptool, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa
+CURRENT: upload_protocol = esptool
+Looking for upload port...
+Auto-detected: /dev/cu.usbmodem101
+Uploading .pio/build/seeed_xiao_esp32s3_profiling/firmware.bin
+esptool v5.1.0
+Serial port /dev/cu.usbmodem101:
+Connecting...
+Connected to ESP32-S3 on /dev/cu.usbmodem101:
+Chip type:          ESP32-S3 (QFN56) (revision v0.2)
+Features:           Wi-Fi, BT 5 (LE), Dual Core + LP Core, 240MHz, Embedded PSRAM 8MB (AP_3v3)
+Crystal frequency:  40MHz
+USB mode:           USB-Serial/JTAG
+MAC:                30:30:f9:33:e4:60
+
+Uploading stub flasher...
+Running stub flasher...
+Stub flasher running.
+Changing baud rate to 460800...
+Changed.
+
+Configuring flash size...
+Auto-detected flash size: 8MB
+Flash will be erased from 0x00000000 to 0x00005fff...
+Flash will be erased from 0x00008000 to 0x00008fff...
+Flash will be erased from 0x00010000 to 0x000f7fff...
+SHA digest in image updated.
+Compressed 21056 bytes to 13391...
+
+Writing at 0x00000000 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0.0% 0/13391 bytes... 
+
+Writing at 0x00005240 [██████████████████████████████] 100.0% 13391/13391 bytes... 
+Wrote 21056 bytes (13391 compressed) at 0x00000000 in 0.4 seconds (453.9 kbit/s).
+Hash of data verified.
+Compressed 3072 bytes to 103...
+
+Writing at 0x00008000 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0.0% 0/103 bytes... 
+
+Writing at 0x00008c00 [██████████████████████████████] 100.0% 103/103 bytes... 
+Wrote 3072 bytes (103 compressed) at 0x00008000 in 0.1 seconds (410.2 kbit/s).
+Hash of data verified.
+Compressed 948304 bytes to 584222...
+
+Writing at 0x00010000 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0.0% 0/584222 bytes... 
+
+Writing at 0x0001d967 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   2.8% 16384/584222 bytes... 
+
+Writing at 0x0002917c [█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   5.6% 32768/584222 bytes... 
+
+Writing at 0x00032361 [██░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   8.4% 49152/584222 bytes... 
+
+Writing at 0x0003b7ec [███░░░░░░░░░░░░░░░░░░░░░░░░░░░]  11.2% 65536/584222 bytes... 
+
+Writing at 0x0004189d [████░░░░░░░░░░░░░░░░░░░░░░░░░░]  14.0% 81920/584222 bytes... 
+
+Writing at 0x00048306 [█████░░░░░░░░░░░░░░░░░░░░░░░░░]  16.8% 98304/584222 bytes... 
+
+Writing at 0x0004e629 [█████░░░░░░░░░░░░░░░░░░░░░░░░░]  19.6% 114688/584222 bytes... 
+
+Writing at 0x000549b0 [██████░░░░░░░░░░░░░░░░░░░░░░░░]  22.4% 131072/584222 bytes... 
+
+Writing at 0x0005b18f [███████░░░░░░░░░░░░░░░░░░░░░░░]  25.2% 147456/584222 bytes... 
+
+Writing at 0x000612d8 [████████░░░░░░░░░░░░░░░░░░░░░░]  28.0% 163840/584222 bytes... 
+
+Writing at 0x00067196 [█████████░░░░░░░░░░░░░░░░░░░░░]  30.8% 180224/584222 bytes... 
+
+Writing at 0x0006cc96 [██████████░░░░░░░░░░░░░░░░░░░░]  33.7% 196608/584222 bytes... 
+
+Writing at 0x000728e1 [██████████░░░░░░░░░░░░░░░░░░░░]  36.5% 212992/584222 bytes... 
+
+Writing at 0x0007861e [███████████░░░░░░░░░░░░░░░░░░░]  39.3% 229376/584222 bytes... 
+
+Writing at 0x0007e15b [████████████░░░░░░░░░░░░░░░░░░]  42.1% 245760/584222 bytes... 
+
+Writing at 0x0008428f [█████████████░░░░░░░░░░░░░░░░░]  44.9% 262144/584222 bytes... 
+
+Writing at 0x00089e49 [██████████████░░░░░░░░░░░░░░░░]  47.7% 278528/584222 bytes... 
+
+Writing at 0x0008fa62 [███████████████░░░░░░░░░░░░░░░]  50.5% 294912/584222 bytes... 
+
+Writing at 0x00095ce6 [███████████████░░░░░░░░░░░░░░░]  53.3% 311296/584222 bytes... 
+
+Writing at 0x0009bb39 [████████████████░░░░░░░░░░░░░░]  56.1% 327680/584222 bytes... 
+
+Writing at 0x000a0ee8 [█████████████████░░░░░░░░░░░░░]  58.9% 344064/584222 bytes... 
+
+Writing at 0x000a5ec3 [██████████████████░░░░░░░░░░░░]  61.7% 360448/584222 bytes... 
+
+Writing at 0x000ab6f3 [███████████████████░░░░░░░░░░░]  64.5% 376832/584222 bytes... 
+
+Writing at 0x000b0efc [████████████████████░░░░░░░░░░]  67.3% 393216/584222 bytes... 
+
+Writing at 0x000b63db [█████████████████████░░░░░░░░░]  70.1% 409600/584222 bytes... 
+
+Writing at 0x000bb7ad [█████████████████████░░░░░░░░░]  72.9% 425984/584222 bytes... 
+
+Writing at 0x000c0e55 [██████████████████████░░░░░░░░]  75.7% 442368/584222 bytes... 
+
+Writing at 0x000c6e06 [███████████████████████░░░░░░░]  78.5% 458752/584222 bytes... 
+
+Writing at 0x000cc709 [████████████████████████░░░░░░]  81.3% 475136/584222 bytes... 
+
+Writing at 0x000d287d [█████████████████████████░░░░░]  84.1% 491520/584222 bytes... 
+
+Writing at 0x000db9e7 [██████████████████████████░░░░]  86.9% 507904/584222 bytes... 
+
+Writing at 0x000e176f [██████████████████████████░░░░]  89.7% 524288/584222 bytes... 
+
+Writing at 0x000e7c43 [███████████████████████████░░░]  92.5% 540672/584222 bytes... 
+
+Writing at 0x000ee3f9 [████████████████████████████░░]  95.4% 557056/584222 bytes... 
+
+Writing at 0x000f374b [█████████████████████████████░]  98.2% 573440/584222 bytes... 
+
+Writing at 0x000f7850 [██████████████████████████████] 100.0% 584222/584222 bytes... 
+Wrote 948304 bytes (584222 compressed) at 0x00010000 in 7.4 seconds (1020.8 kbit/s).
+Hash of data verified.
+
+Hard resetting via RTS pin...
+========================= [SUCCESS] Took 28.02 seconds =========================
+
+Environment                   Status    Duration
+----------------------------  --------  ------------
+seeed_xiao_esp32s3_profiling  SUCCESS   00:00:28.021
+========================= 1 succeeded in 00:00:28.021 =========================

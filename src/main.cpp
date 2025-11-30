@@ -20,6 +20,30 @@
 #include "effects/PerArmBlobs.h"
 #include "effects/VirtualBlobs.h"
 #include "timing_utils.h"
+#include "esp_app_trace.h"
+
+#ifdef CONFIG_APPTRACE_GCOV_ENABLE
+// Forward declare GCOV runtime functions
+extern "C" {
+    void __gcov_init(void *info);
+    void gcov_rtio_init(void);
+    void do_global_ctors(void);  // Re-run global constructors
+
+    // Debug stub functions (match ESP-IDF definition exactly)
+    typedef enum {
+        ESP_DBG_STUB_MAGIC_NUM,
+        ESP_DBG_STUB_TABLE_SIZE,
+        ESP_DBG_STUB_CONTROL_DATA,
+        ESP_DBG_STUB_ENTRY_FIRST,
+        ESP_DBG_STUB_ENTRY_GCOV = ESP_DBG_STUB_ENTRY_FIRST,
+        ESP_DBG_STUB_ENTRY_CAPABILITIES,
+        ESP_DBG_STUB_ENTRY_MAX
+    } esp_dbg_stub_id_t;
+
+    typedef int esp_err_t;
+    esp_err_t esp_dbg_stub_entry_get(esp_dbg_stub_id_t id, uint32_t *entry);
+}
+#endif
 
 // Hardware Configuration
 #define NUM_LEDS 30
@@ -152,6 +176,22 @@ void hallProcessingTask(void* pvParameters) {
 void setup() {
     Serial.begin(115200);
     delay(2000);
+
+#ifdef CONFIG_APPTRACE_GCOV_ENABLE
+    Serial.println("Waiting 10 seconds for serial monitor...");
+    delay(10000);
+
+    // CRITICAL: Manually initialize GCOV runtime for Arduino framework
+    // Arduino doesn't call C++ global constructors the same way as ESP-IDF
+    Serial.println("[GCOV] Calling gcov_rtio_init()...");
+    gcov_rtio_init();
+    Serial.println("[GCOV] gcov_rtio_init() returned");
+
+    // Verify stub was registered
+    uint32_t stub_addr = 0;
+    esp_err_t gcov_err = esp_dbg_stub_entry_get(ESP_DBG_STUB_ENTRY_GCOV, &stub_addr);
+    Serial.printf("[GCOV] Stub get returned: err=%d, addr=0x%08x (expected 0x42017618)\n", gcov_err, stub_addr);
+#endif
 
     // Disable WiFi to reduce jitter - WiFi interrupts steal cycles
     WiFi.mode(WIFI_OFF);
@@ -446,4 +486,15 @@ void loop() {
         strip.Show();
         delay(10);
     }
+
+#ifdef CONFIG_APPTRACE_GCOV_ENABLE
+    // Hard-coded GCOV dump - run ONCE after 1000 frames
+    static bool gcov_dumped = false;
+    if (!gcov_dumped && globalFrameCount >= 1000) {
+        Serial.println("[GCOV] 1000 frames complete. Ready to dump. Run 'esp gcov dump' in OpenOCD NOW...");
+        esp_gcov_dump();
+        Serial.println("[GCOV] Dump complete!");
+        gcov_dumped = true;
+    }
+#endif
 }

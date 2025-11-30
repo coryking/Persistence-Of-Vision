@@ -1,8 +1,7 @@
 ## IDF Component Manager Manifest File
-## Explicitly exclude components we don't want
 
 dependencies:
-  # Explicitly declare we don't want these managed components
-  # This prevents the component manager from auto-downloading them
+  # GCOV code coverage component
+  espressif/esp_gcov: ^1
 
   # We only need basic ESP-IDF, not cloud/provisioning services
