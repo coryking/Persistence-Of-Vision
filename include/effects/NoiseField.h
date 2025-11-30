@@ -21,5 +21,5 @@ public:
     static constexpr float DRIFT_PERIOD_US = SECONDS_TO_MICROS(DRIFT_PERIOD_SECONDS);
     static constexpr float RADIUS_MIN = 0.5f;
     static constexpr float RADIUS_MAX = 2.0f;
-
+};
 #endif // NOISE_FIELD_H

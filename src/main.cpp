@@ -24,10 +24,10 @@
 // Hardware Configuration
 #define NUM_LEDS 30
 #define LEDS_PER_ARM 10
-#define HALL_PIN D1
+#define HALL_PIN GPIO_NUM_2  // GPIO2 on Seeed XIAO ESP32S3 (not used in TEST_MODE)
 
 // ===== TEST MODE CONFIGURATION =====
-#define TEST_RPM 2800.0
+#define TEST_RPM 360.0
 #define TEST_VARY_RPM false
 
 // Physical arm layout - maps arm index to physical LED start position
@@ -75,44 +75,55 @@ bool csvHeaderPrinted = false;
 // Global frame counter (shared via RenderContext)
 uint32_t globalFrameCount = 0;
 
-// Test mode: simulated rotation
-// Feed synthetic hall timestamps into revTimer to exercise real timing logic
+// Test mode: ESP-IDF timer-based hall sensor simulation
+// Posts HallEffectEvent to queue, exercising full hallProcessingTask path
 #ifdef TEST_MODE
-timestamp_t lastHallTimestamp = 0;
-interval_t simulatedMicrosecondsPerRev = 0;
+esp_timer_handle_t testHallTimer = nullptr;
+QueueHandle_t testHallQueue = nullptr;
 
-void simulateHallTrigger() {
-    timestamp_t now = esp_timer_get_time();
+// Timer callback - posts hall events to queue (same as real ISR)
+static void IRAM_ATTR testHallTimerCallback(void* arg) {
+    HallEffectEvent event;
+    event.triggerTimestamp = esp_timer_get_time();
 
-    // Generate synthetic RPM
-    double rpm = TEST_RPM;
-    if (TEST_VARY_RPM) {
-        double timeSec = now / 1000000.0;
-        rpm = 700.0 + 1050.0 * (1.0 + sin(timeSec * 0.5));
-    }
+    BaseType_t higherPriorityTaskWoken = pdFALSE;
+    xQueueOverwriteFromISR((QueueHandle_t)arg, &event, &higherPriorityTaskWoken);
 
-    interval_t microsecondsPerRev = static_cast<interval_t>(60000000.0 / rpm);
-
-    // Inject synthetic hall trigger into revTimer at appropriate intervals
-    if (lastHallTimestamp == 0) {
-        // First trigger
-        lastHallTimestamp = now;
-        revTimer.addTimestamp(now);
-    } else if (now - lastHallTimestamp >= microsecondsPerRev) {
-        // Time for next trigger
-        lastHallTimestamp += microsecondsPerRev;
-        revTimer.addTimestamp(lastHallTimestamp);
-        simulatedMicrosecondsPerRev = microsecondsPerRev;
+    if (higherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
     }
 }
-#endif
+
+// Optional: Variable RPM updater timer (if TEST_VARY_RPM enabled)
+#if TEST_VARY_RPM
+esp_timer_handle_t testRpmUpdaterTimer = nullptr;
+
+static void IRAM_ATTR testRpmUpdaterCallback(void* arg) {
+    // Calculate new RPM using sinusoidal function
+    timestamp_t now = esp_timer_get_time();
+    double timeSec = now / 1000000.0;
+    double rpm = 700.0 + 1050.0 * (1.0 + sin(timeSec * 0.5));
+
+    // Calculate new interval
+    uint64_t newIntervalUs = static_cast<uint64_t>(60000000.0 / rpm);
+
+    // Reconfigure main hall timer
+    esp_timer_stop(testHallTimer);
+    esp_timer_start_periodic(testHallTimer, newIntervalUs);
+}
+#endif // TEST_VARY_RPM
+#endif // TEST_MODE
 
 /**
  * FreeRTOS task for processing hall sensor events
  */
 void hallProcessingTask(void* pvParameters) {
     HallEffectEvent event;
-    QueueHandle_t queue = hallDriver.getEventQueue();
+#ifdef TEST_MODE
+    QueueHandle_t queue = testHallQueue;  // Use simulated queue in TEST_MODE
+#else
+    QueueHandle_t queue = hallDriver.getEventQueue();  // Use real hall sensor queue
+#endif
     bool wasRotating = false;  // Track motor state
     static uint16_t revolutionCount = 1;
 
@@ -167,9 +178,73 @@ void setup() {
     }
     Serial.println("Startup blink complete");
 
-    // Setup hall effect sensor
+#ifdef TEST_MODE
+    // TEST_MODE: Setup timer-based hall sensor simulation
+    Serial.println("TEST_MODE: Initializing timer-based hall simulation");
+
+    // Create event queue (size 1, same as HallEffectDriver)
+    testHallQueue = xQueueCreate(1, sizeof(HallEffectEvent));
+    if (testHallQueue == nullptr) {
+        Serial.println("ERROR: Failed to create test hall queue");
+        while (1) { delay(1000); }
+    }
+
+    // Create main hall timer
+    esp_timer_create_args_t hallTimerArgs = {
+        .callback = testHallTimerCallback,
+        .arg = (void*)testHallQueue,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "test_hall_timer"
+    };
+
+    esp_err_t err = esp_timer_create(&hallTimerArgs, &testHallTimer);
+    if (err != ESP_OK) {
+        Serial.printf("ERROR: Failed to create hall timer: %d\n", err);
+        while (1) { delay(1000); }
+    }
+
+    // Calculate interval from TEST_RPM
+    uint64_t intervalUs = static_cast<uint64_t>(60000000.0 / TEST_RPM);
+    Serial.printf("TEST_MODE: Starting hall timer at %.1f RPM (interval: %llu us)\n",
+                  TEST_RPM, intervalUs);
+
+    // Start periodic timer
+    err = esp_timer_start_periodic(testHallTimer, intervalUs);
+    if (err != ESP_OK) {
+        Serial.printf("ERROR: Failed to start hall timer: %d\n", err);
+        while (1) { delay(1000); }
+    }
+
+#if TEST_VARY_RPM
+    // Create RPM updater timer (fires every 100ms to adjust RPM)
+    esp_timer_create_args_t rpmUpdaterArgs = {
+        .callback = testRpmUpdaterCallback,
+        .arg = nullptr,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "test_rpm_updater"
+    };
+
+    err = esp_timer_create(&rpmUpdaterArgs, &testRpmUpdaterTimer);
+    if (err != ESP_OK) {
+        Serial.printf("ERROR: Failed to create RPM updater timer: %d\n", err);
+        while (1) { delay(1000); }
+    }
+
+    // Start updater timer (100ms period)
+    err = esp_timer_start_periodic(testRpmUpdaterTimer, 100000);
+    if (err != ESP_OK) {
+        Serial.printf("ERROR: Failed to start RPM updater timer: %d\n", err);
+        while (1) { delay(1000); }
+    }
+    Serial.println("TEST_MODE: Variable RPM enabled");
+#endif // TEST_VARY_RPM
+
+    Serial.println("TEST_MODE: Hall simulation initialized");
+#else
+    // Setup hall effect sensor (real hardware)
     hallDriver.start();
     Serial.println("Hall effect sensor initialized");
+#endif // TEST_MODE
 
     // Start hall processing task
     BaseType_t taskCreated = xTaskCreate(
@@ -207,15 +282,10 @@ void setup() {
 }
 
 void loop() {
-#ifdef TEST_MODE
-    // Generate synthetic hall triggers at TEST_RPM to exercise revTimer logic
-    simulateHallTrigger();
-#endif
-
     // Get atomic snapshot of timing values
-    // In test mode: simulateHallTrigger() feeds synthetic timestamps
-    // In real mode: hallProcessingTask feeds real ISR timestamps
-    // Rest of code path is identical
+    // In test mode: testHallTimerCallback() posts events to queue → hallProcessingTask
+    // In real mode: sensorTriggered_ISR() posts events to queue → hallProcessingTask
+    // Both paths exercise identical queue/task integration
     timestamp_t now = esp_timer_get_time();
     TimingSnapshot timing = revTimer.getTimingSnapshot();
 

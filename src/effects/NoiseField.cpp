@@ -25,7 +25,7 @@ void NoiseField::render(RenderContext& ctx) {
             int64_t noiseStart = esp_timer_get_time();
 #endif
             // Normalize radial position: 0.0 (hub) to 1.0 (tip)
-            float height = led / 9.0f;
+            float height = fl::map_range<float, float>(led, 0, 9, 0.0f, 1.0f);
 
             // Sample cylindrical noise
             // radius controls zoom (larger = coarser pattern)
