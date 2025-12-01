@@ -190,7 +190,19 @@ void setup() {
     // Verify stub was registered
     uint32_t stub_addr = 0;
     esp_err_t gcov_err = esp_dbg_stub_entry_get(ESP_DBG_STUB_ENTRY_GCOV, &stub_addr);
-    Serial.printf("[GCOV] Stub get returned: err=%d, addr=0x%08x (expected 0x42017618)\n", gcov_err, stub_addr);
+    Serial.printf("[GCOV] Stub get returned: err=%d, addr=0x%08x\n", gcov_err, stub_addr);
+
+    if (gcov_err == 0 && stub_addr != 0) {
+        // NOW re-run global constructors to initialize coverage data structures
+        // This is necessary because Arduino runs global constructors BEFORE esp_dbg_stubs_init(),
+        // causing __gcov_init() to fail. Now that the stub is registered, we re-run the
+        // constructors so each compilation unit's __gcov_init() can properly initialize.
+        Serial.println("[GCOV] Re-running global constructors to initialize coverage data...");
+        do_global_ctors();
+        Serial.println("[GCOV] Global constructors re-run complete. GCOV should now work!");
+    } else {
+        Serial.printf("[GCOV] ERROR: Stub registration failed! Cannot enable coverage.\n");
+    }
 #endif
 
     // Disable WiFi to reduce jitter - WiFi interrupts steal cycles
