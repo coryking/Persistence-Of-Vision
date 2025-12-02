@@ -5,6 +5,8 @@
 #include <algorithm>
 #include "types.h"
 #include "RenderContext.h"
+#include "fl/noise.h"
+#include "fl/map_range.h"
 
 
 
@@ -256,5 +258,42 @@ inline uint8_t armLedToVirtual(uint8_t armIndex, uint8_t ledPos) {
 // If you need similar functionality, use the integer-based
 // angle helpers (isAngleInArcUnits, arcIntensityUnits, etc.)
 // and work with angleUnits directly.
+
+// ============================================================
+// Noise Helpers
+// ============================================================
+
+/**
+ * Single-channel cylindrical noise for palette mapping (16-bit)
+ *
+ * Same cylindrical mapping as noiseCylinderHSV8, but returns a single
+ * uint16_t value (0-65535) for high-precision palette indexing.
+ *
+ * Using 16-bit indexing with ColorFromPalette gives 65,536 gradient steps
+ * instead of 256, resulting in much smoother color transitions.
+ *
+ * @param angle Angle in radians
+ * @param height Normalized height (0.0 = hub, 1.0 = tip)
+ * @param time Time offset for animation
+ * @param radius Noise zoom factor (larger = coarser pattern)
+ * @return Palette index (0-65535)
+ */
+inline uint16_t noiseCylinderPalette16(float angle, float height, uint32_t time, float radius) {
+    // Convert cylindrical to Cartesian
+    float x = cosf(angle);
+    float y = sinf(angle);
+
+    // Map to 16.16 fixed-point noise space [0, 0xFFFF]
+    uint32_t nx = static_cast<uint32_t>((x + 1.0f) * 0.5f * radius * 0xffff);
+    uint32_t ny = static_cast<uint32_t>((y + 1.0f) * 0.5f * radius * 0xffff);
+    uint32_t nz = static_cast<uint32_t>(height * radius * 0xffff);
+
+    // Single noise sample (vs 3 samples for HSV)
+    uint16_t raw = inoise16(nx, ny, nz, time);
+
+    // Rescale from observed noise range to full 0-65535 (same as noiseCylinderHSV16)
+    return fl::map_range_clamped(raw, fl::NOISE16_EXTENT_MIN, fl::NOISE16_EXTENT_MAX,
+                                 uint16_t(0), uint16_t(65535));
+}
 
 #endif // POLAR_HELPERS_H

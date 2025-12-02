@@ -16,6 +16,10 @@ public:
 
     timestamp_t noiseTimeOffsetMs = 0;
     float radius = 1.5f;
+
+    // Palette for color mapping
+    CRGBPalette16 palette = OceanColors_p;
+
     static constexpr float ANIMATION_SPEED = 10.0f;
     static constexpr float DRIFT_PERIOD_SECONDS = 10.0f;
     static constexpr float DRIFT_PERIOD_US = SECONDS_TO_MICROS(DRIFT_PERIOD_SECONDS);

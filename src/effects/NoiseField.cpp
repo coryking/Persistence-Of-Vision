@@ -28,15 +28,17 @@ void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
             uint8_t virtualPos = armLedToVirtual(armIdx, led);
             float height = fl::map_range<float, float>(virtualPos, 0, 29, 0.0f, 1.0f);
 
-            // Sample cylindrical noise
-            // radius controls zoom (larger = coarser pattern)
-            CHSV color = fl::noiseCylinderHSV8(angleRadians, height, noiseTimeOffsetMs, 1.0f);
+            // Get 16-bit palette index from noise (single channel)
+            uint16_t paletteIndex = noiseCylinderPalette16(angleRadians, height, noiseTimeOffsetMs, radius);
+
+            // Map to color via palette with linear blending (16-bit precision)
+            CRGB color = ColorFromPaletteExtended(palette, paletteIndex, 255, LINEARBLEND);
             arm.pixels[led] = color;
 #ifdef ENABLE_TIMING_INSTRUMENTATION
             int64_t noiseEnd = esp_timer_get_time();
             // print rotation number, arm, led, virtual pos, noise time using proper %llu, %d, %u, etc. formatting
-            Serial.printf("NoiseField::render: frame: %lu, arm: %d, led: %d, virtualPos: %u, angle: %.4f, height: %.4f, timeOffset: %u, noise time: %lld us\n",
-                          ctx.frameCount, armIdx, led, virtualPos, angleRadians, height, noiseTimeOffsetMs, noiseEnd - noiseStart);
+            Serial.printf("NoiseField::render: frame: %lu, arm: %d, led: %d, virtualPos: %u, angle: %.4f, height: %.4f, timeOffset: %u, paletteIdx: %u, noise time: %lld us\n",
+                          ctx.frameCount, armIdx, led, virtualPos, angleRadians, height, noiseTimeOffsetMs, paletteIndex, noiseEnd - noiseStart);
 #endif
         }
     }
