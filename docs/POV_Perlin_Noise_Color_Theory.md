@@ -123,19 +123,10 @@ CRGB color = ColorFromPaletteExtended(palette, paletteIndex, 255, LINEARBLEND);
 
 See `include/effects/NoiseField.h` for full palette definitions.
 
-### Dark-Center (recommended)
 - `EmberDark_p` - Black with fiery orange/red pops
 - `AbyssDark_p` - Black with cyan/white pops
 - `VoidDark_p` - Black with purple/magenta pops
 - `FireflyDark_p` - Black with green/yellow pops
-
-### Bright-Center
-- `LavaCenterBias_p` - Orange/yellow primary, dark red & white accents
-- `OceanCenterBias_p` - Cyan primary, deep blue & white accents
-- `AuroraCenterBias_p` - Green primary, purple & white accents
-
-### Diagnostic
-- `DiagnosticCenterBias_p` - RED/GREEN/MAGENTA to visualize distribution
 
 ## Performance
 
