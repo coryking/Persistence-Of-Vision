@@ -47,13 +47,23 @@ void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
 void NoiseField::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) {
   noiseTimeOffsetMs  = (timestamp_t)(timestamp / 10);
 
-#ifdef ENABLE_TIMING_INSTRUMENTATION
-  Serial.printf("NoiseField::onRevolution: revCount: %u, timestamp: %llu us, noiseTimeOffsetMs: %u\n",
-                revolutionCount, timestamp, noiseTimeOffsetMs);
-#endif
+  // Pulsate radius using sine wave over RADIUS_PERIOD_SECONDS
+  // sin16 takes 0-65535 as input (one full cycle), returns -32768 to 32767
+  uint16_t phase = (uint16_t)((timestamp % (uint64_t)RADIUS_PERIOD_US) * 65536ULL / (uint64_t)RADIUS_PERIOD_US);
+  int16_t sinVal = sin16(phase);  // -32768 to 32767
+  float normalized = (sinVal + 32768) / 65536.0f;  // 0.0 to 1.0
+  radius = RADIUS_MIN + normalized * (RADIUS_MAX - RADIUS_MIN);
 
-  // Oscillate radius between RADIUS_MIN and RADIUS_MAX over DRIFT_PERIOD_SECONDS
-  //float phase = 2.0f * M_PI * timestamp / DRIFT_PERIOD_US;
-  //float sinValue = sin(phase);  // -1.0 to 1.0
-  //radius = fl::map_range(sinValue, -1.0f, 1.0f, RADIUS_MIN, RADIUS_MAX);
+  // Switch palette every PALETTE_SWITCH_SECONDS
+  uint32_t seconds = timestamp / 1000000;
+  uint8_t newPaletteIndex = (seconds / PALETTE_SWITCH_SECONDS) % NOISE_PALETTE_COUNT;
+  if (newPaletteIndex != paletteIndex) {
+    paletteIndex = newPaletteIndex;
+    palette = *NOISE_PALETTES[paletteIndex];
+  }
+
+#ifdef ENABLE_TIMING_INSTRUMENTATION
+  Serial.printf("NoiseField::onRevolution: revCount: %u, timestamp: %llu us, paletteIdx: %u\n",
+                revolutionCount, timestamp, paletteIndex);
+#endif
 }
