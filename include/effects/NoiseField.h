@@ -4,82 +4,15 @@
 #include "Effect.h"
 
 // =============================================================================
-// Center-biased palettes for Perlin noise
+// DARK-CENTER PALETTES for Perlin noise
 // =============================================================================
-// Perlin noise clusters around middle values, so:
-//   - Entries 6-9: Primary colors (seen most often)
-//   - Entries 0-2: Low accent (rare)
-//   - Entries 13-15: High accent (rare)
+// Primary color is dark/black (entries 6-9), accent colors POP at edges.
+// Perlin noise clusters around middle values (~65%), so dark center = mostly
+// black with occasional bright flashes. Drive at higher brightness!
 //
 // To add a new palette:
 //   1. Define it here as const CRGBPalette16
 //   2. Add it to NOISE_PALETTES array below
-//   3. That's it! It will automatically be included in the rotation.
-// =============================================================================
-
-// Lava: Orange/yellow center, DARK red and BRIGHT white tips
-const CRGBPalette16 LavaCenterBias_p(
-    CRGB(20, 0, 0),        // 0: Nearly black red (rare)
-    CRGB(40, 0, 0),        // 1: Very dark red (rare)
-    CRGB(80, 5, 0),        // 2: Dark red
-    CRGB(140, 20, 0),      // 3:
-    CRGB(200, 60, 0),      // 4:
-    CRGB(240, 100, 0),     // 5:
-    CRGB(255, 140, 0),     // 6: PRIMARY - orange
-    CRGB(255, 180, 0),     // 7: PRIMARY - orange-yellow
-    CRGB(255, 200, 20),    // 8: PRIMARY - yellow
-    CRGB(255, 180, 40),    // 9: PRIMARY - golden
-    CRGB(255, 200, 80),    // 10:
-    CRGB(255, 220, 140),   // 11:
-    CRGB(255, 240, 200),   // 12:
-    CRGB(255, 250, 240),   // 13: Hot white (rare)
-    CRGB(255, 255, 250),   // 14: Bright white (rare)
-    CRGB(255, 255, 255)    // 15: Pure white (very rare)
-);
-
-// Ocean: Blue/cyan center, DARK deep and BRIGHT white accents
-const CRGBPalette16 OceanCenterBias_p(
-    CRGB(0, 0, 10),        // 0: Nearly black (rare)
-    CRGB(0, 5, 30),        // 1: Very dark blue (rare)
-    CRGB(0, 15, 60),       // 2: Dark blue
-    CRGB(0, 40, 100),      // 3:
-    CRGB(0, 70, 130),      // 4:
-    CRGB(0, 100, 160),     // 5:
-    CRGB(0, 140, 180),     // 6: PRIMARY - ocean blue
-    CRGB(20, 170, 200),    // 7: PRIMARY - cyan
-    CRGB(60, 190, 210),    // 8: PRIMARY - bright cyan
-    CRGB(40, 160, 190),    // 9: PRIMARY - teal
-    CRGB(100, 200, 220),   // 10:
-    CRGB(160, 230, 245),   // 11:
-    CRGB(200, 245, 255),   // 12:
-    CRGB(230, 255, 255),   // 13: Bright cyan (rare)
-    CRGB(250, 255, 255),   // 14: Near white (rare)
-    CRGB(255, 255, 255)    // 15: Pure white (very rare)
-);
-
-// Aurora: Green/cyan center, DARK purple and BRIGHT white tips
-const CRGBPalette16 AuroraCenterBias_p(
-    CRGB(10, 0, 20),       // 0: Nearly black purple (rare)
-    CRGB(25, 0, 50),       // 1: Very dark purple (rare)
-    CRGB(40, 0, 80),       // 2: Dark purple
-    CRGB(30, 40, 100),     // 3:
-    CRGB(0, 80, 100),      // 4:
-    CRGB(0, 120, 80),      // 5:
-    CRGB(0, 160, 60),      // 6: PRIMARY - teal-green
-    CRGB(20, 200, 80),     // 7: PRIMARY - green
-    CRGB(50, 230, 100),    // 8: PRIMARY - bright green
-    CRGB(30, 190, 90),     // 9: PRIMARY - green
-    CRGB(80, 220, 150),    // 10:
-    CRGB(140, 240, 200),   // 11:
-    CRGB(200, 250, 240),   // 12:
-    CRGB(230, 255, 255),   // 13: Bright cyan (rare)
-    CRGB(250, 255, 255),   // 14: Near white (rare)
-    CRGB(255, 255, 255)    // 15: Pure white (very rare)
-);
-
-// =============================================================================
-// DARK-CENTER PALETTES: Primary is dark/black, accents POP
-// Drive at higher brightness - the rare accent colors will really stand out
 // =============================================================================
 
 // Ember: Mostly dark with fiery orange/red pops
@@ -164,41 +97,12 @@ const CRGBPalette16 FireflyDark_p(
 
 // =============================================================================
 
-// Diagnostic: Tests center-bias hypothesis
-// If center-biased: You'll see mostly GREEN with rare RED/MAGENTA flashes
-// If uniform: You'll see roughly equal red, green, and magenta
-const CRGBPalette16 DiagnosticCenterBias_p(
-    CRGB(255, 0, 0),       // 0: RED (should be rare)
-    CRGB(255, 0, 0),       // 1: RED (should be rare)
-    CRGB(255, 0, 0),       // 2: RED (should be rare)
-    CRGB(200, 50, 0),      // 3: transition
-    CRGB(150, 100, 0),     // 4: transition
-    CRGB(100, 150, 0),     // 5: transition
-    CRGB(0, 255, 0),       // 6: GREEN (should dominate)
-    CRGB(0, 255, 0),       // 7: GREEN (should dominate)
-    CRGB(0, 255, 0),       // 8: GREEN (should dominate)
-    CRGB(0, 255, 0),       // 9: GREEN (should dominate)
-    CRGB(50, 150, 100),    // 10: transition
-    CRGB(100, 100, 150),   // 11: transition
-    CRGB(150, 50, 200),    // 12: transition
-    CRGB(255, 0, 255),     // 13: MAGENTA (should be rare)
-    CRGB(255, 0, 255),     // 14: MAGENTA (should be rare)
-    CRGB(255, 0, 255)      // 15: MAGENTA (should be rare)
-);
-
 // Palette collection - add new palettes here!
 const CRGBPalette16* const NOISE_PALETTES[] = {
-    // Dark-center palettes (crank brightness, colors POP)
     &EmberDark_p,
     &AbyssDark_p,
     &VoidDark_p,
     &FireflyDark_p,
-    // Bright-center palettes
-    &LavaCenterBias_p,
-    &OceanCenterBias_p,
-    &AuroraCenterBias_p,
-    // Diagnostic (uncomment to test)
-    // &DiagnosticCenterBias_p,
 };
 const uint8_t NOISE_PALETTE_COUNT = sizeof(NOISE_PALETTES) / sizeof(NOISE_PALETTES[0]);
 
