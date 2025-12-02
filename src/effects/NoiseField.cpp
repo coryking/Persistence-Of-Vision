@@ -14,7 +14,7 @@
  *
  * The cylinder mapping eliminates the 0°/360° seam problem.
  */
-void NoiseField::render(RenderContext& ctx) {
+void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
 
     for (int armIdx = 0; armIdx < 3; armIdx++) {
         auto& arm = ctx.arms[armIdx];
@@ -24,8 +24,9 @@ void NoiseField::render(RenderContext& ctx) {
 #ifdef ENABLE_TIMING_INSTRUMENTATION
             int64_t noiseStart = esp_timer_get_time();
 #endif
-            // Normalize radial position: 0.0 (hub) to 1.0 (tip)
-            float height = fl::map_range<float, float>(led, 0, 9, 0.0f, 1.0f);
+            // Use virtual position to respect radial stagger
+            uint8_t virtualPos = armLedToVirtual(armIdx, led);
+            float height = fl::map_range<float, float>(virtualPos, 0, 29, 0.0f, 1.0f);
 
             // Sample cylindrical noise
             // radius controls zoom (larger = coarser pattern)
@@ -33,16 +34,16 @@ void NoiseField::render(RenderContext& ctx) {
             arm.pixels[led] = color;
 #ifdef ENABLE_TIMING_INSTRUMENTATION
             int64_t noiseEnd = esp_timer_get_time();
-            // print rotation number, arm, led, noise time using proper %llu, %d, %u, etc. formatting
-            Serial.printf("NoiseField::render: frame: %lu, arm: %d, led: %d, angle: %.4f, height: %.4f, timeOffset: %u, noise time: %lld us\n",
-                          ctx.frameCount, armIdx, led, angleRadians, height, noiseTimeOffsetMs, noiseEnd - noiseStart);
+            // print rotation number, arm, led, virtual pos, noise time using proper %llu, %d, %u, etc. formatting
+            Serial.printf("NoiseField::render: frame: %lu, arm: %d, led: %d, virtualPos: %u, angle: %.4f, height: %.4f, timeOffset: %u, noise time: %lld us\n",
+                          ctx.frameCount, armIdx, led, virtualPos, angleRadians, height, noiseTimeOffsetMs, noiseEnd - noiseStart);
 #endif
         }
     }
 }
 
 void NoiseField::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) {
-  noiseTimeOffsetMs  = (timestamp_t)(timestamp / 1000);
+  noiseTimeOffsetMs  = (timestamp_t)(timestamp / 10);
 
 #ifdef ENABLE_TIMING_INSTRUMENTATION
   Serial.printf("NoiseField::onRevolution: revCount: %u, timestamp: %llu us, noiseTimeOffsetMs: %u\n",

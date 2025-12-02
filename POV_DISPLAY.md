@@ -172,6 +172,32 @@ const uint8_t PHYSICAL_TO_VIRTUAL[30] = {
 };
 ```
 
+### Helper Functions (polar_helpers.h)
+
+For converting between arm+LED and virtual positions, use these helpers instead of manual calculation:
+
+**Convert arm + LED to virtual position (0-29):**
+```cpp
+uint8_t virtualPos = armLedToVirtual(armIdx, led);
+// Example: armLedToVirtual(1, 0) = 1  (Arm B, LED 0 → virtual 1)
+// Example: armLedToVirtual(0, 1) = 3  (Arm A, LED 1 → virtual 3)
+```
+
+**Convert virtual position to arm + LED:**
+```cpp
+uint8_t armIdx, ledPos;
+virtualToArmLed(virtualPos, armIdx, ledPos);
+// Example: virtualToArmLed(1, ...) → armIdx=1, ledPos=0
+// Example: virtualToArmLed(3, ...) → armIdx=0, ledPos=1
+```
+
+**Access virtual pixel directly from RenderContext:**
+```cpp
+ctx.virt(virtualPos) = color;  // Sets the LED at virtual position
+```
+
+These helpers implement the A,B,C,A,B,C interleaving pattern and are faster/safer than manual calculation.
+
 ---
 
 ## Per-Arm Reference
