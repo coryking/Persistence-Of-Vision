@@ -22,9 +22,16 @@
 #include "timing_utils.h"
 
 // Hardware Configuration
+
+#define GLOBAL_BRIGHTNESS 100
+
 #define NUM_LEDS 30
 #define LEDS_PER_ARM 10
-#define HALL_PIN GPIO_NUM_2  // GPIO2 on Seeed XIAO ESP32S3 (not used in TEST_MODE)
+
+// Hardware pin assignments
+#define HALL_PIN GPIO_NUM_1     // D1 (yellow wire) on Seeed XIAO ESP32S3 (not used in TEST_MODE)
+#define SPI_CLK_PIN GPIO_NUM_6  // D6 (green wire) - SK9822 Clock
+#define SPI_DATA_PIN GPIO_NUM_5 // D5 (orange wire) - SK9822 Data
 
 // ===== TEST MODE CONFIGURATION =====
 #define TEST_RPM 360.0
@@ -159,8 +166,9 @@ void setup() {
 
     Serial.println("POV Display Initializing...");
 
-    // Initialize LED strip
-    strip.Begin();
+    // Initialize LED strip with custom SPI pins
+    // Begin(sck, miso, mosi, ss)
+    strip.Begin(SPI_CLK_PIN, -1, SPI_DATA_PIN, -1);
     strip.ClearTo(RgbColor(0, 0, 0));
     strip.Show();
     Serial.println("Strip initialized");
@@ -415,7 +423,7 @@ void loop() {
             uint16_t start = ARM_START[a];
             for (int p = 0; p < 10; p++) {
                 CRGB color = renderCtx.arms[a].pixels[p];
-                color.nscale8(32);  // Power budget
+                color.nscale8(GLOBAL_BRIGHTNESS);  // Power budget
                 strip.SetPixelColor(start + p, RgbColor(color.r, color.g, color.b));
             }
         }

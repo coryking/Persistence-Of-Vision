@@ -163,9 +163,10 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 
 - **Board**: Lolin S3 Mini (ESP32-S3)
 - **LED Strip**: SK9822 (APA102-compatible DotStar)
-  - Data Pin: GPIO 7 (via hardware SPI)
-  - Clock Pin: GPIO 9 (via hardware SPI)
+  - Data Pin: D5 / GPIO 5 (orange wire, via hardware SPI)
+  - Clock Pin: D6 / GPIO 6 (green wire, via hardware SPI)
   - Color Order: BGR
+- **Hall Effect Sensor**: D1 / GPIO 1 (yellow wire)
 - **USB Port**: `/dev/cu.usbmodem2101` (macOS)
 
 ## Build Environments

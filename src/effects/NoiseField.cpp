@@ -45,7 +45,7 @@ void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
 }
 
 void NoiseField::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) {
-  noiseTimeOffsetMs  = (timestamp_t)(timestamp / 10);
+  noiseTimeOffsetMs  = (timestamp_t)(timestamp / 50);
 
   // Pulsate radius using sine wave over RADIUS_PERIOD_SECONDS
   // sin16 takes 0-65535 as input (one full cycle), returns -32768 to 32767
