@@ -20,29 +20,20 @@
 #include "effects/PerArmBlobs.h"
 #include "effects/VirtualBlobs.h"
 #include "timing_utils.h"
+#include "hardware_config.h"
 
 // Hardware Configuration
 
 #define GLOBAL_BRIGHTNESS 100
 
-#define NUM_LEDS 30
-#define LEDS_PER_ARM 10
-
-// Hardware pin assignments
-#define HALL_PIN GPIO_NUM_1     // D1 (yellow wire) on Seeed XIAO ESP32S3 (not used in TEST_MODE)
-#define SPI_CLK_PIN GPIO_NUM_6  // D6 (green wire) - SK9822 Clock
-#define SPI_DATA_PIN GPIO_NUM_5 // D5 (orange wire) - SK9822 Data
-
 // ===== TEST MODE CONFIGURATION =====
 #define TEST_RPM 360.0
 #define TEST_VARY_RPM false
 
-// Physical arm layout - maps arm index to physical LED start position
-// Arms: [0]=inner, [1]=middle (hall trigger), [2]=outer
-static const uint16_t ARM_START[3] = {10, 0, 20};  // Physical LED indices
-
-// Phase offsets removed - use constants from types.h instead
-// (INNER_ARM_PHASE = 1200 units = 120°, OUTER_ARM_PHASE = 2400 units = 240°)
+// Phase offsets defined in types.h:
+// OUTER_ARM_PHASE = 2400 units = 240° (arm[0])
+// MIDDLE_ARM_PHASE = 0 units = 0° (arm[1], hall sensor reference)
+// INSIDE_ARM_PHASE = 1200 units = 120° (arm[2])
 
 // POV Display Configuration
 #define WARMUP_REVOLUTIONS 20
@@ -50,13 +41,13 @@ static const uint16_t ARM_START[3] = {10, 0, 20};  // Physical LED indices
 #define ROTATION_TIMEOUT_US 2000000
 
 // ESP32-S3 hardware SPI for SK9822/APA102 (DotStar)
-NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(NUM_LEDS);
+NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(HardwareConfig::TOTAL_LEDS);
 
 // Revolution timing
 RevolutionTimer revTimer(WARMUP_REVOLUTIONS, ROLLING_AVERAGE_SIZE, ROTATION_TIMEOUT_US);
 
 // Hall effect sensor driver
-HallEffectDriver hallDriver(HALL_PIN);
+HallEffectDriver hallDriver(HardwareConfig::HALL_PIN);
 
 // Effect instances
 NoiseField noiseFieldEffect;
@@ -335,16 +326,16 @@ void loop() {
 
     // Integer angle calculation - 3600 units = 360 degrees (0.1° resolution)
     // SAFETY: Only calculate if microsecondsPerRev > 0 to avoid division by zero
-    angle_t angleMiddleUnits, angleInnerUnits, angleOuterUnits;
+    angle_t angleMiddleUnits, angleOuterUnits, angleInsideUnits;
     if (microsecondsPerRev > 0) {
         angleMiddleUnits = static_cast<angle_t>(
             (static_cast<uint32_t>(elapsed) * 3600UL / microsecondsPerRev) % 3600
         );
-        angleInnerUnits = (angleMiddleUnits + INNER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
         angleOuterUnits = (angleMiddleUnits + OUTER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
+        angleInsideUnits = (angleMiddleUnits + INSIDE_ARM_PHASE) % ANGLE_FULL_CIRCLE;
     } else {
         // Not rotating - use safe default angles (all at 0°)
-        angleMiddleUnits = angleInnerUnits = angleOuterUnits = 0;
+        angleMiddleUnits = angleOuterUnits = angleInsideUnits = 0;
     }
 
 #ifdef ENABLE_DETAILED_TIMING
@@ -387,8 +378,8 @@ void loop() {
         // regardless of when loop() happens to sample esp_timer_get_time()
         angle_t slotBoundaryAngle = static_cast<angle_t>(currentSlot * slotSizeUnits);
         angleMiddleUnits = slotBoundaryAngle;
-        angleInnerUnits = (slotBoundaryAngle + INNER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
         angleOuterUnits = (slotBoundaryAngle + OUTER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
+        angleInsideUnits = (slotBoundaryAngle + INSIDE_ARM_PHASE) % ANGLE_FULL_CIRCLE;
 
         // Start render timing measurement
         revTimer.startRender();
@@ -407,10 +398,10 @@ void loop() {
         renderCtx.microsPerRev = microsecondsPerRev;
         renderCtx.slotSizeUnits = slotSizeUnits;
 
-        // Set arm angles - arms[0]=inner, arms[1]=middle, arms[2]=outer
-        renderCtx.arms[0].angleUnits = angleInnerUnits;
+        // Set arm angles - arms[0]=outer, arms[1]=middle(hall), arms[2]=inside
+        renderCtx.arms[0].angleUnits = angleOuterUnits;
         renderCtx.arms[1].angleUnits = angleMiddleUnits;
-        renderCtx.arms[2].angleUnits = angleOuterUnits;
+        renderCtx.arms[2].angleUnits = angleInsideUnits;
 
         // Render current effect
         Effect* current = effectRegistry.current();
@@ -420,10 +411,10 @@ void loop() {
 
         // Copy arm buffers to LED strip
         for (int a = 0; a < 3; a++) {
-            uint16_t start = ARM_START[a];
-            for (int p = 0; p < 10; p++) {
+            uint16_t start = HardwareConfig::ARM_START[a];
+            for (int p = 0; p < HardwareConfig::LEDS_PER_ARM; p++) {
                 CRGB color = renderCtx.arms[a].pixels[p];
-                color.nscale8(GLOBAL_BRIGHTNESS);  // Power budget
+                color.nscale8(GLOBAL_BRIGHTNESS);  // Power budget (slip ring provides full power)
                 strip.SetPixelColor(start + p, RgbColor(color.r, color.g, color.b));
             }
         }

@@ -6,10 +6,11 @@
 #include <FastLED.h>
 #include "types.h"
 
-// Arm indices
-#define ARM_INNER  0
+// Arm indices (physical position)
+// arm[0] = outer (furthest from center), arm[1] = middle (hall sensor), arm[2] = inside (closest to center)
+#define ARM_OUTER  0
 #define ARM_MIDDLE 1
-#define ARM_OUTER  2
+#define ARM_INSIDE 2
 
 // Blob pool - up to 5 total blobs across all arms
 #define MAX_BLOBS 5
@@ -32,7 +33,7 @@ struct Blob {
     angle_t maxArcSizeUnits;         // maximum wedge size in angle units
     uint16_t sizePhaseAccum;         // FastLED beat accumulator for size oscillation
 
-    // Radial position (LED index along arm, 0-9 for per-arm, 0-29 for virtual)
+    // Radial position (LED index along arm, 0-10 for per-arm, 0-32 for virtual)
     float currentRadialCenter;    // current LED position (can go out of bounds)
     float radialDriftVelocity;    // rad/sec frequency for radial drift
     float radialWanderCenter;     // radial center point for wandering

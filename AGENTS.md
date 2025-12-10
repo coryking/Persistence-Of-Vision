@@ -103,13 +103,13 @@ POV displays work by persistence of vision - LEDs flash at precise angular posit
 4-wire clocked SPI protocol (unlike WS2812B's timing-sensitive 3-wire)
 Can drive up to 20-30MHz on hardware SPI
 Much more forgiving timing for high-speed updates
-Each arm's 10 LEDs can theoretically update in ~5μs at maximum SPI speed
+Each arm's 11 LEDs can theoretically update in ~5.5μs at maximum SPI speed
 
 ### Why ESP32-S3?
 
-- Tiny form factor (using Lolin S3 Mini or Seeed XIAO ESP32S3)
-- WiFi for programming/control (device is wirelessly powered)
-- Tight power budget - just enough for 30 LEDs
+- Tiny form factor (using Seeed XIAO ESP32S3)
+- WiFi for programming/control
+- Slip ring power delivery enables full brightness on all LEDs
 - Hardware SPI with DMA support
 
 ## Build System: PlatformIO + uv
@@ -161,12 +161,14 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 
 ## Hardware Configuration
 
-- **Board**: Lolin S3 Mini (ESP32-S3)
-- **LED Strip**: SK9822 (APA102-compatible DotStar)
-  - Data Pin: D5 / GPIO 5 (orange wire, via hardware SPI)
-  - Clock Pin: D6 / GPIO 6 (green wire, via hardware SPI)
-  - Color Order: BGR
-- **Hall Effect Sensor**: D1 / GPIO 1 (yellow wire)
+**See `include/hardware_config.h` for current hardware configuration.**
+
+**Summary:**
+- **Board**: Seeed XIAO ESP32S3
+- **LEDs**: 33 total SK9822 (APA102-compatible DotStar), 11 per arm, 3 arms
+- **Pin Assignments**: D7 (data/orange), D9 (clock/green), D10 (hall/yellow)
+- **Color Order**: BGR
+- **Power**: Slip ring configuration (full brightness capability)
 - **USB Port**: `/dev/cu.usbmodem2101` (macOS)
 
 ## Build Environments

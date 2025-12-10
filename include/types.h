@@ -29,8 +29,19 @@ static constexpr angle_t ANGLE_FULL_CIRCLE = ANGLE_UNITS(360);
 static constexpr angle_t ANGLE_HALF_CIRCLE = ANGLE_UNITS(180);
 static constexpr angle_t ANGLE_QUARTER_CIRCLE = ANGLE_UNITS(90);
 static constexpr angle_t ANGLE_PER_PATTERN = ANGLE_UNITS(18);      // 18 degrees = 1 pattern
-static constexpr angle_t INNER_ARM_PHASE = ANGLE_UNITS(120);       // 120 degrees
-static constexpr angle_t OUTER_ARM_PHASE = ANGLE_UNITS(240);       // 240 degrees
+
+// Phase offsets for each arm (indexed by physical position)
+// arm[0] = outer (+240° from hall), arm[1] = middle (0°, hall), arm[2] = inside (+120° from hall)
+static constexpr angle_t OUTER_ARM_PHASE = ANGLE_UNITS(240);   // 240 degrees - arm[0]
+static constexpr angle_t MIDDLE_ARM_PHASE = ANGLE_UNITS(0);    // 0 degrees (hall sensor reference) - arm[1]
+static constexpr angle_t INSIDE_ARM_PHASE = ANGLE_UNITS(120);  // 120 degrees - arm[2]
+
+// Phase lookup table (indexed by arm position)
+static constexpr angle_t ARM_PHASE[3] = {
+    OUTER_ARM_PHASE,   // arm[0]
+    MIDDLE_ARM_PHASE,  // arm[1]
+    INSIDE_ARM_PHASE   // arm[2]
+}
 
 // Speed constants (microseconds per revolution)
 // Lower value = faster rotation

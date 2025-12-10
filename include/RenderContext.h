@@ -3,6 +3,7 @@
 
 #include <FastLED.h>
 #include "types.h"
+#include "hardware_config.h"
 
 /**
  * Render context passed to every effect
@@ -33,24 +34,24 @@ struct RenderContext {
     // === The Three Arms (physical reality) ===
     struct Arm {
         angle_t angleUnits;       // THIS arm's current angle (3600 = 360 degrees)
-        CRGB pixels[10];          // THIS arm's LEDs: [0]=hub, [9]=tip
-    } arms[3];                    // [0]=inner(+120°), [1]=middle(0°), [2]=outer(+240°)
+        CRGB pixels[HardwareConfig::LEDS_PER_ARM];  // THIS arm's LEDs: [0]=hub, [LEDS_PER_ARM-1]=tip
+    } arms[3];                    // [0]=outer(+240°), [1]=middle(0°/hall), [2]=inside(+120°)
 
     // === Virtual Pixel Access ===
     //
-    // Virtual pixels 0-29 map to physical LEDs in radial order:
-    //   virt 0  = arm0:led0 (innermost)
-    //   virt 1  = arm1:led0
-    //   virt 2  = arm2:led0
+    // Virtual pixels 0-32 map to physical LEDs in radial order:
+    //   virt 0  = arm0:led0 (outermost - arm0 is outer)
+    //   virt 1  = arm1:led0 (middle)
+    //   virt 2  = arm2:led0 (innermost - arm2 is inside)
     //   virt 3  = arm0:led1
     //   ...
-    //   virt 29 = arm2:led9 (outermost)
+    //   virt 32 = arm2:led10 (innermost tip)
     //
-    // Note: These 30 "virtual pixels" are at 3 different angular
+    // Note: These 33 "virtual pixels" are at 3 different angular
     // positions right now! The virtual line only exists when spinning.
 
     /**
-     * Access virtual pixel by position (0-29)
+     * Access virtual pixel by position (0-32)
      */
     CRGB& virt(uint8_t v) {
         return arms[v % 3].pixels[v / 3];
@@ -68,7 +69,7 @@ struct RenderContext {
      * @param color Color to fill
      */
     void fillVirtual(uint8_t start, uint8_t end, CRGB color) {
-        for (uint8_t v = start; v < end && v < 30; v++) {
+        for (uint8_t v = start; v < end && v < 33; v++) {
             virt(v) = color;
         }
     }
@@ -87,7 +88,7 @@ struct RenderContext {
                              uint8_t paletteStart = 0,
                              uint8_t paletteEnd = 255) {
         if (end <= start) return;
-        for (uint8_t v = start; v < end && v < 30; v++) {
+        for (uint8_t v = start; v < end && v < 33; v++) {
             uint8_t palIdx = map(v - start, 0, end - start - 1, paletteStart, paletteEnd);
             virt(v) = ColorFromPalette(palette, palIdx);
         }
@@ -98,7 +99,7 @@ struct RenderContext {
      */
     void clear() {
         for (auto& arm : arms) {
-            fill_solid(arm.pixels, 10, CRGB::Black);
+            fill_solid(arm.pixels, HardwareConfig::LEDS_PER_ARM, CRGB::Black);
         }
     }
 };

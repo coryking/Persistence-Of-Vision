@@ -30,12 +30,12 @@ void PerArmBlobs::render(RenderContext& ctx) {
             continue;  // Arm not in blob's wedge - skip this blob
         }
 
-        // Fill affected radial pixels on this arm (0-9 LED range)
+        // Fill affected radial pixels on this arm (0 to LEDS_PER_ARM-1)
         float radialHalfSize = blob.currentRadialSize / 2.0f;
         float radialStart = blob.currentRadialCenter - radialHalfSize;
         float radialEnd = blob.currentRadialCenter + radialHalfSize;
 
-        for (int p = 0; p < 10; p++) {
+        for (int p = 0; p < HardwareConfig::LEDS_PER_ARM; p++) {
             float pixelPos = static_cast<float>(p);
             if (pixelPos >= radialStart && pixelPos <= radialEnd) {
                 arm.pixels[p] += blob.color;  // Additive blending
@@ -62,9 +62,9 @@ void PerArmBlobs::initializeBlobs() {
         {20, 90, 0.15, 0.1, 120, 3, 7, 0.15, 0.1, 3.0}
     };
 
-    // Distribute blobs: 2 inner, 2 middle, 1 outer
+    // Distribute blobs: 2 inside, 2 middle, 1 outer
     uint8_t armAssignments[MAX_BLOBS] = {
-        ARM_INNER, ARM_INNER,
+        ARM_INSIDE, ARM_INSIDE,
         ARM_MIDDLE, ARM_MIDDLE,
         ARM_OUTER
     };
