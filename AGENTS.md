@@ -166,7 +166,7 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 **Summary:**
 - **Board**: Seeed XIAO ESP32S3
 - **LEDs**: 33 total SK9822 (APA102-compatible DotStar), 11 per arm, 3 arms
-- **Pin Assignments**: D7 (data/orange), D9 (clock/green), D10 (hall/yellow)
+- **Pin Assignments**: D10 (data/blue), D8 (clock/purple), D7 (hall/brown)
 - **Color Order**: BGR
 - **Power**: Slip ring configuration (full brightness capability)
 - **USB Port**: `/dev/cu.usbmodem2101` (macOS)

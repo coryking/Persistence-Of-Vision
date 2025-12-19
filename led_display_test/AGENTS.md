@@ -37,15 +37,9 @@ uv run pio run -t upload && uv run pio device monitor
 
 ## Hardware Configuration
 
-### Pin Assignments (Different from Main POV Project!)
+**See `../include/hardware_config.h` for authoritative pin assignments and wire colors.**
 
-| Wire Color | GPIO | Function | Notes |
-|------------|------|----------|-------|
-| Blue       | D8 (GPIO 8)  | SPI Data (MOSI) | LED data signal |
-| Purple     | D9 (GPIO 9)  | SPI Clock (SCLK) | LED clock signal |
-| Brown      | D10 (GPIO 10) | Hall Sensor | Active LOW (pullup enabled) |
-
-**WARNING:** Main POV project uses D7/D9/D10 (GPIO 6/8/9). This test uses GPIO 8/9/10. Don't confuse them.
+This test firmware uses the same hardware configuration as the main POV display.
 
 ### Hardware Details
 - **LEDs**: 33 × SK9822/APA102 (DotStar), BGR color order
@@ -113,7 +107,6 @@ This test is intentionally simplified - it's NOT representative of the main firm
 
 | Feature | LED Test (This Project) | Main POV Display (Parent Dir) |
 |---------|-------------------------|-------------------------------|
-| Pin Config | GPIO 8/9/10 | GPIO 6/8/9 (D7/D9/D10) |
 | Rendering | Blocking `delay()` loop | High-speed interrupt-driven |
 | Timing | ~100ms cycle time | Sub-millisecond precision |
 | Hall Sensor | Color trigger only | Revolution timing & sync |
@@ -132,9 +125,19 @@ This test is intentionally simplified - it's NOT representative of the main firm
 
 ## Troubleshooting
 
+### Understanding Pin Labels vs GPIO Numbers
+
+The Seeed XIAO ESP32S3 silkscreen labels (D8, D9, D10) don't directly correspond to GPIO numbers:
+- **D8** = GPIO 7 (hardware SCK)
+- **D10** = GPIO 9 (hardware MOSI)
+- **D7** = GPIO 44 (general purpose)
+
+We use the hardware SPI pins (D10 for MOSI, D8 for SCK) which work reliably with NeoPixelBus.
+
 ### No LEDs Lighting
 - LED strip needs external 5V power (common ground with ESP32)
-- Verify pin connections: Blue → D8, Purple → D9
+- Verify pin connections match `../include/hardware_config.h`
+- Double-check you're using the correct D-pin labels (not GPIO numbers directly)
 - Check serial: Should see "NeoPixelBus initialized" message
 
 ### Hall Sensor Not Triggering

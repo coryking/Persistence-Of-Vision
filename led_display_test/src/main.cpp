@@ -9,18 +9,18 @@
  * - Serial output shows hall triggers and color values
  *
  * Pin Configuration:
- * - GPIO 8 (Blue wire):   SPI Data (LED_DATA)
- * - GPIO 9 (Purple wire): SPI Clock (LED_CLOCK)
- * - GPIO 10 (Brown wire): Hall effect sensor (active LOW)
+ * - D10/GPIO 9 (Blue wire):   SPI Data (MOSI)
+ * - D8/GPIO 7 (Purple wire):  SPI Clock (SCK)
+ * - D7/GPIO 44 (Brown wire):  Hall effect sensor (active LOW)
  */
 
 #include <Arduino.h>
 #include <NeoPixelBus.h>
 
 // Pin Definitions
-#define LED_DATA D8      // Blue wire - SPI Data
-#define LED_CLOCK D9     // Purple wire - SPI Clock
-#define HALL_PIN D10     // Brown wire - Hall effect sensor
+#define LED_DATA D10     // Blue wire - SPI Data (MOSI)
+#define LED_CLOCK D8     // Purple wire - SPI Clock (SCK)
+#define HALL_PIN D7      // Brown wire - Hall effect sensor
 
 // LED Configuration
 #define NUM_LEDS 33     // 11 LEDs per arm × 3 arms
