@@ -15,17 +15,24 @@ This document analyzes timing and jitter in POV display rendering systems, compa
 **Measured RPM Range**: 1200-1940 RPM
 **Target Angular Resolution**: 1° per column (360 columns per revolution)
 
+**Measured SPI Performance (NeoPixelBus DotStarSpi40MhzMethod):**
+- 30 LEDs: Show() ~45 μs, DMA transfer ~38 μs
+- 33 LEDs: Show() ~50 μs, DMA transfer ~40 μs
+- 42 LEDs: Show() ~58 μs, DMA transfer ~48 μs
+
 **Timing at High Speed (1940 RPM)**:
 - Revolution period: 30,928 μs (~31 ms)
 - Time per 1° column: 85.9 μs
-- **SPI update time: ~44 μs** (57% of column budget - excellent!)
+- **SPI update time (33 LEDs): ~50 μs** (58% of column budget)
+- **SPI update time (42 LEDs): ~58 μs** (68% of column budget)
 
 **Timing at Low Speed (1200 RPM)**:
 - Revolution period: 50,000 μs (50 ms)
 - Time per 1° column: 138.9 μs
-- **SPI update time: ~44 μs** (32% of column budget - excellent!)
+- **SPI update time (33 LEDs): ~50 μs** (36% of column budget)
+- **SPI update time (42 LEDs): ~58 μs** (42% of column budget)
 
-**Key Insight**: With ~44μs SPI writes, POV_Project has **41-94μs of headroom per column** for angle calculation and effect logic. This is comfortable margin.
+**Key Insight**: Show() call time scales with LED count (~0.9 μs per LED added). DMA happens asynchronously in background (see NEOPIXELBUS_DMA_BEHAVIOR.md).
 
 ---
 
@@ -264,13 +271,17 @@ Arduino loop() runs as a FreeRTOS task at **priority 1** (loopTask).
 - Task wake + queue receive: ~5-10 μs
 - **Total interruption to loop(): ~10-15 μs**
 
-At 1940 RPM with 85.9 μs column budget:
+At 1940 RPM with 85.9 μs column budget (33 LEDs):
 - Hall event processing: ~15 μs (17% of column)
-- SPI write: ~44 μs (51% of column)
+- SPI write: ~50 μs (58% of column)
 - Angle calculation: ~5 μs (6% of column)
-- **Remaining headroom: ~22 μs (26%)**
+- **Remaining headroom: ~16 μs (19%)**
 
-This is comfortable margin for effect rendering logic.
+At 1940 RPM with 85.9 μs column budget (42 LEDs):
+- Hall event processing: ~15 μs (17% of column)
+- SPI write: ~58 μs (68% of column)
+- Angle calculation: ~5 μs (6% of column)
+- **Remaining headroom: ~8 μs (9%)**
 
 ---
 
@@ -300,7 +311,7 @@ FastLED.addLeds<SK9822, LED_DATA, LED_CLOCK, BGR, DATA_RATE_MHZ(40)>(leds, NUM_L
 NeoPixelBusLg<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(NUM_LEDS);
 ```
 
-**Result**: **~44 μs for 30 LEDs** - correct hardware SPI performance
+**Result**: **~45-58 μs (depending on LED count)** - correct hardware SPI performance
 
 ### Architecture Doesn't Matter If LED Library Dominates
 
@@ -310,9 +321,10 @@ At 1940 RPM (85.9 μs column budget):
 - **Already over budget** - POV display impossible
 - Architecture irrelevant - can't fix hardware bottleneck with software
 
-**With NeoPixelBus (44 μs write)**:
-- **51% of column budget** - comfortable
-- Even simple loop() architecture works with proper priorities
+**With NeoPixelBus:**
+- 30 LEDs: 45 μs (52% of column budget) - comfortable
+- 33 LEDs: 50 μs (58% of column budget) - comfortable
+- 42 LEDs: 58 μs (68% of column budget) - tight but workable
 
 **Lesson**: **Optimize the bottleneck first**. POV_Top's sophisticated architecture (queue + task + message buffers + frame management) couldn't overcome a broken LED library.
 
@@ -376,40 +388,53 @@ void loop() {
 
 **NeoPixelBus DotStarSpi40MhzMethod**:
 - Uses hardware SPI peripheral
-- Blocks CPU during transfer
-- **Deterministic timing**: Always ~44 μs for 30 LEDs
+- Show() waits for previous DMA, queues new DMA, returns (see NEOPIXELBUS_DMA_BEHAVIOR.md)
+- **Deterministic timing**: 45 μs (30 LEDs), 50 μs (33 LEDs), 58 μs (42 LEDs)
 
 **SPI Transfer Structure for SK9822/APA102**:
 ```
 Start frame: 4 bytes × 8 bits = 32 bits
-LED data: 30 LEDs × 4 bytes × 8 bits = 960 bits
+LED data: N LEDs × 4 bytes × 8 bits = 32N bits
 End frame: 4 bytes × 8 bits = 32 bits
-Total: 1024 bits @ 40 MHz = 25.6 μs (theoretical)
+Total: 64 + 32N bits @ 40 MHz
 
-Actual: ~44 μs (includes SPI overhead, setup, DMA)
+Theoretical DMA times:
+  30 LEDs: 1024 bits = 25.6 μs
+  33 LEDs: 1120 bits = 28.0 μs
+  42 LEDs: 1408 bits = 35.2 μs
+
+Measured DMA times (background transfer):
+  30 LEDs: ~38 μs
+  33 LEDs: ~40 μs
+  42 LEDs: ~48 μs
 ```
 
 **Blocking Impact**:
-- While strip.Show() executes, CPU is blocked
+- Show() waits for PREVIOUS frame's DMA (~40-48 μs)
+- Show() queues CURRENT frame's DMA (~1 μs)
+- Show() returns, DMA happens in background
 - Hall ISR can still fire (interrupt level)
-- Hall task can't run until Show() completes
+- Hall task can't run until Show() completes its wait
 - Queue holds event until task runs
 
-**Latency Example**:
+**Latency Example (33 LEDs)**:
 ```
 Time 0 μs: strip.Show() starts (loop() priority 1)
-Time 22 μs: Hall ISR fires
+  - Waits for previous DMA to complete
+Time 22 μs: Hall ISR fires (during Show() wait)
   - Captures timestamp: 22 μs
   - Posts to queue
   - Sets higherPriorityTaskWoken = pdTRUE
   - Calls portYIELD_FROM_ISR()
-Time 44 μs: strip.Show() completes
+Time 50 μs: strip.Show() completes
+  - Previous DMA finished, new DMA queued
   - Scheduler runs hallTask (priority 3)
   - Task reads queue: timestamp = 22 μs
-  - Processes with 22 μs latency (25% of column time - acceptable)
+  - Processes with 28 μs latency (acceptable)
+Time 50-90 μs: New frame DMA transfer (background, CPU free)
 ```
 
-**Critical Insight**: Even though hall task has higher priority, it can't preempt strip.Show() because **SPI hardware blocks CPU**. But queue ensures event isn't lost.
+**Critical Insight**: Even though hall task has higher priority, it can't preempt Show() during the wait for previous DMA. But queue ensures event isn't lost.
 
 ---
 
@@ -600,8 +625,8 @@ SemaphoreGive(revTimerMutex);
 ### 1. Current Hybrid Architecture Is Optimal
 
 **Given**:
-- SPI performance: ~44 μs (excellent with NeoPixelBus)
-- Column budget: 85.9-138.9 μs
+- SPI performance: 45-58 μs (depending on LED count)
+- Column budget: 85.9-138.9 μs (depending on RPM)
 - Loop iteration: ~50-70 μs
 - Hall processing: Queue + task (proven pattern)
 
@@ -609,7 +634,7 @@ SemaphoreGive(revTimerMutex);
 
 **Rationale**:
 - Hall events never missed (queue + priority 3 task)
-- Rendering has adequate headroom (41-94 μs per column)
+- Rendering has adequate headroom at low RPM
 - Simpler than pure task-based (easier maintenance)
 - No benefit from complex architecture when bottleneck is optimized
 
@@ -619,7 +644,7 @@ SemaphoreGive(revTimerMutex);
 - POV_Top used it because they had motor control + display + effects
 - POV_Project only needs hall processing + rendering
 - Pure tasks add complexity without benefit
-- **POV_Top still failed due to FastLED bottleneck**
+- **POV_Top still failed due to FastLED bottleneck (100+ μs vs NeoPixelBus 45-58 μs)**
 
 **When to Reconsider**:
 - If adding motor control (PID loop)
@@ -760,8 +785,9 @@ class ExponentialMovingAverage {
    - **Architecture can't fix hardware bottleneck**
 
 3. **NeoPixelBus performance unlocks simple architecture**
-   - ~44 μs SPI write is 51-57% of column budget
-   - Leaves 41-94 μs headroom for angle calculation and effects
+   - 45-58 μs SPI write (varies with LED count)
+   - At 1940 RPM: 52-68% of column budget (33-42 LEDs)
+   - At 1200 RPM: 36-42% of column budget (33-42 LEDs)
    - Even simple loop() works with proper hall task priority
 
 4. **Jitter sources are well-controlled**
@@ -792,8 +818,8 @@ class ExponentialMovingAverage {
 
 ### Final Insight
 
-**The lesson from cross-project analysis**: Optimize the bottleneck first. POV_Top's sophisticated architecture (ISR → Queue → Task → Message Buffer → Rendering Task) couldn't overcome a 100+ μs LED update time. POV_Project's simpler hybrid architecture succeeds because **NeoPixelBus gives ~44 μs SPI performance**.
+**The lesson from cross-project analysis**: Optimize the bottleneck first. POV_Top's sophisticated architecture (ISR → Queue → Task → Message Buffer → Rendering Task) couldn't overcome a 100+ μs LED update time. POV_Project's simpler hybrid architecture succeeds because **NeoPixelBus gives 45-58 μs SPI performance** (depending on LED count).
 
 **Architecture follows performance, not the other way around.**
 
-When your bottleneck is optimized (~44 μs SPI), you can afford simpler architecture. When your bottleneck is broken (100+ μs SPI), no architecture can save you.
+When your bottleneck is optimized (45-58 μs SPI), you can afford simpler architecture. When your bottleneck is broken (100+ μs SPI), no architecture can save you.

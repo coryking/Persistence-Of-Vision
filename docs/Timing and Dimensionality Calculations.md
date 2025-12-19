@@ -217,45 +217,77 @@ arc_PWM[n] = LED_radius[n] × θ_PWM × (π / 180)
 
 ## Data Transfer Timing
 
-### SPI Transfer Time
+### SPI Transfer Time (Measured - NeoPixelBus @ 40MHz)
 
-**Time to update all LEDs (measured):**
+**Measured Show() call times (SK9822/APA102 via DotStarSpi40MhzMethod):**
 
 ```
-T_SPI = 44 µs  (for 30 LEDs)
+30 LEDs: T_SPI = 45 µs (avg), DMA transfer ~38 µs
+33 LEDs: T_SPI = 50 µs (avg), DMA transfer ~40 µs
+42 LEDs: T_SPI = 58 µs (avg), DMA transfer ~48 µs
 ```
 
-**Angular movement during SPI transfer:**
+**Note:** Show() time includes waiting for previous DMA completion + queuing new DMA. Actual DMA transfer happens asynchronously in background (see NEOPIXELBUS_DMA_BEHAVIOR.md).
+
+**Angular movement during Show() call:**
 
 ```
 θ_SPI = (T_SPI / T_rotation) × 360 = (T_SPI × RPM) / 166,667
 ```
 
-### SPI Transfer Angular Movement
+### SPI Transfer Angular Movement (30 LEDs, 45µs)
 
-| RPM  | Angular movement during 44µs transfer (degrees) |
+| RPM  | Angular movement during 45µs transfer (degrees) |
 | ---- | ----------------------------------------------- |
-| 1000 | 0.264                                           |
-| 1600 | 0.422                                           |
-| 2000 | 0.528                                           |
-| 2500 | 0.660                                           |
-| 3000 | 0.792                                           |
+| 700  | 0.189                                           |
+| 1000 | 0.270                                           |
+| 1600 | 0.432                                           |
+| 2000 | 0.540                                           |
+| 2500 | 0.675                                           |
+| 2800 | 0.756                                           |
+| 3000 | 0.810                                           |
+
+### SPI Transfer Angular Movement (33 LEDs, 50µs)
+
+| RPM  | Angular movement during 50µs transfer (degrees) |
+| ---- | ----------------------------------------------- |
+| 700  | 0.210                                           |
+| 1000 | 0.300                                           |
+| 1600 | 0.480                                           |
+| 2000 | 0.600                                           |
+| 2500 | 0.750                                           |
+| 2800 | 0.840                                           |
+| 3000 | 0.900                                           |
+
+### SPI Transfer Angular Movement (42 LEDs, 58µs)
+
+| RPM  | Angular movement during 58µs transfer (degrees) |
+| ---- | ----------------------------------------------- |
+| 700  | 0.244                                           |
+| 1000 | 0.348                                           |
+| 1600 | 0.557                                           |
+| 2000 | 0.696                                           |
+| 2500 | 0.870                                           |
+| 2800 | 0.974                                           |
+| 3000 | 1.044                                           |
 
 ### Maximum Update Rate
 
-**Maximum updates per rotation (limited by SPI):**
+**Maximum updates per rotation (limited by Show() call time):**
 
 ```
-N_max_updates = T_rotation / T_SPI = 1,363,636 / RPM
+N_max_updates = T_rotation / T_SPI
 ```
 
-| RPM  | Max updates/rotation | Theoretical best resolution (degrees) |
-| ---- | -------------------- | ------------------------------------- |
-| 1000 | 1364                 | 0.264                                 |
-| 1600 | 852                  | 0.422                                 |
-| 2000 | 682                  | 0.528                                 |
-| 2500 | 545                  | 0.660                                 |
-| 3000 | 455                  | 0.792                                 |
+| RPM  | 30 LEDs (45µs)<br>Updates/rot | 33 LEDs (50µs)<br>Updates/rot | 42 LEDs (58µs)<br>Updates/rot |
+| ---- | ---- | ---- | ---- |
+| 700  | 1905 | 1714 | 1478 |
+| 1000 | 1333 | 1200 | 1034 |
+| 1600 | 833  | 750  | 647  |
+| 2000 | 667  | 600  | 517  |
+| 2500 | 533  | 480  | 414  |
+| 2800 | 476  | 429  | 370  |
+| 3000 | 444  | 400  | 345  |
 
 ---
 
@@ -326,14 +358,34 @@ T_update = T_rotation / N_divisions
 T_compute_available = T_update - T_SPI
 ```
 
+#### 30 LEDs (T_SPI = 45µs)
+
 | RPM  | For 360 divisions    | For 720 divisions         |
 | ---- | -------------------- | ------------------------- |
 |      | T_update / T_compute | T_update / T_compute      |
-| 1600 | 104.17µs / 60.17µs   | 52.08µs / 8.08µs          |
-| 2000 | 83.33µs / 39.33µs    | 41.67µs / **-2.33µs** ❌  |
-| 2500 | 66.67µs / 22.67µs    | 33.33µs / **-10.67µs** ❌ |
+| 1600 | 104.17µs / 59.17µs   | 52.08µs / 7.08µs          |
+| 2000 | 83.33µs / 38.33µs    | 41.67µs / **-3.33µs** ❌  |
+| 2500 | 66.67µs / 21.67µs    | 33.33µs / **-11.67µs** ❌ |
 
-**Note:** At higher RPM, 720 divisions become impossible with current 44µs SPI transfer time.
+#### 33 LEDs (T_SPI = 50µs)
+
+| RPM  | For 360 divisions    | For 720 divisions         |
+| ---- | -------------------- | ------------------------- |
+|      | T_update / T_compute | T_update / T_compute      |
+| 1600 | 104.17µs / 54.17µs   | 52.08µs / 2.08µs          |
+| 2000 | 83.33µs / 33.33µs    | 41.67µs / **-8.33µs** ❌  |
+| 2500 | 66.67µs / 16.67µs    | 33.33µs / **-16.67µs** ❌ |
+
+#### 42 LEDs (T_SPI = 58µs)
+
+| RPM  | For 360 divisions    | For 720 divisions         |
+| ---- | -------------------- | ------------------------- |
+|      | T_update / T_compute | T_update / T_compute      |
+| 1600 | 104.17µs / 46.17µs   | 52.08µs / **-5.92µs** ❌  |
+| 2000 | 83.33µs / 25.33µs    | 41.67µs / **-16.33µs** ❌ |
+| 2500 | 66.67µs / 8.67µs     | 33.33µs / **-24.67µs** ❌ |
+
+**Note:** At higher RPM, 720 divisions become impossible with measured SPI transfer times.
 
 ---
 
@@ -520,6 +572,8 @@ To analyze any POV display configuration, calculate in order:
 
 - RPM = 2000
 - PWM frequency = 27 kHz (HD108)
+- LED count = 33
+- T_SPI = 50 µs (measured)
 - Desired resolution = 1° (360 divisions)
 - Global brightness = 16 (50%)
 - LED of interest = LED 9 (98mm radius)
@@ -533,8 +587,8 @@ To analyze any POV display configuration, calculate in order:
 5. arc_1° = 98 × 0.017453 = 1.710 mm
 6. arc_PWM = 98 × 0.444 × (π/180) = 0.759 mm
 7. T_update = 30,000 / 360 = 83.33 µs
-8. T_compute = 83.33 - 44 = 39.33 µs ✓
-9. θ_SPI = 44 × 360 / 30,000 = 0.528° ✓
+8. T_compute = 83.33 - 50 = 33.33 µs ✓
+9. θ_SPI = 50 × 360 / 30,000 = 0.600° ✓
 10. duty_cycle = 16/31 = 51.6%
 11. arc_visible = 0.759 × 0.516 = 0.392 mm
 

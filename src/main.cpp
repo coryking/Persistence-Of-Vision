@@ -159,7 +159,7 @@ void setup() {
 
     // Initialize LED strip with custom SPI pins
     // Begin(sck, miso, mosi, ss)
-    strip.Begin(SPI_CLK_PIN, -1, SPI_DATA_PIN, -1);
+    strip.Begin(HardwareConfig::SPI_CLK_PIN, -1, HardwareConfig::SPI_DATA_PIN, -1);
     strip.ClearTo(RgbColor(0, 0, 0));
     strip.Show();
     Serial.println("Strip initialized");

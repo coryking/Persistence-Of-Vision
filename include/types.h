@@ -41,7 +41,7 @@ static constexpr angle_t ARM_PHASE[3] = {
     OUTER_ARM_PHASE,   // arm[0]
     MIDDLE_ARM_PHASE,  // arm[1]
     INSIDE_ARM_PHASE   // arm[2]
-}
+};
 
 // Speed constants (microseconds per revolution)
 // Lower value = faster rotation

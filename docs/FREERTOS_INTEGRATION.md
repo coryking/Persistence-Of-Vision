@@ -428,9 +428,15 @@ Current configuration uses **40MHz SPI** for SK9822/APA102 LEDs:
 NeoPixelBusLg<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(NUM_LEDS);
 ```
 
-**Update time for 30 LEDs**: ~44 microseconds (measured)
-- Well within 85us minimum window at 1940 RPM
-- Leaves ~40us for rendering calculations
+**Measured Show() times (NeoPixelBus @ 40MHz)**:
+- 30 LEDs: ~45 μs
+- 33 LEDs: ~50 μs
+- 42 LEDs: ~58 μs
+
+At 1940 RPM (85.9 μs per 1° column):
+- 30 LEDs: Leaves ~41 μs for rendering (48% headroom)
+- 33 LEDs: Leaves ~36 μs for rendering (42% headroom)
+- 42 LEDs: Leaves ~28 μs for rendering (33% headroom)
 
 ### Jitter Sources and Mitigation
 
@@ -878,7 +884,7 @@ Current hybrid approach is simpler and likely sufficient.
 - ✅ ISR minimal (timestamp + queue send only)
 - ✅ Queue-based communication (no polling)
 - ✅ High-priority processing task (priority 3)
-- ✅ SPI fast enough (40MHz = 44us for 30 LEDs)
+- ✅ SPI fast enough (40MHz = 45-58us for 30-42 LEDs)
 - ⚠️ Stack monitoring needed (verify 2048 bytes sufficient)
 - ⚠️ Timing instrumentation recommended (measure actual jitter)
 - 🔲 Consider core pinning if adding WiFi/BLE
