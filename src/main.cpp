@@ -19,6 +19,7 @@
 #include "effects/RpmArc.h"
 #include "effects/PerArmBlobs.h"
 #include "effects/VirtualBlobs.h"
+#include "effects/ArmAlignment.h"
 #include "timing_utils.h"
 #include "hardware_config.h"
 
@@ -53,6 +54,7 @@ SolidArms solidArmsEffect;
 RpmArc rpmArcEffect;
 PerArmBlobs perArmBlobsEffect;
 VirtualBlobs virtualBlobsEffect;
+ArmAlignment armAlignmentEffect;
 
 // Effect registry
 EffectRegistry effectRegistry;
@@ -265,6 +267,7 @@ void setup() {
     //effectRegistry.registerEffect(&rpmArcEffect);
     //effectRegistry.registerEffect(&perArmBlobsEffect);
     //effectRegistry.registerEffect(&virtualBlobsEffect);
+    effectRegistry.registerEffect(&armAlignmentEffect);
 
     // Initialize scheduler (loads NVS, advances effect, saves, starts registry)
     effectScheduler.begin(&effectRegistry);

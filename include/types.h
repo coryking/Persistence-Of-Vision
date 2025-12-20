@@ -31,10 +31,12 @@ static constexpr angle_t ANGLE_QUARTER_CIRCLE = ANGLE_UNITS(90);
 static constexpr angle_t ANGLE_PER_PATTERN = ANGLE_UNITS(18);      // 18 degrees = 1 pattern
 
 // Phase offsets for each arm (indexed by physical position)
-// arm[0] = outer (+240° from hall), arm[1] = middle (0°, hall), arm[2] = inside (+120° from hall)
-static constexpr angle_t OUTER_ARM_PHASE = ANGLE_UNITS(240);   // 240 degrees - arm[0]
-static constexpr angle_t MIDDLE_ARM_PHASE = ANGLE_UNITS(0);    // 0 degrees (hall sensor reference) - arm[1]
-static constexpr angle_t INSIDE_ARM_PHASE = ANGLE_UNITS(120);  // 120 degrees - arm[2]
+// Adjusted for new LED segment order (commit 54c8674)
+// These offsets are ADDED to angleMiddleUnits (calculated from hall trigger)
+// arm[0] = outer, arm[1] = middle (implicit 0° base), arm[2] = inside
+static constexpr angle_t OUTER_ARM_PHASE = ANGLE_UNITS(120);   // 120 degrees - arm[0]
+static constexpr angle_t MIDDLE_ARM_PHASE = ANGLE_UNITS(0);    // 0 degrees - arm[1] (not used in calculation)
+static constexpr angle_t INSIDE_ARM_PHASE = ANGLE_UNITS(240);  // 240 degrees - arm[2]
 
 // Phase lookup table (indexed by arm position)
 static constexpr angle_t ARM_PHASE[3] = {
