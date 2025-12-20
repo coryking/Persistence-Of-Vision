@@ -14,20 +14,39 @@ namespace HardwareConfig {
     constexpr uint8_t SPI_DATA_PIN = D10;  // Blue wire - SK9822 Data (MOSI)
     constexpr uint8_t SPI_CLK_PIN = D8;    // Purple wire - SK9822 Clock (SCK)
 
-    // Physical arm layout (indexed by physical position, not LED address)
-    // arm[0] = Outer (furthest from center, +240° from hall sensor)
-    // arm[1] = Middle (between outer and inside, 0° hall sensor reference)
-    // arm[2] = Inside (closest to center, +120° from hall sensor)
+    // Physical arm layout (indexed by logical position)
+    // Logical arm[0] = Outer (furthest from center, +240° from hall sensor)
+    // Logical arm[1] = Middle (between outer and inside, 0° hall sensor reference)
+    // Logical arm[2] = Inside (closest to center, +120° from hall sensor)
+    //
+    // LED wiring:
+    // - arm[0] (outer): REVERSED (LED0 at tip, LED10 at hub)
+    // - arm[1] (middle): Normal (LED0 at hub, LED10 at tip)
+    // - arm[2] (inside): Normal (LED0 at hub, LED10 at tip)
+    //
+    // Physical LED addressing (verified with led_display_test):
+    // - Physical LEDs 0-10   = Middle arm (arm[1]) - Normal ordering
+    // - Physical LEDs 11-21  = Inside arm (arm[2]) - Normal ordering
+    // - Physical LEDs 22-32  = Outer arm (arm[0])  - REVERSED ordering
 
-    constexpr uint16_t OUTER_ARM_START = 0;    // arm[0]: LEDs 0-10
-    constexpr uint16_t MIDDLE_ARM_START = 22;  // arm[1]: LEDs 22-32 (hall sensor)
-    constexpr uint16_t INSIDE_ARM_START = 11;  // arm[2]: LEDs 11-21
+    constexpr uint16_t MIDDLE_ARM_START = 0;                              // arm[1]: First segment (hall sensor reference)
+    constexpr uint16_t INSIDE_ARM_START = MIDDLE_ARM_START + LEDS_PER_ARM; // arm[2]: Second segment
+    constexpr uint16_t OUTER_ARM_START = INSIDE_ARM_START + LEDS_PER_ARM;  // arm[0]: Third segment (REVERSED)
 
     // Physical LED start positions indexed by arm (lookup table)
     constexpr uint16_t ARM_START[3] = {
         OUTER_ARM_START,   // arm[0]
         MIDDLE_ARM_START,  // arm[1]
         INSIDE_ARM_START   // arm[2]
+    };
+
+    // LED ordering (normal vs reversed wiring)
+    // false = LED0 at hub, LED10 at tip (normal)
+    // true = LED0 at tip, LED10 at hub (reversed)
+    constexpr bool ARM_LED_REVERSED[3] = {
+        true,   // arm[0] = Outer (REVERSED wiring)
+        false,  // arm[1] = Middle (normal wiring)
+        false   // arm[2] = Inside (normal wiring)
     };
 }
 

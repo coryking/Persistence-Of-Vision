@@ -412,10 +412,15 @@ void loop() {
         // Copy arm buffers to LED strip
         for (int a = 0; a < 3; a++) {
             uint16_t start = HardwareConfig::ARM_START[a];
+            bool reversed = HardwareConfig::ARM_LED_REVERSED[a];
+
             for (int p = 0; p < HardwareConfig::LEDS_PER_ARM; p++) {
+                // Map logical position to physical position
+                int physicalPos = reversed ? (HardwareConfig::LEDS_PER_ARM - 1 - p) : p;
+
                 CRGB color = renderCtx.arms[a].pixels[p];
                 color.nscale8(GLOBAL_BRIGHTNESS);  // Power budget (slip ring provides full power)
-                strip.SetPixelColor(start + p, RgbColor(color.r, color.g, color.b));
+                strip.SetPixelColor(start + physicalPos, RgbColor(color.r, color.g, color.b));
             }
         }
 
