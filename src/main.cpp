@@ -262,12 +262,12 @@ void setup() {
     Serial.println("Hall processing task started");
 
     // Register effects
-    //effectRegistry.registerEffect(&noiseFieldEffect);
-    effectRegistry.registerEffect(&solidArmsEffect);
+    effectRegistry.registerEffect(&noiseFieldEffect);
+    //effectRegistry.registerEffect(&solidArmsEffect);
     //effectRegistry.registerEffect(&rpmArcEffect);
     //effectRegistry.registerEffect(&perArmBlobsEffect);
     //effectRegistry.registerEffect(&virtualBlobsEffect);
-    effectRegistry.registerEffect(&armAlignmentEffect);
+    //effectRegistry.registerEffect(&armAlignmentEffect);
 
     // Initialize scheduler (loads NVS, advances effect, saves, starts registry)
     effectScheduler.begin(&effectRegistry);
