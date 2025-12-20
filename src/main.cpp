@@ -24,8 +24,6 @@
 
 // Hardware Configuration
 
-#define GLOBAL_BRIGHTNESS 100
-
 // ===== TEST MODE CONFIGURATION =====
 #define TEST_RPM 360.0
 #define TEST_VARY_RPM false
@@ -419,7 +417,9 @@ void loop() {
                 int physicalPos = reversed ? (HardwareConfig::LEDS_PER_ARM - 1 - p) : p;
 
                 CRGB color = renderCtx.arms[a].pixels[p];
-                color.nscale8(GLOBAL_BRIGHTNESS);  // Power budget (slip ring provides full power)
+                if constexpr (HardwareConfig::GLOBAL_BRIGHTNESS < 255) {
+                    color.nscale8(HardwareConfig::GLOBAL_BRIGHTNESS);
+                }
                 strip.SetPixelColor(start + physicalPos, RgbColor(color.r, color.g, color.b));
             }
         }

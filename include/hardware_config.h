@@ -8,6 +8,11 @@ namespace HardwareConfig {
     constexpr uint16_t LEDS_PER_ARM = 11;
     constexpr uint16_t NUM_ARMS = 3;
     constexpr uint16_t TOTAL_LEDS = 33;
+    constexpr uint8_t GLOBAL_BRIGHTNESS = 255;
+
+    // IMPORTANT: NEVER hardcode loop limits in effects!
+    // ❌ BAD:  for (int p = 0; p < 10; p++)
+    // ✅ GOOD: for (int p = 0; p < HardwareConfig::LEDS_PER_ARM; p++)
 
     // Hardware pin assignments (Seeed XIAO ESP32S3)
     constexpr uint8_t HALL_PIN = D7;       // Brown wire - Hall effect sensor
