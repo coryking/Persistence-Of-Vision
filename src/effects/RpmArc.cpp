@@ -49,7 +49,7 @@ void RpmArc::render(RenderContext& ctx) {
         }
 
         // Fill radial pixels up to RPM-based limit
-        for (int p = 0; p < 10; p++) {
+        for (int p = 0; p < HardwareConfig::LEDS_PER_ARM; p++) {
             uint8_t virtualPos = a + p * 3;
 
             if (virtualPos < pixelCount) {

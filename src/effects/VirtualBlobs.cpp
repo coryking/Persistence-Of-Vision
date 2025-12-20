@@ -35,7 +35,7 @@ void VirtualBlobs::render(RenderContext& ctx) {
             float radialEnd = blob.currentRadialCenter + radialHalfSize;
 
             // Map virtual pixels to this arm's LEDs
-            for (int p = 0; p < 10; p++) {
+            for (int p = 0; p < HardwareConfig::LEDS_PER_ARM; p++) {
                 uint8_t virtualPos = a + p * 3;  // Virtual mapping
                 float vPos = static_cast<float>(virtualPos);
 

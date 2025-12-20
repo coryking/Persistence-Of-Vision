@@ -171,6 +171,13 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 - **Power**: Slip ring configuration (full brightness capability)
 - **USB Port**: `/dev/cu.usbmodem2101` (macOS)
 
+**CRITICAL: When writing effect render loops, NEVER hardcode LED counts!**
+
+```cpp
+// ❌ BAD:  for (int p = 0; p < 10; p++)
+// ✅ GOOD: for (int p = 0; p < HardwareConfig::LEDS_PER_ARM; p++)
+```
+
 ## Build Environments
 
 ### seeed_xiao_esp32s3 (Production)

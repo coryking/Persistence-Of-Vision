@@ -77,7 +77,7 @@ void SolidArms::render(RenderContext& ctx) {
         bool striped = isStripedPattern(pattern);
 
         // Fill arm pixels
-        for (int p = 0; p < 10; p++) {
+        for (int p = 0; p < HardwareConfig::LEDS_PER_ARM; p++) {
             if (striped) {
                 // Striped pattern - only positions 0, 4, 9
                 if (p == 0 || p == 4 || p == 9) {
@@ -100,7 +100,7 @@ void SolidArms::render(RenderContext& ctx) {
         angle_t armAngle = ctx.arms[a].angleUnits;
         if (armAngle < 30 || armAngle > 3570) {
             CRGB color = (armAngle < 30) ? CRGB::White : CRGB::Orange;
-            fill_solid(ctx.arms[a].pixels, 10, color);
+            fill_solid(ctx.arms[a].pixels, HardwareConfig::LEDS_PER_ARM, color);
         }
     }
 }

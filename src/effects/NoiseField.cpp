@@ -20,7 +20,7 @@ void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
         auto& arm = ctx.arms[armIdx];
         float angleRadians = angleUnitsToRadians(arm.angleUnits);
 
-        for (int led = 0; led < 10; led++) {
+        for (int led = 0; led < HardwareConfig::LEDS_PER_ARM; led++) {
 #ifdef ENABLE_TIMING_INSTRUMENTATION
             int64_t noiseStart = esp_timer_get_time();
 #endif

@@ -260,8 +260,8 @@ void setup() {
     Serial.println("Hall processing task started");
 
     // Register effects
-    effectRegistry.registerEffect(&noiseFieldEffect);
-    //effectRegistry.registerEffect(&solidArmsEffect);
+    //effectRegistry.registerEffect(&noiseFieldEffect);
+    effectRegistry.registerEffect(&solidArmsEffect);
     //effectRegistry.registerEffect(&rpmArcEffect);
     //effectRegistry.registerEffect(&perArmBlobsEffect);
     //effectRegistry.registerEffect(&virtualBlobsEffect);
