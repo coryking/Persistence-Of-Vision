@@ -38,6 +38,10 @@ static constexpr size_t NUM_VALID_RESOLUTIONS = sizeof(VALID_RESOLUTIONS) / size
 static constexpr float DEFAULT_RESOLUTION = 3.0f;
 static constexpr float RENDER_TIME_SAFETY_MARGIN = 1.5f;
 
+// Outlier rejection: reject intervals that deviate too much from rolling average
+// 0.5 = 50% deviation allowed (interval must be between 50% and 150% of average)
+static constexpr float MAX_INTERVAL_DEVIATION = 0.5f;
+
 /**
  * RevolutionTimer - High-precision revolution timing for POV displays
  *
@@ -117,6 +121,25 @@ public:
 
         if (hasInterval) {
             interval = timestamp - lastTimestamp;
+
+            // OUTLIER REJECTION: Once warmed up, reject intervals that deviate
+            // too much from the rolling average. This filters noise/bounce.
+            // During warmup, accept everything (speed changes rapidly).
+            if (smoothedInterval > 0 && revolutionCount >= warmupRevolutions) {
+                interval_t lowerBound = static_cast<interval_t>(
+                    smoothedInterval * (1.0f - MAX_INTERVAL_DEVIATION));
+                interval_t upperBound = static_cast<interval_t>(
+                    smoothedInterval * (1.0f + MAX_INTERVAL_DEVIATION));
+
+                if (interval < lowerBound || interval > upperBound) {
+                    // Reject this sample - don't update lastInterval or rolling average
+                    // But DO update lastTimestamp so next interval is calculated correctly
+                    portENTER_CRITICAL(&_spinlock);
+                    lastTimestamp = timestamp;
+                    portEXIT_CRITICAL(&_spinlock);
+                    return;
+                }
+            }
         }
 
         // Update shared state atomically
