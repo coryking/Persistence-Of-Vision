@@ -50,4 +50,20 @@ static constexpr angle_t ARM_PHASE[3] = {
 static constexpr interval_t MICROS_PER_REV_MIN = 21428;   // ~2800 RPM (fastest)
 static constexpr interval_t MICROS_PER_REV_MAX = 85714;   // ~700 RPM (slowest)
 
+/**
+ * Represents a target angular position for precision-timed rendering
+ *
+ * The POV display renders for a FUTURE position, then waits until
+ * the disc reaches that position before firing the LED update.
+ * This ensures the angle told to the renderer matches where LEDs
+ * actually illuminate.
+ */
+struct SlotTarget {
+    int slotNumber;           // Which slot (0 to totalSlots-1)
+    angle_t angleUnits;       // Target angle in units (0-3599)
+    timestamp_t targetTime;   // When disc will be at this angle
+    angle_t slotSize;         // Size of each slot in angle units
+    int totalSlots;           // Total number of slots per revolution
+};
+
 #endif // TYPES_H

@@ -22,6 +22,7 @@
 #include "effects/ArmAlignment.h"
 #include "timing_utils.h"
 #include "hardware_config.h"
+#include "SlotTiming.h"
 
 // Hardware Configuration
 
@@ -147,6 +148,9 @@ void hallProcessingTask(void* pvParameters) {
     }
 }
 
+// Track which slot was last rendered (persists across loop iterations)
+static int g_lastRenderedSlot = -1;
+
 void setup() {
     Serial.begin(115200);
     delay(2000);
@@ -262,8 +266,8 @@ void setup() {
     Serial.println("Hall processing task started");
 
     // Register effects
-    effectRegistry.registerEffect(&noiseFieldEffect);
-    //effectRegistry.registerEffect(&solidArmsEffect);
+    //effectRegistry.registerEffect(&noiseFieldEffect);
+    effectRegistry.registerEffect(&solidArmsEffect);
     //effectRegistry.registerEffect(&rpmArcEffect);
     //effectRegistry.registerEffect(&perArmBlobsEffect);
     //effectRegistry.registerEffect(&virtualBlobsEffect);
@@ -282,175 +286,89 @@ void setup() {
 }
 
 void loop() {
-    // Get atomic snapshot of timing values
-    // In test mode: testHallTimerCallback() posts events to queue → hallProcessingTask
-    // In real mode: sensorTriggered_ISR() posts events to queue → hallProcessingTask
-    // Both paths exercise identical queue/task integration
-    timestamp_t now = esp_timer_get_time();
+    // ========== PRECISION TIMING MODEL ==========
+    // We render for a FUTURE angular position, then wait until the disc
+    // reaches that position before firing Show(). This ensures the angle
+    // told to the renderer matches where LEDs actually illuminate.
+
+    // 1. Get atomic snapshot of timing values
     TimingSnapshot timing = revTimer.getTimingSnapshot();
 
-    bool isRotating = timing.isRotating;
-    bool isWarmupComplete = timing.warmupComplete;
-    timestamp_t lastHallTime = timing.lastTimestamp;
+    // 2. Handle not-rotating state
+    if (!timing.isRotating || !timing.warmupComplete) {
+        handleNotRotating(strip);
+        g_lastRenderedSlot = -1;  // Reset on stop so we start fresh
+        return;
+    }
 
-    // Use ACTUAL last interval for angle calculation (not smoothed average)
-    // This prevents drift within a revolution when motor speed varies slightly
-    // The smoothed value is still available for display/resolution calculations
+    // 3. Calculate next slot to render (always advance from last rendered)
+    SlotTarget target = calculateNextSlot(g_lastRenderedSlot, timing);
+
+    // 4. Check if we're behind schedule (past target time)
+    timestamp_t now = esp_timer_get_time();
+    if (now > target.targetTime) {
+        // We're behind - skip this slot and try the next one
+        g_lastRenderedSlot = target.slotNumber;
+        return;
+    }
+
+    // 5. Render for TARGET angle (future position)
+    revTimer.startRender();
+
+#if ENABLE_TIMING_INSTRUMENTATION
+    if (!csvHeaderPrinted) {
+        Serial.println("frame,effect,total_us,slot,angle_units,usec_per_rev,resolution_units,rev_count,angular_res,last_interval_us");
+        csvHeaderPrinted = true;
+    }
+    int64_t frameStart = timingStart();
+#endif
+
+    // Populate render context with target angle (not current angle!)
     interval_t microsecondsPerRev = timing.lastActualInterval;
+    if (microsecondsPerRev == 0) microsecondsPerRev = timing.microsecondsPerRev;
 
-    // Fall back to smoothed if no actual interval yet (first revolution)
-    if (microsecondsPerRev == 0) {
-        microsecondsPerRev = timing.microsecondsPerRev;
+    renderCtx.frameCount = globalFrameCount++;
+    renderCtx.timeUs = static_cast<uint32_t>(now);
+    renderCtx.microsPerRev = microsecondsPerRev;
+    renderCtx.slotSizeUnits = target.slotSize;
+
+    // Set arm angles from target - arms[0]=outer, arms[1]=middle(hall), arms[2]=inside
+    renderCtx.arms[0].angleUnits = (target.angleUnits + OUTER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
+    renderCtx.arms[1].angleUnits = target.angleUnits;
+    renderCtx.arms[2].angleUnits = (target.angleUnits + INSIDE_ARM_PHASE) % ANGLE_FULL_CIRCLE;
+
+    // Render current effect
+    Effect* current = effectRegistry.current();
+    if (current) {
+        current->render(renderCtx);
     }
 
-    timestamp_t elapsed = now - lastHallTime;
+    // Copy arm buffers to LED strip (NeoPixelBus double-buffers, so this is safe)
+    copyPixelsToStrip(renderCtx, strip);
 
-#ifdef ENABLE_DETAILED_TIMING
-    // Detect race condition: elapsed should never be > ~1.5 revolutions
-    // or suspiciously large (wraparound from negative)
-    static uint32_t raceDetectCount = 0;
-    if (microsecondsPerRev > 0) {
-        // Check for wraparound (elapsed would be huge if now < lastHallTime)
-        if (elapsed > 1000000000ULL) {  // > 1000 seconds = definitely wraparound
-            Serial.printf("RACE_WRAPAROUND: elapsed=%llu lastHall=%llu now=%llu\n",
-                          elapsed, lastHallTime, now);
-            raceDetectCount++;
-        }
-        // Check for elapsed > 1.5 revolutions (might indicate missed hall or race)
-        else if (elapsed > (microsecondsPerRev * 3 / 2)) {
-            Serial.printf("RACE_LARGE_ELAPSED: elapsed=%llu expected<%llu\n",
-                          elapsed, microsecondsPerRev);
-            raceDetectCount++;
-        }
-    }
-#endif
+    revTimer.endRender();
 
-    // Integer angle calculation - 3600 units = 360 degrees (0.1° resolution)
-    // SAFETY: Only calculate if microsecondsPerRev > 0 to avoid division by zero
-    angle_t angleMiddleUnits, angleOuterUnits, angleInsideUnits;
-    if (microsecondsPerRev > 0) {
-        angleMiddleUnits = static_cast<angle_t>(
-            (static_cast<uint32_t>(elapsed) * 3600UL / microsecondsPerRev) % 3600
-        );
-        angleOuterUnits = (angleMiddleUnits + OUTER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
-        angleInsideUnits = (angleMiddleUnits + INSIDE_ARM_PHASE) % ANGLE_FULL_CIRCLE;
-    } else {
-        // Not rotating - use safe default angles (all at 0°)
-        angleMiddleUnits = angleOuterUnits = angleInsideUnits = 0;
-    }
+    // 6. Wait for precise moment (busy-wait)
+    waitForTargetTime(target.targetTime);
 
-#ifdef ENABLE_DETAILED_TIMING
-    // Detect large angle jumps (potential race condition symptom)
-    static angle_t prevAngleMiddleUnits = 0;
-    if (prevAngleMiddleUnits > 0) {
-        int32_t angleDiff = static_cast<int32_t>(angleMiddleUnits) - static_cast<int32_t>(prevAngleMiddleUnits);
-        // Normalize to -1800 to +1800 (±180°)
-        if (angleDiff > 1800) angleDiff -= 3600;
-        if (angleDiff < -1800) angleDiff += 3600;
-        // At 2800 RPM, expect ~8.4 units per frame. Flag jumps > 900 units (90°)
-        if (abs(angleDiff) > 900) {
-            Serial.printf("ANGLE_JUMP: prev=%u curr=%u diff=%d\n",
-                          prevAngleMiddleUnits, angleMiddleUnits, angleDiff);
-        }
-    }
-    prevAngleMiddleUnits = angleMiddleUnits;
-#endif
+    // 7. Fire at exact angular position
+    strip.Show();
 
-    if (isWarmupComplete && isRotating) {
-        // Angle-slot gating: only render when we've moved to a new angular position
-        // Resolution adapts to RPM and render performance, updated once per revolution
-        // All valid resolutions evenly divide 360° for clean 0° alignment
-        angle_t slotSizeUnits = static_cast<angle_t>(timing.angularResolution * 10.0f);
-        if (slotSizeUnits == 0) slotSizeUnits = 30;  // 3 degrees default
-        static int lastSlot = -1;
-
-        int currentSlot = angleMiddleUnits / slotSizeUnits;
-
-        // Check if we've moved to a new slot (handles wraparound at 360°)
-        bool shouldRender = (currentSlot != lastSlot);
-
-        if (!shouldRender) {
-            return;  // Skip this iteration - we're still in the same angular slot
-        }
-        lastSlot = currentSlot;
-
-        // Snap angles to slot boundary for deterministic rendering
-        // This ensures pattern boundaries are crossed at exact, consistent angles
-        // regardless of when loop() happens to sample esp_timer_get_time()
-        angle_t slotBoundaryAngle = static_cast<angle_t>(currentSlot * slotSizeUnits);
-        angleMiddleUnits = slotBoundaryAngle;
-        angleOuterUnits = (slotBoundaryAngle + OUTER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
-        angleInsideUnits = (slotBoundaryAngle + INSIDE_ARM_PHASE) % ANGLE_FULL_CIRCLE;
-
-        // Start render timing measurement
-        revTimer.startRender();
+    // 8. Update state for next iteration
+    g_lastRenderedSlot = target.slotNumber;
 
 #if ENABLE_TIMING_INSTRUMENTATION
-        if (!csvHeaderPrinted) {
-            Serial.println("frame,effect,total_us,slot,angle_units,usec_per_rev,resolution_units,rev_count,elapsed_us,angular_res,last_interval_us");
-            csvHeaderPrinted = true;
-        }
-        int64_t frameStart = timingStart();
+    int64_t totalTime = timingEnd(frameStart);
+    Serial.printf("%u,%u,%lld,%d,%u,%llu,%u,%u,%f,%llu\n",
+                  renderCtx.frameCount,
+                  effectRegistry.getCurrentIndex(),
+                  totalTime,
+                  target.slotNumber,
+                  target.angleUnits,
+                  microsecondsPerRev,
+                  target.slotSize,
+                  revTimer.getRevolutionCount(),
+                  timing.angularResolution,
+                  timing.lastActualInterval);
 #endif
-
-        // Populate render context
-        renderCtx.frameCount = globalFrameCount++;
-        renderCtx.timeUs = static_cast<uint32_t>(now);
-        renderCtx.microsPerRev = microsecondsPerRev;
-        renderCtx.slotSizeUnits = slotSizeUnits;
-
-        // Set arm angles - arms[0]=outer, arms[1]=middle(hall), arms[2]=inside
-        renderCtx.arms[0].angleUnits = angleOuterUnits;
-        renderCtx.arms[1].angleUnits = angleMiddleUnits;
-        renderCtx.arms[2].angleUnits = angleInsideUnits;
-
-        // Render current effect
-        Effect* current = effectRegistry.current();
-        if (current) {
-            current->render(renderCtx);
-        }
-
-        // Copy arm buffers to LED strip
-        for (int a = 0; a < 3; a++) {
-            uint16_t start = HardwareConfig::ARM_START[a];
-            bool reversed = HardwareConfig::ARM_LED_REVERSED[a];
-
-            for (int p = 0; p < HardwareConfig::LEDS_PER_ARM; p++) {
-                // Map logical position to physical position
-                int physicalPos = reversed ? (HardwareConfig::LEDS_PER_ARM - 1 - p) : p;
-
-                CRGB color = renderCtx.arms[a].pixels[p];
-                if constexpr (HardwareConfig::GLOBAL_BRIGHTNESS < 255) {
-                    color.nscale8(HardwareConfig::GLOBAL_BRIGHTNESS);
-                }
-                strip.SetPixelColor(start + physicalPos, RgbColor(color.r, color.g, color.b));
-            }
-        }
-
-        strip.Show();
-
-        // End render timing measurement
-        revTimer.endRender();
-
-#if ENABLE_TIMING_INSTRUMENTATION
-        int64_t totalTime = timingEnd(frameStart);
-        Serial.printf("%u,%u,%lld,%d,%u,%llu,%u,%u,%llu,%f,%llu\n",
-                      renderCtx.frameCount,
-                      effectRegistry.getCurrentIndex(),
-                      totalTime,
-                      currentSlot,
-                      angleMiddleUnits,
-                      microsecondsPerRev,
-                      slotSizeUnits,
-                      revTimer.getRevolutionCount(),
-                      elapsed,
-                      timing.angularResolution,
-                      timing.lastActualInterval);
-#endif
-
-    } else {
-        strip.ClearTo(RgbColor(0, 0, 0));
-        strip.Show();
-        delay(10);
-    }
 }
