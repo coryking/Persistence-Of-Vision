@@ -15,11 +15,14 @@
 #include "EffectRegistry.h"
 #include "EffectScheduler.h"
 #include "effects/NoiseField.h"
+#include "effects/NoiseFieldRGB.h"
 #include "effects/SolidArms.h"
 #include "effects/RpmArc.h"
 #include "effects/PerArmBlobs.h"
 #include "effects/VirtualBlobs.h"
 #include "effects/ArmAlignment.h"
+#include "effects/PulseChaser.h"
+#include "effects/MomentumFlywheel.h"
 #include "timing_utils.h"
 #include "hardware_config.h"
 #include "SlotTiming.h"
@@ -38,7 +41,7 @@
 // POV Display Configuration
 #define WARMUP_REVOLUTIONS 20
 #define ROLLING_AVERAGE_SIZE 20
-#define ROTATION_TIMEOUT_US 2000000
+#define ROTATION_TIMEOUT_US 10000000  // 10 seconds for hand-spin support (6 RPM min)
 
 // ESP32-S3 hardware SPI for SK9822/APA102 (DotStar)
 NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(HardwareConfig::TOTAL_LEDS);
@@ -51,11 +54,14 @@ HallEffectDriver hallDriver(HardwareConfig::HALL_PIN);
 
 // Effect instances
 NoiseField noiseFieldEffect;
+NoiseFieldRGB noiseFieldRGBEffect;
 SolidArms solidArmsEffect;
 RpmArc rpmArcEffect;
 PerArmBlobs perArmBlobsEffect;
 VirtualBlobs virtualBlobsEffect;
 ArmAlignment armAlignmentEffect;
+PulseChaser pulseChaserEffect;
+MomentumFlywheel momentumFlywheelEffect;
 
 // Effect registry
 EffectRegistry effectRegistry;
@@ -267,11 +273,14 @@ void setup() {
 
     // Register effects
     //effectRegistry.registerEffect(&noiseFieldEffect);
+    //effectRegistry.registerEffect(&noiseFieldRGBEffect);
     effectRegistry.registerEffect(&solidArmsEffect);
     //effectRegistry.registerEffect(&rpmArcEffect);
     //effectRegistry.registerEffect(&perArmBlobsEffect);
     //effectRegistry.registerEffect(&virtualBlobsEffect);
     //effectRegistry.registerEffect(&armAlignmentEffect);
+    effectRegistry.registerEffect(&pulseChaserEffect);
+    effectRegistry.registerEffect(&momentumFlywheelEffect);
 
     // Initialize scheduler (loads NVS, advances effect, saves, starts registry)
     effectScheduler.begin(&effectRegistry);
@@ -281,7 +290,7 @@ void setup() {
                   effectRegistry.getCurrentIndex());
 
     Serial.println("\n=== POV Display Ready ===");
-    Serial.println("Effects: NoiseField, SolidArms, RpmArc, PerArmBlobs, VirtualBlobs");
+    Serial.println("Effects: NoiseField, NoiseFieldRGB, SolidArms, RpmArc, PerArmBlobs, VirtualBlobs");
     Serial.println("Waiting for rotation...\n");
 }
 

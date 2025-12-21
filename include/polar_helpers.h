@@ -96,6 +96,7 @@ inline uint8_t arcIntensityUnits(angle_t angle, angle_t center, angle_t width) {
  * Map rotation speed to 0-255 (faster = higher value)
  * Uses microsPerRev which is the raw timing measurement.
  * Lower microsPerRev = faster rotation = higher return value.
+ * Tuned for motor range: 700-2800 RPM
  */
 inline uint8_t speedFactor8(interval_t microsPerRev) {
     if (microsPerRev >= MICROS_PER_REV_MAX) return 0;
@@ -103,6 +104,19 @@ inline uint8_t speedFactor8(interval_t microsPerRev) {
     return static_cast<uint8_t>(
         (MICROS_PER_REV_MAX - microsPerRev) * 255 /
         (MICROS_PER_REV_MAX - MICROS_PER_REV_MIN)
+    );
+}
+
+/**
+ * Map rotation speed to 0-255 for hand-spin range (faster = higher value)
+ * Tuned for hand-spin: 5-60 RPM
+ */
+inline uint8_t speedFactor8HandSpin(interval_t microsPerRev) {
+    if (microsPerRev >= MICROS_PER_REV_HANDSPIN_MAX) return 0;
+    if (microsPerRev <= MICROS_PER_REV_HANDSPIN_MIN) return 255;
+    return static_cast<uint8_t>(
+        (MICROS_PER_REV_HANDSPIN_MAX - microsPerRev) * 255 /
+        (MICROS_PER_REV_HANDSPIN_MAX - MICROS_PER_REV_HANDSPIN_MIN)
     );
 }
 

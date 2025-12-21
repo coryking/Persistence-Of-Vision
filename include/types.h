@@ -50,6 +50,10 @@ static constexpr angle_t ARM_PHASE[3] = {
 static constexpr interval_t MICROS_PER_REV_MIN = 21428;   // ~2800 RPM (fastest)
 static constexpr interval_t MICROS_PER_REV_MAX = 85714;   // ~700 RPM (slowest)
 
+// Hand-spin speed range (extends beyond motor range)
+static constexpr interval_t MICROS_PER_REV_HANDSPIN_MIN = 1000000;   // 60 RPM (fast hand spin)
+static constexpr interval_t MICROS_PER_REV_HANDSPIN_MAX = 12000000;  // 5 RPM (slow hand spin)
+
 /**
  * Represents a target angular position for precision-timed rendering
  *
