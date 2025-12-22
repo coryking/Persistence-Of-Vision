@@ -15,7 +15,7 @@ namespace HardwareConfig {
     // ✅ GOOD: for (int p = 0; p < HardwareConfig::LEDS_PER_ARM; p++)
 
     // Hardware pin assignments (Seeed XIAO ESP32S3)
-    constexpr uint8_t HALL_PIN = D7;       // Brown wire - Hall effect sensor
+    constexpr uint8_t HALL_PIN = D4;       // Brown wire - Hall effect sensor
     constexpr uint8_t SPI_DATA_PIN = D10;  // Blue wire - SK9822 Data (MOSI)
     constexpr uint8_t SPI_CLK_PIN = D8;    // Purple wire - SK9822 Clock (SCK)
 
