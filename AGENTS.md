@@ -4,28 +4,24 @@ This is a unified mega-project for the POV (Persistence of Vision) display syste
 
 ## Project Structure
 
+See **docs/PROJECT_STRUCTURE.md** for the complete, authoritative project layout.
+
+**Quick overview:**
+
 - **led_display/** - Main POV display firmware (ESP32-S3)
   - See led_display/AGENTS.md for LED display-specific guidance
   - Rotating LED arrays, effect system, FreeRTOS-based hall sensor processing
 
-- **motor_controller/** - Motor controller firmware (RP2040)
-  - See motor_controller/AGENTS.md for motor controller-specific guidance
-  - Simple open-loop PWM control, rotary encoder input, RGB LED status
+- **motor_controller/** - Motor controller firmware (ESP32-S3-Zero)
+  - Simple open-loop PWM control, rotary encoder input, RGB LED status, IR receiver
+
+- **shared/** - Shared headers for ESP-NOW communication between controllers
 
 - **test_projects/** - Test and prototype projects
-  - ir_remote_test/ - IR remote button mapping utility
-  - led_display_test/ - Hardware validation for LED strips and hall sensors
-  - led_test/ - Performance benchmarking (FastLED vs NeoPixelBus)
 
-- **docs/** - Unified documentation
-  - led_display/ - LED display-specific docs (timing, effects, architecture)
-  - motor_controller/ - Motor controller docs (calibration, datasheets)
-  - datasheets/ - Shared hardware datasheets
-  - integration/ - Future: IR communication, telemetry protocols
+- **docs/** - Unified documentation (see PROJECT_STRUCTURE.md for details)
 
 - **tools/** - Shared scripts and utilities
-  - calibration/ - Motor calibration scripts
-  - analysis/ - Performance analysis tools
 
 ## Build System
 
@@ -37,7 +33,7 @@ cd led_display
 uv sync
 uv run pio run -e seeed_xiao_esp32s3
 
-# Motor controller (RP2040)
+# Motor controller (ESP32-S3-Zero)
 cd motor_controller
 uv sync
 uv run pio run
@@ -45,12 +41,12 @@ uv run pio run
 
 ## Future Integration
 
-The motor controller and LED display will communicate bidirectionally:
-- IR communication for control
+The motor controller and LED display communicate bidirectionally via ESP-NOW:
+- IR remote control forwarding
 - Telemetry exchange (RPM, status)
-- Playlist synchronization
+- Effect switching
 
-See docs/integration/ for integration planning (TBD).
+See **docs/PROJECT_STRUCTURE.md** for shared message definitions and **docs/ir-control-spec.md** for IR control implementation.
 
 ## Philosophy
 

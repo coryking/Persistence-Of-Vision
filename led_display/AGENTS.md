@@ -50,6 +50,8 @@ What We're Building: A high-speed Persistence of Vision (POV) display using rota
 
 This is an embedded systems project testing SPI performance for driving SK9822/APA102 LED strips on ESP32-S3. The test jig validates whether we can achieve the sub-20μs update timing required for a full POV display spinning at 8000 RPM.
 
+**See docs/PROJECT_STRUCTURE.md for complete project layout and where to find things in the codebase.**
+
 **The POV Display Vision**
 The ultimate goal is a spinning LED display with three arms arranged 120° apart. Each arm has 10 SK9822 LEDs, creating an interlaced 30-row radial display when spinning. A hall effect sensor detects rotation, subdividing each revolution into 360 angular columns (1° resolution) (as an example).
 
