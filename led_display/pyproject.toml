@@ -1,0 +1,21 @@
+[project]
+name = "pov-project"
+version = "0.1.0"
+description = "NeoPixelBus Test Jig for ESP32-S3 - SPI LED strip performance testing"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "platformio>=6.1.16",
+    "esptool>=4.8.0",
+    "pip>=25.0",  # Required by PlatformIO's ESP32 platform
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8.0",  # Modern Python linter/formatter
+]
+
+# This is a firmware project (C++), not a Python package
+# No build-system needed - we're just managing tooling dependencies
+[tool.uv]
+package = false  # This is an application, not a library

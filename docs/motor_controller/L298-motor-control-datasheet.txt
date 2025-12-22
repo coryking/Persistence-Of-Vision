@@ -1,0 +1,2050 @@
+L298
+Datasheet
+
+Dual full-bridge driver
+Features
+
+Multiwatt15 V
+
+Multiwatt15 H
+
+•
+•
+•
+•
+•
+
+Operating supply voltage up to 46 V.
+Total dc current up to 4 A.
+Low saturation voltage.
+Overtemperature protection.
+Logical "0" input voltage up to 1.5 V (high noise immunity).
+
+Applications
+
+PowerSO-20
+
+•
+•
+
+Dual brush DC motors
+Stepper motors
+
+Description
+
+Product summary
+L298
+
+Product label
+
+The L298 is an integrated monolithic circuit in a 15-lead multiwatt and PowerSO-20
+packages. It is a high-voltage, high-current dual full-bridge driver designed to accept
+standard TTL logic levels and drive inductive loads such as relays, solenoids, DC
+and stepping motors.
+Two enable inputs are provided to enable or disable the device independently of the
+input signals. The emitters of the lower transistors of each bridge are connected
+together and the corresponding external terminal can be used for the connection of
+an external sensing resistor. An additional supply input is provided so that the logic
+works at a lower voltage.
+
+DS0218 - Rev 5 - October 2023
+For further information contact your local STMicroelectronics sales office.
+
+www.st.com
+
+L298
+Block diagram
+
+1
+
+Block diagram
+
+Figure 1. Block diagram
+
+DS0218 - Rev 5
+
+page 2/23
+
+L298
+Absolute maximum ratings
+
+2
+
+Absolute maximum ratings
+Absolute maximum ratings are those values beyond which damage to the device may occur. These are stress
+ratings only and functional operation of the device at these conditions is not implied. Operating outside maximum
+recommended conditions for extended periods of time may impact product reliability and result in device failures.
+
+Table 1. Absolute maximum ratings
+Symbol
+
+Parameter
+
+Value
+
+Unit
+
+VS
+
+Power supply
+
+50
+
+V
+
+VSS
+
+Logic supply voltage
+
+7
+
+V
+
+VI, Ven
+
+Input and enable voltage
+
+–0.3 to 7
+
+V
+
+Peak output current (each channel):
+IO
+
+•
+
+Non repetitive (t = 100 ms)
+
+3
+
+A
+
+•
+
+repetitive (80% on –20% off; ton =10 ms)
+
+2.5
+
+A
+
+•
+
+DC operation
+
+2
+
+A
+
+–1 to 2.3
+
+V
+
+25
+
+W
+
+Vsens
+
+Sensing voltage
+
+Ptot
+
+Total power dissipation (tcase = 75 °C)
+
+Top
+
+Junction operating temperature
+
+–25 to 130
+
+°C
+
+Tstg, Tj
+
+Storage and junction temperature
+
+–40 to 150
+
+°C
+
+Table 2. Thermal data
+Symbol
+
+Parameter
+
+Rth j-case
+
+Thermal resistance junction-case
+
+Rth j-amb
+
+Thermal resistance junction-ambient
+
+Power SO20
+
+Multiwatt 15
+
+Unit
+
+Max.
+
+–
+
+3
+
+°C/W
+
+Max.
+
+13 (1)
+
+35
+
+°C/W
+
+1. Mounted on aluminum substrate
+
+DS0218 - Rev 5
+
+page 3/23
+
+L298
+Pin description
+
+3
+
+Pin description
+Figure 2. Pin configuration
+
+Multiwatt15
+
+15
+
+CURRENT S ENS ING B
+
+14
+
+OUTP UT 4
+
+13
+
+OUTP UT 3
+
+12
+
+INP UT 4
+
+11
+
+ENABLE B
+
+10
+
+INP UT 3
+
+9
+
+LOGIC S UP P LY VOLTAGE VS S
+
+8
+
+GND
+
+7
+
+INP UT 2
+
+6
+
+ENABLE A
+
+5
+
+INP UT 1
+
+4
+
+S UP P LY VOLTAGE VS
+
+3
+
+OUTP UT 2
+
+2
+
+OUTP UT 1
+
+1
+
+CURRENT S ENS ING A
+
+TAB CONNECTED TO P IN 8
+
+D95IN240A
+
+GND
+
+1
+
+20
+
+GND
+
+S e ns e A
+
+2
+
+19
+
+S e ns e B
+
+N.C.
+
+3
+
+18
+
+N.C.
+
+Out 1
+
+4
+
+17
+
+Out 4
+
+Out 2
+
+5
+
+16
+
+Out 3
+
+Po we rS O20
+
+VS
+
+6
+
+15
+
+Input 4
+
+Input 1
+
+7
+
+14
+
+Ena ble B
+
+Ena ble A
+
+8
+
+13
+
+Input 3
+
+Input 2
+
+9
+
+12
+
+VS S
+
+GND
+
+10
+
+11
+
+GND
+
+D95IN239
+
+Table 3. Pin function
+MW.15
+
+Power
+SO
+
+Name
+
+Function
+
+1, 15
+
+2, 19
+
+Sense A, Sense B
+
+Between this pin and ground is connected the sense resistor to control the current of the
+load.
+
+2, 3
+
+4, 5
+
+Out 1, Out 2
+
+Outputs of the bridge A; the current that flows through the load connected between these
+two pins is monitored at pin 1.
+
+4
+
+6
+
+VS
+
+5, 7
+
+7, 9
+
+Input 1, Input 2
+
+6, 11
+
+8, 14
+
+Enable A, Enable B
+
+8
+
+1, 10, 11,
+20
+
+GND
+
+Ground.
+
+9
+
+12
+
+VSS
+
+Supply voltage for the logic blocks. A 100nF capacitor must be connected between this
+pin and ground.
+
+10, 12
+
+13, 15
+
+Input 3, Input 4
+
+TTL compatible inputs of the bridge B.
+
+13, 14
+
+16, 17
+
+Out 3, Out 4
+
+Outputs of the bridge B. The current that flows through the load connected between these
+two pins is monitored at pin 15.
+
+–
+
+3, 18
+
+N.C.
+
+DS0218 - Rev 5
+
+Supply voltage for the power output stages.
+Anon-inductive 100nF capacitor must be connected between this pin and ground.
+TTL compatible inputs of the bridge A.
+TTL compatible enable input: the L state disables the bridge A (enable A) and/or the
+bridge B (enable B).
+
+Not connected
+
+page 4/23
+
+L298
+Electrical characteristics
+
+4
+
+Electrical characteristics
+Table 4. Electrical characteristics
+
+(VS = 42 V; VSS = 5 V, Tj = 25 °C; unless otherwise specified)
+Symbol
+
+Parameter
+
+VS
+
+Supply voltage (pin 4)
+
+VSS
+
+Logic supply voltage (pin 9)
+
+IS
+
+Quiescent supply current (pin 4)
+
+Test conditions
+
+Max.
+
+Unit
+
+46
+
+V
+
+5
+
+7
+
+V
+
+Ven = H; Vi = L; IL= 0
+
+13
+
+22
+
+mA
+
+Ven = H; Vi = H; IL= 0
+
+50
+
+70
+
+mA
+
+4
+
+mA
+
+Operative condition
+
+Min.
+
+Typ.
+
+VIH +2.5
+4.5
+
+Ven = L; Vi = X
+
+ISS
+
+Quiescent current from VSS (pin 9)
+
+Ven = H; Vi = L; IL= 0
+
+24
+
+36
+
+mA
+
+Ven = H; Vi = H; IL= 0
+
+7
+
+12
+
+mA
+
+6
+
+m
+
+V en = L; Vi = X
+ViL
+
+Input low voltage (pins 5, 7, 10, 12)
+
+–0.3
+
+1.5
+
+V
+
+ViH
+
+Input high voltage (pins 5, 7, 10, 12)
+
+2.3
+
+VSS
+
+V
+
+IiL
+
+Low voltage input current (pins 5, 7, 10, 12)
+
+Vi = L
+
+–10
+
+μA
+
+IiH
+
+High voltage input current (pins 5, 7, 10, 12)
+
+Vi = H ≤ VSS–0.6V
+
+100
+
+μA
+
+VenL
+
+Enable low voltage (pins 6, 11)
+
+–0.3
+
+1.5
+
+V
+
+VenH
+
+Enable high voltage (pins 6, 11)
+
+2.3
+
+VSS
+
+V
+
+IenL
+
+Low voltage enable current (pins 6, 11)
+
+Ven = L
+
+–10
+
+μA
+
+IenH
+
+High voltage enable current (pins 6, 11)
+
+Ven = H ≤ VSS–0.6V
+
+30
+
+100
+
+μA
+
+1.35
+
+1.7
+
+V
+
+2
+
+2.7
+
+V
+
+1.2
+
+1.6
+
+V
+
+1.7
+
+2.3
+
+V
+
+VCEsat (H)
+
+VCEsat (L)
+
+Source saturation voltage
+
+IL = 1A
+
+0.95
+
+IL = 2A
+I = 1A (1)
+
+Sink saturation voltage
+
+30
+
+0.85
+
+L
+
+IL = 2A (1)
+IL
+
+= 1A (1)
+
+1.80
+
+3.2
+
+VCEsat
+
+Total drop
+
+Vsens
+
+Sensing voltage (pins 1, 15)
+
+T1 (Vi)
+
+Source current turn-off delay
+
+0.5 Vi to 0.9 IL(3); (5)
+
+1.5
+
+μs
+
+T2 (Vi)
+
+Source current fall time
+
+0.9 IL to 0.1 IL(3); (5)
+
+0.2
+
+μs
+
+T3 (Vi)
+
+Source current turn-on delay
+
+0.5 V to 0.1 I (3); (5)
+
+2
+
+μs
+
+T4 (Vi)
+
+Source current rise time
+
+0.1 IL to 0.9 IL(3); (5)
+
+0.7
+
+μs
+
+(4); (5)
+
+0.7
+
+μs
+
+V
+
+IL = 2A (1)
+
+4.9
+–1 (2)
+
+i
+
+L
+
+2
+
+V
+
+T5 (Vi)
+
+Sink current turn-off delay
+
+0.5 Vi to 0.9 IL
+
+T6 (Vi)
+
+Sink current fall time
+
+0.9 IL to 0.1 IL; (4); (5)
+
+0.25
+
+μs
+
+T7 (Vi)
+
+Sink current turn-on delay
+
+0.5 V to 0.9 I ; (4); (5)
+
+1.6
+
+μs
+
+T8 (Vi)
+
+Sink current rise time
+
+0.1 ILto 0.9 IL; (4); (5)
+
+0.2
+
+μs
+
+fC (Vi)
+
+Commutation frequency
+
+IL = 2A
+
+25
+
+T1 (Ven)
+
+Source current turn-off delay
+
+0.5 Ven to 0.9 IL (3); (5)
+
+3
+
+μs
+
+T2 (Ven)
+
+Source current fall time
+
+0.9 IL to 0.1 IL (3); (5)
+
+1
+
+μs
+
+DS0218 - Rev 5
+
+i
+
+L
+
+40
+
+KHz
+
+page 5/23
+
+L298
+Electrical characteristics
+
+Symbol
+
+Parameter
+
+Test conditions
+
+T3 (Ven)
+
+Source current turn-on delay
+
+0.5 Ven to 0.1 IL
+
+T4 (Ven)
+
+Source current rise time
+
+T5 (Ven)
+
+(3); (5)
+
+Min.
+
+Typ.
+
+Max.
+
+Unit
+
+0.3
+
+μs
+
+0.1 IL to 0.9 IL (3); (5)
+
+0.4
+
+μs
+
+Sink current turn-off delay
+
+0.5 Ven to 0.9 IL (4); (5)
+
+2.2
+
+μs
+
+T6 (Ven)
+
+Sink current fall time
+
+0.9 IL to 0.1 IL(4); (5)
+
+0.35
+
+μs
+
+T7 (Ven)
+
+Sink current turn-on delay
+
+0.5 Ven to 0.9 IL (4); (5)
+
+0.25
+
+μs
+
+T8 (Ven)
+
+Sink current rise time
+
+0.1 IL to 0.9 IL(4); (5)
+
+0.1
+
+μs
+
+1. “Sense A” and “Sense B” pins connected to GND.
+2. Sensing voltage can be –1 V for t ≤ 50 μsec; in steady state Vsens min ≥ – 0.5 V.
+3. See Figure 4.
+4. See Figure 6.
+5. The load must be a pure resistor.
+
+Figure 3. Typical saturation voltage vs. output
+
+Figure 4. Switching times test circuits
+
+Note:
+
+For INPUT switching, set EN = H
+For ENABLE switching, set IN = H
+
+Figure 5. Source current delay times vs. input or enable switching
+
+DS0218 - Rev 5
+
+page 6/23
+
+L298
+Electrical characteristics
+
+Figure 6. Switching times test circuits
+
+Note:
+
+For INPUT Switching, set EN = H
+For ENABLE Switching, set IN = L
+
+Figure 7. Sink current delay times vs. input 0 V enable switching
+
+DS0218 - Rev 5
+
+page 7/23
+
+L298
+Electrical characteristics
+
+Figure 8. Bidirectional dc motor control
+
+Table 5. Values of bidirectional dc motor control
+Inputs
+
+Ven = H
+
+Ven = L
+
+Note:
+
+Function
+
+C = H; D = L
+
+Forward
+
+C = L; D = H
+
+Reverse
+
+C=D
+
+Fast motor stop
+
+C = X; D = X
+
+Free running motor stop
+
+L = Low, H = High, X = Do not care
+Figure 9. For higher currents, outputs can be paralleled. Take care to parallel channel 1 with channel 4
+and channel 2 with channel 3
+
+DS0218 - Rev 5
+
+page 8/23
+
+L298
+Application information
+
+5
+
+Application information
+(Refer to the Section 1 Block diagram)
+
+5.1
+
+Power output stage
+The L298 integrates two power output stages (A ; B).
+The power output stage is a bridge configuration and its outputs can drive an inductive load in common or
+differenzial mode, depending on the state of the inputs. The current that flows through the load comes out from
+the bridge at the sense output : an external resistor (RSA ; RSB) allows to detect the intensity of this current.
+
+5.1.1
+
+Input stage
+Each bridge is driven by means of four gates, managed by following inputs:
+•
+•
+
+In1, In2 and EnA
+In3, In4 and EnB
+
+The In inputs set the bridge state when The En input is high; a low state of the En input inhibits the bridge.
+All the inputs are TTL compatible.
+
+5.2
+
+Suggestions
+A non inductive capacitor, usually of 100 nF, is required between both VS and VSS to ground, as near as possible
+to GND pin. When the bulk capacitor of the power supply is too far from the IC, a second smaller one must be
+placed near the L298.
+The sense resistor, low inductance, must be grounded near the negative pole of VS that must be near the GND
+pin of the IC.
+Each input must be connected to the source of the driving signals by means of a very short path.
+Before to Turn-ON the supply voltage and before to Turn it OFF, the enable inputs must be driven to the low state.
+
+5.3
+
+Applications
+Figure 8 shows a bidirectional DC motor control schematic diagram for which only one bridge is needed.
+The external bridge of diodes D1 to D4 is made by four fast recovery elements (trr ≤ 200 ns) that must be chosen
+of a VF as low as possible at the worst case of the load current.
+An external bridge of diodes are required when inductive loads are driven and when the inputs of the IC are
+chopped; Schottky diodes would be preferred.
+The sense output voltage can be used to control the current amplitude by chopping the inputs, or to provide
+overcurrent protection by switching low the enable input.
+The brake function (Fast motor stop) requires that the Absolute Maximum Rating of 2 A must never be exceeded.
+When the repetitive peak current needed from the load is higher than 2 A, a paralleled configuration can be
+chosen (See Figure 9).
+This solution can drive up to 3 A in dc operation and until 3.5 A of a repetitive peak current.
+On Figure 10 it is shown the driving of a two phase bipolar stepper motor; the needed signals to drive the inputs
+of the L298 are generated, in this example, by the IC L297.
+Figure 11 shows an example of P.C.B. designed for the application of Figure 10.
+Figure 12 shows a second two phase bipolar stepper motor control circuit where the current is controlled by the IC
+L6506.
+
+DS0218 - Rev 5
+
+page 9/23
+
+L298
+Applications
+
+Figure 10. Two phase bipolar stepper motor circuit
+
+Note:
+
+RS1 = RS2 = 0.5 Ω.
+
+Figure 11. Suggested printed circuit board layout for the circuit of fig. 10 (1:1 scale)
+
+DS0218 - Rev 5
+
+page 10/23
+
+L298
+Applications
+
+Figure 12. Two phase bipolar stepper motor control circuit by using the current controller L6506.
+
+DS0218 - Rev 5
+
+page 11/23
+
+L298
+Package information
+
+6
+
+Package information
+In order to meet environmental requirements, ST offers these devices in different grades of ECOPACK packages,
+depending on their level of environmental compliance. ECOPACK specifications, grade definitions and product
+status are available at: www.st.com. ECOPACK is an ST trademark.
+
+6.1
+
+Outline and mechanical data
+Figure 13. Multiwatt15L V
+
+Figure 14. Outline - Multiwatt15L V
+
+DS0218 - Rev 5
+
+page 12/23
+
+L298
+Outline and mechanical data
+
+Table 6. Mechanical data Multiwatt15L V
+Dim.
+
+mm
+Min.
+
+Typ.
+
+inch
+Max.
+
+Min.
+
+Typ.
+
+Max.
+
+A
+
+5
+
+0.197
+
+B
+
+2.65
+
+0.104
+
+C
+
+1.6
+
+0.063
+
+D
+
+1
+
+0.039
+
+E
+
+0.49
+
+0.55
+
+0.019
+
+0.022
+
+F
+
+0.66
+
+0.75
+
+0.026
+
+0.030
+
+G
+
+1.02
+
+1.27
+
+1.52
+
+0.040
+
+0.050
+
+0.060
+
+G1
+
+17.53
+
+17.78
+
+18.03
+
+0.690
+
+0.700
+
+0.710
+
+H1
+
+19.6
+
+0.772
+
+H2
+
+20.2
+
+0.795
+
+L
+
+21.9
+
+22.2
+
+22.5
+
+0.862
+
+0.874
+
+0.886
+
+L1
+
+21.7
+
+22.1
+
+22.5
+
+0.854
+
+0.870
+
+0.886
+
+L2
+
+17.65
+
+18.1
+
+0.695
+
+L3
+
+17.25
+
+17.5
+
+17.75
+
+0.679
+
+0.689
+
+0.699
+
+L4
+
+10.3
+
+10.7
+
+10.9
+
+0.406
+
+0.421
+
+0.429
+
+L7
+
+2.65
+
+2.9
+
+0.104
+
+M
+
+4.25
+
+4.55
+
+4.85
+
+0.167
+
+0.179
+
+0.191
+
+M1
+
+4.63
+
+5.08
+
+5.53
+
+0.182
+
+0.200
+
+0.218
+
+S
+
+1.9
+
+2.6
+
+0.075
+
+0.102
+
+S1
+
+1.9
+
+2.6
+
+0.075
+
+0.102
+
+Dia1
+
+3.65
+
+3.85
+
+0.144
+
+0.152
+
+DS0218 - Rev 5
+
+0.713
+
+0.114
+
+page 13/23
+
+L298
+Outline and mechanical data
+
+Figure 15. Multiwatt15 H
+
+Figure 16. Outline - Multiwatt15L H
+
+DS0218 - Rev 5
+
+page 14/23
+
+L298
+Outline and mechanical data
+
+Table 7. Mechanical data Multiwatt15L H
+Dim.
+
+mm
+Min.
+
+Typ.
+
+inch
+Max.
+
+Min.
+
+Typ.
+
+Max.
+
+A
+
+5
+
+0.197
+
+B
+
+2.65
+
+0.104
+
+C
+
+1.6
+
+0.063
+
+E
+
+0.49
+
+0.55
+
+0.019
+
+0.022
+
+F
+
+0.66
+
+0.75
+
+0.026
+
+0.030
+
+G
+
+1.14
+
+1.27
+
+1.4
+
+0.045
+
+0.050
+
+0.055
+
+G1
+
+17.57
+
+17.78
+
+17.91
+
+0.692
+
+0.700
+
+0.705
+
+H1
+
+19.6
+
+0.772
+
+H2
+
+20.2
+
+0.795
+
+L
+
+20.5
+
+0.807
+
+L1
+
+18
+
+0.709
+
+L2
+
+2.5
+
+0.098
+
+L3
+
+17.25
+
+17.5
+
+17.75
+
+0.679
+
+0.689
+
+0.699
+
+L4
+
+10.3
+
+10.7
+
+10.9
+
+0.406
+
+0.421
+
+0.429
+
+L5
+
+5.55
+
+0.208
+
+L7
+
+2.65
+
+2.9
+
+0.104
+
+0.114
+
+S
+
+1.9
+
+2.6
+
+0.075
+
+0.102
+
+S1
+
+1.9
+
+2.6
+
+0.075
+
+0.102
+
+Dia1
+
+3.65
+
+3.85
+
+0.144
+
+0.152
+
+DS0218 - Rev 5
+
+page 15/23
+
+L298
+Outline and mechanical data
+
+Figure 17. PowerSO-20
+
+Figure 18. Outline - PowerSO-20
+N
+
+R
+
+N
+a2
+b
+
+A
+
+e
+
+DETAIL A
+
+c
+a1
+
+DETAIL B
+
+E
+
+e3
+H
+
+DETAIL A
+
+le a d
+
+D
+
+s lug
+
+a3
+DETAIL B
+20
+
+11
+
+0.35
+Ga ge P la ne
+
+-C-
+
+S
+
+S EATING P LANE
+
+L
+
+G
+
+E2
+
+E1
+
+BOTTOM VIEW
+
+C
+
+(COP LANARITY)
+
+T
+E3
+1
+
+h x 45
+
+DS0218 - Rev 5
+
+10
+
+P S O20MEC
+
+D1
+
+page 16/23
+
+L298
+Outline and mechanical data
+
+Table 8. Mechanical data PowerSO-20
+Dim.
+
+mm
+Min.
+
+Typ.
+
+A
+a1
+
+inch
+Max.
+
+Min.
+
+Typ.
+
+3.6
+0.1
+
+0.142
+
+0.3
+
+a2
+
+Max.
+
+0.004
+
+0.012
+
+3.3
+
+0.130
+
+a3
+
+0
+
+0.1
+
+0.000
+
+0.004
+
+b
+
+0.4
+
+0.53
+
+0.016
+
+0.021
+
+c
+
+0.23
+
+0.32
+
+0.009
+
+0.013
+
+D (1)
+
+15.8
+
+16
+
+0.622
+
+0.630
+
+D1
+
+9.4
+
+9.8
+
+0.370
+
+0.386
+
+E
+
+13.9
+
+14.5
+
+0.547
+
+0.570
+
+e
+
+1.27
+
+0.050
+
+e3
+
+11.43
+
+0.450
+
+E1 (1)
+
+10.9
+
+11.1
+
+E2
+
+0.429
+
+0.437
+
+2.9
+
+0.114
+
+E3
+
+5.8
+
+6.2
+
+0.228
+
+0.244
+
+G
+
+0
+
+0.1
+
+0.000
+
+0.004
+
+H
+
+15.5
+
+15.9
+
+0.610
+
+0.626
+
+h
+L
+
+1.1
+0.8
+
+0.043
+
+1.1
+
+0.031
+
+N
+
+10˚ (max.)
+
+S
+
+8˚ (max.)
+
+T
+
+10
+
+0.043
+
+0.394
+
+1. Do not include mold flash or protrusions.
+- Mold flash or protrusions shall not exceed 0.15 mm (0.006").
+- Critical dimensions: "E", "G" and "a3"
+
+DS0218 - Rev 5
+
+page 17/23
+
+L298
+Ordering information
+
+7
+
+Ordering information
+Table 9. Order codes
+
+DS0218 - Rev 5
+
+Order code
+
+Package
+
+Packaging
+
+L298N
+
+Multiwatt15L V
+
+Tube
+
+L298HN
+
+Multiwatt15L H
+
+Tube
+
+L298P
+
+PowerSO-20
+
+Tube
+
+L298P013TR
+
+PowerSO-20
+
+Tape and reel
+
+page 18/23
+
+L298
+
+Revision history
+Table 10. Document revision history
+
+DS0218 - Rev 5
+
+Date
+
+Version
+
+06-Oct-2023
+
+5
+
+Changes
+Changed outline and mechanical data; see package H, Figure 16.
+
+page 19/23
+
+L298
+Contents
+
+Contents
+1
+
+Block diagram . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .2
+
+2
+
+Absolute maximum ratings . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+
+3
+
+Pin description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .4
+
+4
+
+Electrical characteristics. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+
+5
+
+Application information . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+5.1
+
+Power output stage . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+5.1.1
+
+6
+
+5.2
+
+Suggestions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+
+5.3
+
+Applications . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+
+Package information. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .12
+6.1
+
+7
+
+Input stage . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+
+Outline and mechanical data . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 12
+
+Ordering information . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .18
+
+Revision history . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .19
+List of tables . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .21
+List of figures. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .22
+
+DS0218 - Rev 5
+
+page 20/23
+
+L298
+List of tables
+
+List of tables
+Table 1.
+Table 2.
+Table 3.
+Table 4.
+Table 5.
+Table 6.
+Table 7.
+Table 8.
+Table 9.
+Table 10.
+
+Absolute maximum ratings . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+Thermal data. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+Pin function . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+Electrical characteristics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+Values of bidirectional dc motor control . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+Mechanical data Multiwatt15L V. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+Mechanical data Multiwatt15L H . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+Mechanical data PowerSO-20 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17
+Order codes . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+Document revision history . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+
+DS0218 - Rev 5
+
+page 21/23
+
+L298
+List of figures
+
+List of figures
+Figure 1.
+Figure 2.
+Figure 3.
+Figure 4.
+Figure 5.
+Figure 6.
+Figure 7.
+Figure 8.
+Figure 9.
+Figure 10.
+Figure 11.
+Figure 12.
+Figure 13.
+Figure 14.
+Figure 15.
+Figure 16.
+Figure 17.
+Figure 18.
+
+DS0218 - Rev 5
+
+Block diagram . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2
+Pin configuration . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+Typical saturation voltage vs. output . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+Switching times test circuits . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+Source current delay times vs. input or enable switching . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+Switching times test circuits . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+Sink current delay times vs. input 0 V enable switching . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+Bidirectional dc motor control . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+For higher currents, outputs can be paralleled. Take care to parallel channel 1 with channel 4 and channel 2 with
+channel 3. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+Two phase bipolar stepper motor circuit . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+Suggested printed circuit board layout for the circuit of fig. 10 (1:1 scale) . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+Two phase bipolar stepper motor control circuit by using the current controller L6506. . . . . . . . . . . . . . . . . . . 11
+Multiwatt15L V . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 12
+Outline - Multiwatt15L V. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 12
+Multiwatt15 H . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+Outline - Multiwatt15L H. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+PowerSO-20 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+Outline - PowerSO-20 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+
+page 22/23
+
+L298
+
+IMPORTANT NOTICE – READ CAREFULLY
+STMicroelectronics NV and its subsidiaries (“ST”) reserve the right to make changes, corrections, enhancements, modifications, and improvements to ST
+products and/or to this document at any time without notice. Purchasers should obtain the latest relevant information on ST products before placing orders. ST
+products are sold pursuant to ST’s terms and conditions of sale in place at the time of order acknowledgment.
+Purchasers are solely responsible for the choice, selection, and use of ST products and ST assumes no liability for application assistance or the design of
+purchasers’ products.
+No license, express or implied, to any intellectual property right is granted by ST herein.
+Resale of ST products with provisions different from the information set forth herein shall void any warranty granted by ST for such product.
+ST and the ST logo are trademarks of ST. For additional information about ST trademarks, refer to www.st.com/trademarks. All other product or service names
+are the property of their respective owners.
+Information in this document supersedes and replaces information previously supplied in any prior versions of this document.
+© 2023 STMicroelectronics – All rights reserved
+
+DS0218 - Rev 5
+
+page 23/23
+
+

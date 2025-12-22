@@ -1,16 +1,14 @@
 {
-    "terminal.integrated.smoothScrolling": false,
-    // Disable Microsoft C/C++ IntelliSense (use clangd instead)
-    "C_Cpp.intelliSenseEngine": "disabled",
-    "C_Cpp.autocomplete": "disabled",
-    "C_Cpp.errorSquiggles": "disabled",
-    // Configure clangd for PlatformIO
-    "clangd.path": "clangd",
-    "clangd.arguments": [
-        "--background-index",
-        "--clang-tidy",
-        "--completion-style=detailed",
-        "--header-insertion=never",
-        "--log=error"
-    ]
+  "files.associations": {
+    "*.h": "cpp",
+    "*.cpp": "cpp"
+  },
+  "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}/led_display",
+    "--fallback-style=Google"
+  ],
+  "[cpp]": {
+    "editor.defaultFormatter": "llvm.vscode-clangd",
+    "editor.formatOnSave": true
+  }
 }

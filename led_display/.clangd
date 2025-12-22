@@ -1,0 +1,20 @@
+CompileFlags:
+  # Remove GCC-specific flags that clang doesn't understand
+  Remove:
+    - -mlongcalls # GCC flag for Xtensa
+    - -mlong-calls # Variant spelling
+    - -mtext-section-literals # GCC flag for Xtensa
+    - -mdisable-hardware-atomics # ESP32-specific
+    - -fstrict-volatile-bitfields # GCC-specific
+    - -fno-tree-switch-conversion # GCC optimization
+    - -free # Typo or GCC flag
+    - -fipa-pta # GCC optimization
+    - -Wno-frame-address # GCC warning flag
+
+  # Add flags for better clangd experience
+  Add:
+    - -ferror-limit=0 # Show all errors
+    - --target=xtensa # Target architecture hint
+
+# Use compile_commands.json from PlatformIO
+CompilationDatabase: .
