@@ -97,22 +97,67 @@ public:
     virtual ~Effect() = default;
 
     // Called once when effect is activated
-    // Use for one-time initialization, loading palettes, etc.
     virtual void begin() {}
 
-    // Called once when effect is deactivated (switching to another effect)
+    // Called once when effect is deactivated
     virtual void end() {}
 
+    // Speed range this effect works well at (override for non-default)
+    virtual SpeedRange getSpeedRange() const { return {0, 0}; }
+
     // THE MAIN WORK: Called for each render cycle
-    // Write to ctx.arms[].pixels[] or use ctx.virt()
     virtual void render(RenderContext& ctx) = 0;
 
     // Called once per revolution (at hall sensor trigger)
-    // Natural place for per-revolution state updates
-    // rpm: current revolutions per minute
-    virtual void onRevolution(float rpm) {}
+    virtual void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) {}
 };
 ```
+
+### Speed Range System
+
+Effects declare their valid speed range via `getSpeedRange()`. The system automatically shuffles between effects valid for the current speed.
+
+```cpp
+struct SpeedRange {
+    uint16_t minRPM = 0;    // 0 = works at any slow speed
+    uint16_t maxRPM = 0;    // 0 = works at any fast speed
+
+    bool contains(interval_t microsPerRev) const {
+        if (minRPM > 0 && microsPerRev > RPM_TO_MICROS(minRPM)) return false;  // Too slow
+        if (maxRPM > 0 && microsPerRev < RPM_TO_MICROS(maxRPM)) return false;  // Too fast
+        return true;
+    }
+};
+```
+
+**Speed Ranges by Effect:**
+
+| Effect | Min RPM | Max RPM | Notes |
+|--------|---------|---------|-------|
+| MomentumFlywheel | 10 | 200 | Hand-spin energy decay |
+| PulseChaser | 10 | 200 | Hand-spin pulse trails |
+| NoiseFieldRGB | 10 | 200 | Hand-spin noise |
+| SolidArms | 10 | 3000 | Diagnostic, any speed |
+| ArmAlignment | 10 | 3000 | Diagnostic, any speed |
+| RpmArc | 200 | 3000 | Needs motor variation |
+| PerArmBlobs | 200 | 3000 | Motor speed |
+| VirtualBlobs | 200 | 3000 | Motor speed |
+| NoiseField | 200 | 3000 | Motor speed |
+
+**Behavior:**
+- Threshold: 200 RPM (~300,000 µs/rev) separates "slow" from "motor" mode
+- Shuffles every 20 seconds to a random effect valid for current speed
+- When speed crosses threshold, switches to valid effect if current isn't
+
+**RPM Conversion Macro:**
+```cpp
+#define RPM_TO_MICROS(rpm) (60000000ULL / (rpm))
+```
+
+**Adaptive Smoothing:**
+Rolling average window scales linearly with speed:
+- 2800 RPM → 20 samples (stability)
+- 50 RPM → 2 samples (responsiveness)
 
 ---
 

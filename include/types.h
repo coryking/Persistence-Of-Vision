@@ -54,6 +54,17 @@ static constexpr interval_t MICROS_PER_REV_MAX = 85714;   // ~700 RPM (slowest)
 static constexpr interval_t MICROS_PER_REV_HANDSPIN_MIN = 1000000;   // 60 RPM (fast hand spin)
 static constexpr interval_t MICROS_PER_REV_HANDSPIN_MAX = 12000000;  // 5 RPM (slow hand spin)
 
+// RPM to microseconds conversion (compile-time)
+// 60,000,000 µs/min ÷ RPM = µs/rev
+#define RPM_TO_MICROS(rpm) (60000000ULL / (rpm))
+
+// Speed mode threshold - below this is "slow mode" (hand-spin)
+static constexpr interval_t MICROS_PER_REV_SLOW_MODE = RPM_TO_MICROS(200);  // ~300,000 µs
+
+// Rolling average bounds for linear interpolation of window size
+static constexpr interval_t MICROS_PER_REV_MIN_SAMPLES = RPM_TO_MICROS(2800);  // 20 samples (fast)
+static constexpr interval_t MICROS_PER_REV_MAX_SAMPLES = RPM_TO_MICROS(50);    // 2 samples (slow)
+
 /**
  * Represents a target angular position for precision-timed rendering
  *

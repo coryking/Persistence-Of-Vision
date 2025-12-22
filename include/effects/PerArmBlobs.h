@@ -24,6 +24,7 @@ public:
     void begin() override;
     void render(RenderContext& ctx) override;
     void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) override;
+    SpeedRange getSpeedRange() const override { return {200, 3000}; }  // Motor speed only
 
 private:
     Blob blobs[MAX_BLOBS];  // MAX_BLOBS defined in blob_types.h

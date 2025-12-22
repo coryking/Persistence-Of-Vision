@@ -21,6 +21,7 @@ public:
     void begin() override;
     void render(RenderContext& ctx) override;
     void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) override;
+    SpeedRange getSpeedRange() const override { return {10, 200}; }  // Hand-spin only
 
 private:
     // Half-life of energy decay in microseconds (~1 second)

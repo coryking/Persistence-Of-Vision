@@ -2,6 +2,28 @@
 #define EFFECT_H
 
 #include "RenderContext.h"
+#include "types.h"
+
+/**
+ * Speed range for effect validity (in RPM for readability)
+ * Use 0 for "no limit" on either end
+ */
+struct SpeedRange {
+    uint16_t minRPM = 0;    // 0 = works at any slow speed
+    uint16_t maxRPM = 0;    // 0 = works at any fast speed
+
+    /**
+     * Check if a speed (in µs/rev) is within this range
+     * Remember: higher µs/rev = slower rotation
+     */
+    bool contains(interval_t microsPerRev) const {
+        // Too slow: microsPerRev > threshold for minRPM
+        if (minRPM > 0 && microsPerRev > RPM_TO_MICROS(minRPM)) return false;
+        // Too fast: microsPerRev < threshold for maxRPM
+        if (maxRPM > 0 && microsPerRev < RPM_TO_MICROS(maxRPM)) return false;
+        return true;
+    }
+};
 
 /**
  * Base class for all visual effects
@@ -24,6 +46,17 @@ public:
      * Use for cleanup if needed
      */
     virtual void end() {}
+
+    /**
+     * Override to specify valid speed range for this effect
+     * Default: works at any speed (0, 0)
+     *
+     * Examples:
+     *   {10, 200}   - Hand-spin only (10-200 RPM)
+     *   {200, 3000} - Motor speed only
+     *   {10, 3000}  - Works at any speed
+     */
+    virtual SpeedRange getSpeedRange() const { return {0, 0}; }
 
     /**
      * THE MAIN WORK: Called for each render cycle

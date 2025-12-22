@@ -19,6 +19,7 @@
 class SolidArms : public Effect {
 public:
     void render(RenderContext& ctx) override;
+    SpeedRange getSpeedRange() const override { return {10, 3000}; }  // Works at any speed
 
 private:
     CRGB getArmColor(uint8_t pattern, uint8_t armIndex) const;

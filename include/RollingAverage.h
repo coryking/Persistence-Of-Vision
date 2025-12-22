@@ -77,6 +77,26 @@ public:
     }
 
     /**
+     * Get average of the n most recent samples
+     * Useful for adaptive smoothing - fewer samples = faster response
+     *
+     * @param n Number of recent samples to average (clamped to available)
+     * @return Average of the n most recent samples
+     */
+    T averageRecent(size_t n) const {
+        if (sampleCount == 0 || n == 0) return 0;
+        if (n > sampleCount) n = sampleCount;
+
+        T sum = 0;
+        // Start n samples back from current position
+        size_t idx = (sampleIndex + N - n) % N;
+        for (size_t i = 0; i < n; i++) {
+            sum += samples[(idx + i) % N];
+        }
+        return sum / n;
+    }
+
+    /**
      * Reset the rolling average to initial state
      */
     void reset() {

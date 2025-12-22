@@ -129,23 +129,38 @@ void hallProcessingTask(void* pvParameters) {
 #else
     QueueHandle_t queue = hallDriver.getEventQueue();  // Use real hall sensor queue
 #endif
-    bool wasRotating = false;  // Track motor state
+    bool wasRotating = false;   // Track motor state
+    bool wasSlowMode = false;   // Track speed mode state
     static uint16_t revolutionCount = 1;
 
     while (1) {
         if (xQueueReceive(queue, &event, portMAX_DELAY) == pdPASS) {
             revTimer.addTimestamp(event.triggerTimestamp);
 
-            // Detect motor start (stopped → rotating transition)
             bool isRotating = revTimer.isCurrentlyRotating();
+            bool isSlowMode = revTimer.isSlowSpeedMode();
+            interval_t currentSpeed = revTimer.getMicrosecondsPerRevolution();
+
+            // Handle rotation start (reset revolution count)
             if (!wasRotating && isRotating) {
-              revolutionCount = 1;
-                effectScheduler.onMotorStart();  // Advance effect, save to NVS
+                revolutionCount = 1;
             }
+
+            if (isRotating) {
+                // Detect speed mode transitions (crossing 200 RPM threshold)
+                if (wasSlowMode != isSlowMode) {
+                    effectScheduler.onSpeedModeChange(currentSpeed, isSlowMode);
+                }
+
+                // Always update shuffle timer (runs in both modes)
+                effectScheduler.updateShuffle(event.triggerTimestamp, currentSpeed);
+            }
+
             wasRotating = isRotating;
+            wasSlowMode = isSlowMode && isRotating;
 
             // Notify current effect of revolution
-            effectRegistry.onRevolution(revTimer.getMicrosecondsPerRevolution(), event.triggerTimestamp, revolutionCount++);
+            effectRegistry.onRevolution(currentSpeed, event.triggerTimestamp, revolutionCount++);
 
             if (revTimer.isWarmupComplete() && revTimer.getRevolutionCount() == WARMUP_REVOLUTIONS) {
                 Serial.println("Warm-up complete! Display active.");
@@ -272,13 +287,13 @@ void setup() {
     Serial.println("Hall processing task started");
 
     // Register effects
-    //effectRegistry.registerEffect(&noiseFieldEffect);
-    //effectRegistry.registerEffect(&noiseFieldRGBEffect);
+    effectRegistry.registerEffect(&noiseFieldEffect);
+    effectRegistry.registerEffect(&noiseFieldRGBEffect);
     effectRegistry.registerEffect(&solidArmsEffect);
-    //effectRegistry.registerEffect(&rpmArcEffect);
-    //effectRegistry.registerEffect(&perArmBlobsEffect);
-    //effectRegistry.registerEffect(&virtualBlobsEffect);
-    //effectRegistry.registerEffect(&armAlignmentEffect);
+    effectRegistry.registerEffect(&rpmArcEffect);
+    effectRegistry.registerEffect(&perArmBlobsEffect);
+    effectRegistry.registerEffect(&virtualBlobsEffect);
+    effectRegistry.registerEffect(&armAlignmentEffect);
     effectRegistry.registerEffect(&pulseChaserEffect);
     effectRegistry.registerEffect(&momentumFlywheelEffect);
 

@@ -24,6 +24,7 @@ class RpmArc : public Effect {
 public:
     void begin() override;
     void render(RenderContext& ctx) override;
+    SpeedRange getSpeedRange() const override { return {200, 3000}; }  // Motor speed only
 
 private:
     // Configuration

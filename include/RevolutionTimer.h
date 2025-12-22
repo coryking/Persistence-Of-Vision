@@ -19,6 +19,7 @@ struct TimingSnapshot {
     interval_t lastActualInterval;  // Most recent actual revolution time (for angle calc)
     bool isRotating;                // Currently rotating?
     bool warmupComplete;            // Warmup period done?
+    bool isSlowSpeedMode;           // Below 200 RPM threshold?
     float angularResolution;        // Current degrees per render slot
 };
 
@@ -172,9 +173,11 @@ public:
             _currentAngularResolution = DEFAULT_RESOLUTION;
         } else if (needsAdd) {
             rollingAvg.add(static_cast<double>(intervalForAvg));
-            // Update smoothed interval (brief critical section)
+            // Calculate adaptive window size based on current speed
+            uint8_t windowSize = _calculateWindowSize(intervalForAvg);
+            // Update smoothed interval using adaptive window (brief critical section)
             portENTER_CRITICAL(&_spinlock);
-            smoothedInterval = static_cast<interval_t>(rollingAvg.average());
+            smoothedInterval = static_cast<interval_t>(rollingAvg.averageRecent(windowSize));
             portEXIT_CRITICAL(&_spinlock);
 
             // Recalculate angular resolution once per revolution
@@ -186,6 +189,23 @@ public:
     }
 
 private:
+    /**
+     * Calculate rolling average window size based on speed
+     * Linear interpolation: fast = 20 samples, slow = 2 samples
+     *
+     * Faster rotation needs more smoothing (stability).
+     * Slower rotation needs faster response (responsiveness).
+     */
+    uint8_t _calculateWindowSize(interval_t microsPerRev) const {
+        if (microsPerRev <= MICROS_PER_REV_MIN_SAMPLES) return 20;
+        if (microsPerRev >= MICROS_PER_REV_MAX_SAMPLES) return 2;
+
+        // Linear interpolation between 20 and 2 samples
+        uint64_t range = MICROS_PER_REV_MAX_SAMPLES - MICROS_PER_REV_MIN_SAMPLES;
+        uint64_t position = microsPerRev - MICROS_PER_REV_MIN_SAMPLES;
+        return static_cast<uint8_t>(20 - (18 * position / range));
+    }
+
     /**
      * Calculate optimal angular resolution based on RPM and render performance
      *
@@ -261,6 +281,7 @@ public:
         snap.lastActualInterval = lastInterval;  // Use this for angle calculation!
         snap.isRotating = isRotating;
         snap.warmupComplete = (revolutionCount >= warmupRevolutions) && (revolutionCount >= 20);
+        snap.isSlowSpeedMode = isRotating && (smoothedInterval > MICROS_PER_REV_SLOW_MODE);
         snap.angularResolution = _currentAngularResolution;
         portEXIT_CRITICAL(&_spinlock);
         return snap;
@@ -280,6 +301,15 @@ public:
      */
     bool isCurrentlyRotating() const {
         return isRotating;
+    }
+
+    /**
+     * Check if device is in slow speed mode (hand-spin)
+     * @return true if rotating below 200 RPM threshold
+     */
+    bool isSlowSpeedMode() const {
+        if (!isRotating || smoothedInterval == 0) return false;
+        return smoothedInterval > MICROS_PER_REV_SLOW_MODE;
     }
 
     /**
