@@ -13,6 +13,8 @@
 #include "RenderContext.h"
 #include "EffectRegistry.h"
 #include "EffectScheduler.h"
+#include "ESPNowComm.h"
+#include "DisplayState.h"
 #include "effects/NoiseField.h"
 #include "effects/NoiseFieldRGB.h"
 #include "effects/SolidArms.h"
@@ -81,6 +83,7 @@ void hallProcessingTask(void* pvParameters) {
     HallEffectEvent event;
     bool wasRotating = false;  // Track motor state
     static uint16_t revolutionCount = 1;
+    static uint16_t revsSinceTelemetry = 0;  // Track revolutions for telemetry
 
     while (1) {
         if (xQueueReceive(g_hallEventQueue, &event, portMAX_DELAY) == pdPASS) {
@@ -90,6 +93,7 @@ void hallProcessingTask(void* pvParameters) {
             bool isRotating = revTimer.isCurrentlyRotating();
             if (!wasRotating && isRotating) {
               revolutionCount = 1;
+              revsSinceTelemetry = 0;  // Reset telemetry counter on motor start
                 effectScheduler.onMotorStart();  // Advance effect, save to NVS
             }
             wasRotating = isRotating;
@@ -99,6 +103,17 @@ void hallProcessingTask(void* pvParameters) {
 
             if (revTimer.isWarmupComplete() && revTimer.getRevolutionCount() == WARMUP_REVOLUTIONS) {
                 Serial.println("Warm-up complete! Display active.");
+            }
+
+            // Send telemetry every ROLLING_AVERAGE_SIZE revolutions
+            revsSinceTelemetry++;
+            if (revsSinceTelemetry >= ROLLING_AVERAGE_SIZE) {
+                sendTelemetry(
+                    static_cast<uint32_t>(esp_timer_get_time()),
+                    static_cast<uint16_t>(revTimer.getMicrosecondsPerRevolution()),
+                    revsSinceTelemetry
+                );
+                revsSinceTelemetry = 0;
             }
         }
     }
@@ -182,8 +197,7 @@ void setup() {
     Serial.begin(115200);
     delay(2000);
 
-    // Disable WiFi/BT to reduce jitter
-    WiFi.mode(WIFI_OFF);
+    // Disable Bluetooth to reduce jitter (WiFi needed for ESP-NOW)
     btStop();
 
     Serial.println("POV Display Initializing...");
@@ -192,6 +206,9 @@ void setup() {
     setupHallSensor();
     startHallProcessingTask();
     registerEffects();
+
+    // Initialize ESP-NOW communication with motor controller
+    setupESPNow();
 
     // Initialize scheduler (loads NVS, advances effect, saves, starts registry)
     effectScheduler.begin(&effectRegistry);

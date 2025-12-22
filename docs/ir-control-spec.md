@@ -8,128 +8,15 @@ The motor controller will command the display to show an effect and its brightne
 
 Remember, this is an art project. You are my main coding dude responsible for keeping our house in order.  But that doesn't mean you are an architecture astronaut.  YAGNI and KISS are guiding principles.
 
-To do this, I need to first boil the ocean.  Here is how to boil the ocean:
-
 [TOC]
 
-## Phase 0 - Update motor controller to use esp32-s3-zero
+## Known Issues
 
-We need to update the motor controller to use my esp32-s3-zero.  Simply rip the platformio shit out of the ir_remote_test project as it is verified to work.
-
-## Phase 0.5 - Get MAC addresses
-
-We need to get the MAC addresses on both devices. Upload this simple sketch to each device:
-
-```cpp
-#include "WiFi.h"
-void setup() {
-    Serial.begin(115200);
-    WiFi.mode(WIFI_STA);
-    Serial.print("MAC Address: ");
-    Serial.println(WiFi.macAddress());
-}
-void loop() {}
-```
-
-Note the MAC addresses and update the constants in the shared header (`shared/espnow_config.h`).
-
-## Phase 1 - Establish ESP-Now Communication
-
-The first phase of this operation is establishing bidirectional ESP-Now communication between the motor controller and the display.  
-
-### Basic Hardware Config
-
-Lets keep this super simple and just bake the mac addresses into the code.  Both can use channel 4 and since these literally sit about a meter apart when on the test bench and probalby less than 100mm apart when assembled we can use pretty low power, say WIFI_POWER_5dBm.
-
-### Overall Message Format
-
-Before we dive too far, we need to standardize our messages so they can be parsed by either end.  We'll use plain c-structs for each message.  The first field will define the message type.
-
-**Shared Header Location:** Both projects need access to a common `messages.h` header file containing all message structures and configuration constants. Implementation agent should determine optimal directory structure (e.g., `POV_Project/shared/` or similar) and configure both PlatformIO projects to include this directory.
-
-**Hardware Configuration Constants:**
-
-```cpp
-// MAC Addresses (see shared/espnow_config.h for authoritative values)
-const uint8_t MOTOR_CONTROLLER_MAC[] = {0x34, 0xB7, 0xDA, 0x53, 0x00, 0xB4};  // ESP32-S3-Zero
-const uint8_t DISPLAY_MAC[] = {0x30, 0x30, 0xF9, 0x33, 0xE4, 0x60};           // Seeed XIAO ESP32S3
-
-// ESP-NOW Configuration
-const uint8_t ESPNOW_CHANNEL = 4;
-const wifi_power_t ESPNOW_POWER = WIFI_POWER_5dBm;  // Low power for <100mm separation
-```
-
-### First Message - Display to Motor Controller
-
-The display sends telemetry every `ROLLING_AVERAGE_SIZE` revolutions (the same constant used for hall sensor smoothing - 20 revolutions). This keeps telemetry rate proportional to rotation speed. The message contains:
-
-* the rolling average hall sensor value
-* current timestamp
-* number of revolutions since last message
-
-Upon receiving this message, the motor controller should immediately write this to its serial console.
-
-**Message Structure:**
-
-```cpp
-enum MessageType : uint8_t {
-    MSG_TELEMETRY = 1,       // Display → Motor Controller
-    MSG_BRIGHTNESS_UP = 2,   // Motor Controller → Display
-    MSG_BRIGHTNESS_DOWN = 3, // Motor Controller → Display
-    MSG_SET_EFFECT = 4,      // Motor Controller → Display
-};
-
-// Display → Motor Controller: Telemetry
-struct TelemetryMsg {
-    uint8_t type = MSG_TELEMETRY;
-    uint32_t timestamp_ms;
-    uint16_t hall_avg_us;          // Rolling average hall sensor period (microseconds)
-    uint16_t revolutions;
-} __attribute__((packed));
-```
-
-### Second Message - Motor Controller to Display
-
-For the second message, let's focus on brightness control from the motor controller to the display. Once every 5 seconds the motor controller should send a **random brightness UP or DOWN message** to the display (we will later have this controlled by an IR remote in Phase 2).
-
-The display should track brightness internally on a scale of **0 to 10** (0 being off, 10 being max brightness). Upon receiving `MSG_BRIGHTNESS_UP`, increment the internal brightness value (clamping at 10). Upon receiving `MSG_BRIGHTNESS_DOWN`, decrement (clamping at 0).
-
-When rendering, map the 0-10 brightness to 0-255 for `nscale8()` using **perceptual (gamma-corrected) mapping**. Human vision perceives brightness logarithmically, so a linear 50% feels much brighter than halfway. Use gamma 2.2:
-
-```cpp
-// Perceptual brightness mapping (gamma 2.2)
-// brightness: 0-10 input, returns 0-255 for nscale8()
-uint8_t brightnessToScale(uint8_t brightness) {
-    if (brightness == 0) return 0;
-    if (brightness >= 10) return 255;
-    // gamma 2.2: output = 255 * (input/10)^2.2
-    float normalized = brightness / 10.0f;
-    return (uint8_t)(255.0f * powf(normalized, 2.2f));
-}
-// Results: 0→0, 1→1, 2→5, 3→13, 4→25, 5→42, 6→65, 7→93, 8→128, 9→169, 10→255
-```
-
-**Confirmation:** Does the display brightness change (up or down) every 5 seconds?
-
-**Message Structures:**
-
-```cpp
-// Motor Controller → Display: Increment brightness
-struct BrightnessUpMsg {
-    uint8_t type = MSG_BRIGHTNESS_UP;
-} __attribute__((packed));
-
-// Motor Controller → Display: Decrement brightness
-struct BrightnessDownMsg {
-    uint8_t type = MSG_BRIGHTNESS_DOWN;
-} __attribute__((packed));
-```
-
-... once we get the basics set up and can get message from the display to the controller and back its time to do the fun stuff.... control effects and brightness using IR.
+**WiFi + Wireless USB Power Incompatibility:** ESP-NOW (WiFi) cannot be used while powering the display via wireless USB power. The wireless power coil runs at 5V instead of 12V, so when the ESP32 transmits WiFi packets it draws too much current and crashes. Use 12V barrel jack power when testing ESP-NOW communication.
 
 ## Phase 2 - Control Effects
 
-The second phase of this operation  assumes we have working bidirectional communication between the motor controller and display controller.  It assumes we have a standardized message format.  It also assumes that the IR hardware is wired into the motor controller and is ready to rock.  
+The second phase of this operation  assumes we have working bidirectional communication between the motor controller and display controller.  It assumes we have a standardized message format.  It also assumes that the IR hardware is wired into the motor controller and is ready to rock.
 
 ### Configuration
 
@@ -242,6 +129,8 @@ I'd rather not have the motor controller care what the current brightness value 
 
 Thats it!  If we do thisl, we'll have very nice control over our display far beyond what it currently does.
 
+---
+
 # Implementation Details
 
 ## No Backwards Compatibility Needed
@@ -287,99 +176,6 @@ See message definitions in Phase 1 and Phase 2 sections above.
 - Brightness at limits → Display clamps (no wraparound)
 - Unknown message type → Ignore and log to serial
 - Corrupted message (wrong length) → Ignore and log to serial
-
-## ESP-NOW Implementation Notes
-
-**Getting Device MAC Addresses:**
-
-```cpp
-#include "WiFi.h"
-
-void setup() {
-    Serial.begin(115200);
-    WiFi.mode(WIFI_STA);
-    Serial.print("MAC Address: ");
-    Serial.println(WiFi.macAddress());
-}
-```
-
-Run this on both devices to get their MAC addresses, then update the constants in the shared header.
-
-**Basic ESP-NOW Setup:**
-
-ESP-NOW uses the raw ESP-IDF API (`esp_now.h`). Setup is straightforward:
-
-1. Initialize WiFi in STA mode
-2. Initialize ESP-NOW
-3. Register receive callback
-4. Add peer device by MAC address
-5. Send/receive using callbacks
-
-**Example initialization:**
-
-Note: Please be kind and put this setup code into its own function.  We can't keep spewing shit into setup() .... there should be a setupESPNow() that setup calls....  consider if this counts as "shared code" that can go in our shared code directory....
-
-```cpp
-#include <esp_now.h>
-#include <WiFi.h>
-
-void on_data_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
-    // Handle received message
-    uint8_t msg_type = data[0];
-    // ... parse based on type
-}
-
-void setup() {
-    WiFi.mode(WIFI_STA);
-    
-    // Optional: Set channel and power
-    esp_wifi_set_promiscuous(true);
-    esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
-    esp_wifi_set_promiscuous(false);
-    WiFi.setTxPower(ESPNOW_POWER);
-    
-    // Initialize ESP-NOW
-    if (esp_now_init() != ESP_OK) {
-        Serial.println("ESP-NOW init failed");
-        return;
-    }
-    
-    // Register receive callback
-    esp_now_register_recv_cb(on_data_recv);
-    
-    // Add peer
-    esp_now_peer_info_t peer;
-    memcpy(peer.peer_addr, OTHER_DEVICE_MAC, 6);
-    peer.channel = 0;  // Use current channel
-    peer.encrypt = false;
-    
-    if (esp_now_add_peer(&peer) != ESP_OK) {
-        Serial.println("Failed to add peer");
-        return;
-    }
-}
-```
-
-**Sending messages:**
-
-use the esp's timestamp not mills()
-
-```cpp
-TelemetryMsg msg;
-msg.timestamp_ms = millis();
-msg.hall_avg_us = 1234;
-msg.revolutions = 5;
-
-esp_now_send(MOTOR_CONTROLLER_MAC, (uint8_t*)&msg, sizeof(msg));
-```
-
-**Important notes:**
-
-- Receive callback runs on WiFi task (Core 0 by default). Keep it fast - just copy data to a queue and process in your main task.
-- You only receive messages from peers you've explicitly added via `esp_now_add_peer()`
-- ESP-NOW v2.0 supports up to 1470 bytes per message on ESP32-S3
-- Setting `peer.channel = 0` means "use current WiFi channel"
-- Both devices must be on the same WiFi channel to communicate
 
 ## Communication Architecture
 
@@ -450,17 +246,7 @@ This keeps state management explicit and visible rather than buried in callbacks
 
 ## Hardware Wiring
 
-Here are the pin assignments on the esp32-s3-zero controller.  Please ensure this information is encapsulated in exactly one location (the hardware.h file for the motor controller) and all other documentation refers to it without duplication.
-
-GPIO3 - Rotary CLK - Green
-GPIO4 - Rotatry DT - Blue
-GPIO5 - Rotatry SW - Yellow
-
-GPIO7 - Motor IN1 - Blue
-GPIO8 - Motor IN2 - Yellow
-GPIO9 - Motor ENA - Green
-
-GPIO2 - IR Signal - Orange
+See `motor_controller/src/hardware_config.h` for authoritative pin assignments on the ESP32-S3-Zero.
 
 ---
 
@@ -474,20 +260,18 @@ This section provides implementation-specific context. See **docs/PROJECT_STRUCT
 |----------|----------|-------|-------|
 | `ROLLING_AVERAGE_SIZE` | `led_display/include/types.h` | 20 | Telemetry interval |
 | `MAX_EFFECTS` | `led_display/include/EffectRegistry.h` | 8 | Max registered effects |
-| `GLOBAL_BRIGHTNESS` | `led_display/include/hardware_config.h` | 255 | Make runtime variable |
+| `GLOBAL_BRIGHTNESS` | `led_display/include/hardware_config.h` | 255 | Now runtime via DisplayState |
 
-## Files to Modify
+## Files to Modify (Phase 2)
 
 **Motor Controller:**
-- `src/hardware_config.h` - Update pin definitions for ESP32-S3-Zero (use GPIO numbers from Hardware Wiring section)
-- `src/main.cpp` - Add ESP-NOW init, IR receiver, message handling
+- `src/main.cpp` - Add IR receiver, replace random brightness with IR-triggered commands
 
 **LED Display:**
 - `include/EffectRegistry.h` - Modify `setEffect()` to accept 1-based effect numbers
-- `include/SlotTiming.h` - Modify `copyPixelsToStrip()` to use runtime brightness from DisplayState
-- `src/main.cpp` - Remove EffectScheduler usage, add ESP-NOW init, add DisplayState, integrate with render loop
+- `src/main.cpp` - Remove EffectScheduler usage, use g_displayState.effectNumber in render loop
 
-## Files to Delete
+## Files to Delete (Phase 2)
 
 - `led_display/include/EffectScheduler.h`
 - `led_display/src/EffectScheduler.cpp` (if exists)
@@ -518,3 +302,50 @@ cd <project_dir>
 uv run pio run              # Build
 uv run pio run -t upload    # Upload
 ```
+
+---
+
+# Completed Phases
+
+## Phase 0 - Update motor controller to use esp32-s3-zero
+
+**COMPLETED**
+
+Updated the motor controller to use ESP32-S3-Zero. Pin definitions in `motor_controller/src/hardware_config.h`.
+
+## Phase 0.5 - Get MAC addresses
+
+**COMPLETED**
+
+MAC addresses captured and stored in `shared/espnow_config.h`:
+- Motor Controller (ESP32-S3-Zero): `34:B7:DA:53:00:B4`
+- Display (Seeed XIAO ESP32S3): `30:30:F9:33:E4:60`
+
+Test utility at `test_projects/mac_address_test/`.
+
+## Phase 1 - Establish ESP-Now Communication
+
+**COMPLETED**
+
+Bidirectional ESP-NOW communication established:
+
+**Motor Controller:**
+- `src/espnow_comm.h/cpp` - ESP-NOW module
+- Receives telemetry from display, logs to serial
+- Sends random brightness UP/DOWN every 5 seconds (test mode)
+
+**LED Display:**
+- `include/DisplayState.h` - Atomic state struct with gamma-corrected `brightnessToScale()`
+- `include/ESPNowComm.h`, `src/ESPNowComm.cpp` - ESP-NOW module
+- Sends telemetry every 20 revolutions from hall processing task
+- Receives brightness commands, updates `g_displayState.brightness`
+- `include/SlotTiming.h` - Uses runtime brightness from DisplayState
+
+**Message Structures** in `shared/messages.h`:
+- `TelemetryMsg` - Display → Motor Controller
+- `BrightnessUpMsg` / `BrightnessDownMsg` - Motor Controller → Display
+- `SetEffectMsg` - Motor Controller → Display (ready for Phase 2)
+
+**Configuration** in `shared/espnow_config.h`:
+- Channel 4, TX power 5dBm
+- MAC addresses for both devices

@@ -5,6 +5,7 @@
 #include "RevolutionTimer.h"
 #include "RenderContext.h"
 #include "hardware_config.h"
+#include "DisplayState.h"
 #include "esp_timer.h"
 #include <NeoPixelBus.h>
 
@@ -69,11 +70,17 @@ inline void waitForTargetTime(timestamp_t targetTime) {
 /**
  * Copy rendered pixels from RenderContext to the LED strip
  *
+ * Applies runtime brightness from DisplayState (0-10 scale, gamma-corrected to 0-255)
+ *
  * @param ctx RenderContext containing rendered arm pixel data
  * @param ledStrip NeoPixelBus strip to copy pixels to
  */
 template<typename T_STRIP>
 void copyPixelsToStrip(const RenderContext& ctx, T_STRIP& ledStrip) {
+    // Get runtime brightness (atomic read, no lock needed)
+    uint8_t brightness = g_displayState.brightness.load();
+    uint8_t scale = brightnessToScale(brightness);  // Gamma-corrected 0-255
+
     for (int a = 0; a < 3; a++) {
         uint16_t start = HardwareConfig::ARM_START[a];
         bool reversed = HardwareConfig::ARM_LED_REVERSED[a];
@@ -82,8 +89,8 @@ void copyPixelsToStrip(const RenderContext& ctx, T_STRIP& ledStrip) {
             int physicalPos = reversed ? (HardwareConfig::LEDS_PER_ARM - 1 - p) : p;
 
             CRGB color = ctx.arms[a].pixels[p];
-            if constexpr (HardwareConfig::GLOBAL_BRIGHTNESS < 255) {
-                color.nscale8(HardwareConfig::GLOBAL_BRIGHTNESS);
+            if (scale < 255) {
+                color.nscale8(scale);
             }
             ledStrip.SetPixelColor(start + physicalPos, RgbColor(color.r, color.g, color.b));
         }

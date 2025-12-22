@@ -1,28 +1,29 @@
 #include "motor_control.h"
 #include "hardware_config.h"
 
+// ESP32 PWM resolution (8-bit = 0-255)
+#define PWM_RESOLUTION 8
+
 void motorInit() {
     // Setup motor driver pins
     pinMode(PIN_MOTOR_IN1, OUTPUT);
     pinMode(PIN_MOTOR_IN2, OUTPUT);
-    pinMode(PIN_MOTOR_ENA, OUTPUT);
 
     // Set direction (forward)
     digitalWrite(PIN_MOTOR_IN1, HIGH);
     digitalWrite(PIN_MOTOR_IN2, LOW);
 
-    // Configure PWM on enable pin
-    analogWriteFreq(PWM_FREQ_HZ);    // 25kHz
-    analogWriteRange(PWM_MAX_VALUE);  // 8-bit (0-255)
-    analogWrite(PIN_MOTOR_ENA, 0);    // Start stopped
+    // Configure LEDC PWM on enable pin (ESP32 API)
+    ledcAttach(PIN_MOTOR_ENA, PWM_FREQ_HZ, PWM_RESOLUTION);
+    ledcWrite(PIN_MOTOR_ENA, 0);  // Start stopped
 }
 
 void motorSetSpeed(uint8_t pwm) {
-    analogWrite(PIN_MOTOR_ENA, pwm);
+    ledcWrite(PIN_MOTOR_ENA, pwm);
 }
 
 void motorStop() {
-    analogWrite(PIN_MOTOR_ENA, 0);
+    ledcWrite(PIN_MOTOR_ENA, 0);
 }
 
 // Convert encoder position (0-40) to PWM value (0-255)
