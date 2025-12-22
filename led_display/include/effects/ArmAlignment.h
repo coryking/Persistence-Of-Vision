@@ -56,7 +56,6 @@ public:
     void render(RenderContext& ctx) override;
     void onRevolution(timestamp_t usPerRev, timestamp_t timestamp,
                      uint16_t revolutionCount) override;
-    SpeedRange getSpeedRange() const override { return {10, 3000}; }  // Works at any speed
 
 private:
     // State machine

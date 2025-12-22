@@ -13,7 +13,6 @@ class NoiseFieldRGB : public Effect {
 public:
     void render(RenderContext &ctx) override;
     void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) override;
-    SpeedRange getSpeedRange() const override { return {10, 200}; }  // Hand-spin only
 
     uint32_t noiseTimeOffsetMs = 0;
     static constexpr float RADIUS = 1.25f;  // Fixed zoom level
