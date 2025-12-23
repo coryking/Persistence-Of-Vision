@@ -7,6 +7,10 @@
 static IRrecv irrecv(PIN_IR_RECV, 1024, 15, true);
 static decode_results results;
 
+// Debounce timing - ignore repeated codes within this window
+static const unsigned long DEBOUNCE_MS = 300;
+static unsigned long lastCodeTime = 0;
+
 void remoteInputInit() {
     irrecv.enableIRIn();
     Serial.println("[IR] Receiver initialized on pin " + String(PIN_IR_RECV));
@@ -14,6 +18,14 @@ void remoteInputInit() {
 
 Command remoteInputPoll() {
     if (!irrecv.decode(&results)) {
+        return Command::None;
+    }
+
+    unsigned long now = millis();
+
+    // Debounce - ignore codes that come too quickly (button held or repeat codes)
+    if (now - lastCodeTime < DEBOUNCE_MS) {
+        irrecv.resume();
         return Command::None;
     }
 
@@ -25,6 +37,8 @@ Command remoteInputPoll() {
         irrecv.resume();
         return Command::None;
     }
+
+    lastCodeTime = now;
 
     uint16_t code = rc5StripToggleBit((uint16_t)results.value);
     Serial.printf("[IR] Stripped: 0x%04X\n", code);
