@@ -10,4 +10,8 @@ enum class Command : uint8_t {
     PowerToggle,
     SpeedUp,
     SpeedDown,
+    EffectModeNext,    // Cycle effect mode forward
+    EffectModePrev,    // Cycle effect mode backward
+    EffectParamUp,     // Effect parameter up
+    EffectParamDown,   // Effect parameter down
 };

@@ -1,5 +1,6 @@
 #include "led_indicator.h"
 #include "motor_speed.h"
+#include "motor_control.h"
 #include "hardware_config.h"
 #include <Arduino.h>
 
@@ -8,8 +9,7 @@ struct RGBColor {
     uint8_t r, g, b;
 };
 
-// Internal state
-static bool isStopped = true;
+// Internal state for blinking
 static unsigned long lastBlinkTime = 0;
 static bool blinkState = false;
 
@@ -57,15 +57,20 @@ void ledInit() {
 }
 
 void ledLoop() {
-    if (isStopped) {
+    MotorState state = getMotorState();
+
+    if (state == MotorState::STOPPED) {
         // Blink red at 500ms interval
         if (millis() - lastBlinkTime >= LED_BLINK_INTERVAL_MS) {
             lastBlinkTime = millis();
             blinkState = !blinkState;
             setRGB(blinkState ? 255 : 0, 0, 0);  // Red on/off
         }
-    } else {
-        // Solid color based on speed position
+    } else if (state == MotorState::BRAKING) {
+        // Solid orange during active brake
+        setRGB(255, 128, 0);
+    } else {  // RUNNING
+        // Solid color gradient based on speed position
         int pos = getPosition();
         RGBColor color = calculateRunningColor(pos);
         setRGB(color.r, color.g, color.b);
@@ -73,11 +78,10 @@ void ledLoop() {
 }
 
 void ledShowStopped() {
-    isStopped = true;
     lastBlinkTime = millis();  // Reset blink timer
     blinkState = false;
 }
 
 void ledShowRunning() {
-    isStopped = false;
+    // No-op - state is now queried from motor controller
 }

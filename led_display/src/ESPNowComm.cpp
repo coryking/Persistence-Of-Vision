@@ -40,6 +40,26 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
             xQueueSend(effectManager.getCommandQueue(), &cmd, 0);
             break;
         }
+        case MSG_EFFECT_MODE_NEXT: {
+            EffectCommand cmd = {EffectCommandType::EFFECT_MODE_NEXT, 0};
+            xQueueSend(effectManager.getCommandQueue(), &cmd, 0);
+            break;
+        }
+        case MSG_EFFECT_MODE_PREV: {
+            EffectCommand cmd = {EffectCommandType::EFFECT_MODE_PREV, 0};
+            xQueueSend(effectManager.getCommandQueue(), &cmd, 0);
+            break;
+        }
+        case MSG_EFFECT_PARAM_UP: {
+            EffectCommand cmd = {EffectCommandType::EFFECT_PARAM_UP, 0};
+            xQueueSend(effectManager.getCommandQueue(), &cmd, 0);
+            break;
+        }
+        case MSG_EFFECT_PARAM_DOWN: {
+            EffectCommand cmd = {EffectCommandType::EFFECT_PARAM_DOWN, 0};
+            xQueueSend(effectManager.getCommandQueue(), &cmd, 0);
+            break;
+        }
         default:
             Serial.printf("[ESPNOW] Unknown message type: %u\n", msgType);
             break;

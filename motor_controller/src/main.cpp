@@ -23,6 +23,7 @@ void setup() {
 
 void loop() {
     ledLoop();
+    motorLoop();  // Handle brake timing (non-blocking)
     processCommand(remoteInputPoll());
     delay(10);
 }

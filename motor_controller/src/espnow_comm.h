@@ -16,4 +16,16 @@ void sendBrightnessDown();
 // Send set effect command to display
 void sendSetEffect(uint8_t effectNumber);
 
+// Send effect mode next command to display
+void sendEffectModeNext();
+
+// Send effect mode prev command to display
+void sendEffectModePrev();
+
+// Send effect parameter up command to display
+void sendEffectParamUp();
+
+// Send effect parameter down command to display
+void sendEffectParamDown();
+
 #endif // ESPNOW_COMM_H

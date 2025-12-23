@@ -44,6 +44,36 @@ public:
      * @param rpm Current revolutions per minute
      */
     virtual void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) { (void)usPerRev; }
+
+    /**
+     * Cycle to next internal mode (if effect supports modes)
+     * Called via ESP-NOW from IR remote left/right buttons
+     * Default: no-op (effect has no modes)
+     */
+    virtual void nextMode() {}
+
+    /**
+     * Cycle to previous internal mode (if effect supports modes)
+     * Called via ESP-NOW from IR remote left/right buttons
+     * Default: no-op (effect has no modes)
+     */
+    virtual void prevMode() {}
+
+    /**
+     * Increment effect's secondary parameter (effect-specific)
+     * Called via ESP-NOW from IR remote up button
+     * Examples: next palette, increase speed, zoom in
+     * Default: no-op
+     */
+    virtual void paramUp() {}
+
+    /**
+     * Decrement effect's secondary parameter (effect-specific)
+     * Called via ESP-NOW from IR remote down button
+     * Examples: prev palette, decrease speed, zoom out
+     * Default: no-op
+     */
+    virtual void paramDown() {}
 };
 
 #endif // EFFECT_H

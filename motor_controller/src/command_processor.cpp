@@ -18,6 +18,10 @@ void processCommand(Command cmd) {
         case Command::Effect10: sendSetEffect(10); break;
         case Command::BrightnessUp:   sendBrightnessUp();   break;
         case Command::BrightnessDown: sendBrightnessDown(); break;
+        case Command::EffectModeNext: sendEffectModeNext(); break;
+        case Command::EffectModePrev: sendEffectModePrev(); break;
+        case Command::EffectParamUp:  sendEffectParamUp();  break;
+        case Command::EffectParamDown: sendEffectParamDown(); break;
         case Command::PowerToggle:
             togglePower();
             motorSetSpeed(getCurrentPWM());

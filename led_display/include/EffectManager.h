@@ -12,6 +12,10 @@ enum class EffectCommandType : uint8_t {
     SET_EFFECT = 1,
     BRIGHTNESS_UP = 2,
     BRIGHTNESS_DOWN = 3,
+    EFFECT_MODE_NEXT = 4,
+    EFFECT_MODE_PREV = 5,
+    EFFECT_PARAM_UP = 6,
+    EFFECT_PARAM_DOWN = 7,
 };
 
 /**
@@ -105,6 +109,30 @@ public:
                     break;
                 case EffectCommandType::BRIGHTNESS_DOWN:
                     decrementBrightness();
+                    break;
+                case EffectCommandType::EFFECT_MODE_NEXT:
+                    if (currentIndex < effectCount && effects[currentIndex]) {
+                        effects[currentIndex]->nextMode();
+                        Serial.println("[EffectManager] Mode -> next");
+                    }
+                    break;
+                case EffectCommandType::EFFECT_MODE_PREV:
+                    if (currentIndex < effectCount && effects[currentIndex]) {
+                        effects[currentIndex]->prevMode();
+                        Serial.println("[EffectManager] Mode -> prev");
+                    }
+                    break;
+                case EffectCommandType::EFFECT_PARAM_UP:
+                    if (currentIndex < effectCount && effects[currentIndex]) {
+                        effects[currentIndex]->paramUp();
+                        Serial.println("[EffectManager] Param -> up");
+                    }
+                    break;
+                case EffectCommandType::EFFECT_PARAM_DOWN:
+                    if (currentIndex < effectCount && effects[currentIndex]) {
+                        effects[currentIndex]->paramDown();
+                        Serial.println("[EffectManager] Param -> down");
+                    }
                     break;
             }
         }

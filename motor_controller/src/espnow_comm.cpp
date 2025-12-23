@@ -102,3 +102,35 @@ void sendSetEffect(uint8_t effectNumber) {
         Serial.printf("[ESPNOW] Effect -> %d\n", effectNumber);
     }
 }
+
+void sendEffectModeNext() {
+    EffectModeNextMsg msg;
+    esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
+    if (result == ESP_OK) {
+        Serial.println("[ESPNOW] Sent effect mode NEXT");
+    }
+}
+
+void sendEffectModePrev() {
+    EffectModePrevMsg msg;
+    esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
+    if (result == ESP_OK) {
+        Serial.println("[ESPNOW] Sent effect mode PREV");
+    }
+}
+
+void sendEffectParamUp() {
+    EffectParamUpMsg msg;
+    esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
+    if (result == ESP_OK) {
+        Serial.println("[ESPNOW] Sent effect param UP");
+    }
+}
+
+void sendEffectParamDown() {
+    EffectParamDownMsg msg;
+    esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
+    if (result == ESP_OK) {
+        Serial.println("[ESPNOW] Sent effect param DOWN");
+    }
+}

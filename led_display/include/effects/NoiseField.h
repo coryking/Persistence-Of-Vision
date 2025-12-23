@@ -116,14 +116,21 @@ class NoiseField : public Effect {
 public:
     void render(RenderContext &ctx) override;
     void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) override;
+    void nextMode() override;
+    void prevMode() override;
+    void paramUp() override;    // Next palette
+    void paramDown() override;  // Previous palette
 
     timestamp_t noiseTimeOffsetMs = 0;
     float radius = 1.5f;
 
-    // Palette rotation
+    // Palette (manual control via paramUp/paramDown)
     uint8_t paletteIndex = 0;
     CRGBPalette16 palette = *NOISE_PALETTES[0];
-    static constexpr uint32_t PALETTE_SWITCH_SECONDS = 10;
+
+    // Contrast modes: 0=Normal, 1=S-curve, 2=Turbulence
+    uint8_t contrastMode = 0;
+    static constexpr uint8_t CONTRAST_MODE_COUNT = 3;
 
     static constexpr float ANIMATION_SPEED = 10.0f;
     static constexpr float RADIUS_PERIOD_SECONDS = 15.0f;

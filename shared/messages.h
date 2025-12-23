@@ -5,10 +5,14 @@
 
 // Message types for ESP-NOW communication between motor controller and display
 enum MessageType : uint8_t {
-    MSG_TELEMETRY = 1,       // Display -> Motor Controller
-    MSG_BRIGHTNESS_UP = 2,   // Motor Controller -> Display
-    MSG_BRIGHTNESS_DOWN = 3, // Motor Controller -> Display
-    MSG_SET_EFFECT = 4,      // Motor Controller -> Display
+    MSG_TELEMETRY = 1,         // Display -> Motor Controller
+    MSG_BRIGHTNESS_UP = 2,     // Motor Controller -> Display
+    MSG_BRIGHTNESS_DOWN = 3,   // Motor Controller -> Display
+    MSG_SET_EFFECT = 4,        // Motor Controller -> Display
+    MSG_EFFECT_MODE_NEXT = 5,  // Motor Controller -> Display (cycle effect's internal mode forward)
+    MSG_EFFECT_MODE_PREV = 6,  // Motor Controller -> Display (cycle effect's internal mode backward)
+    MSG_EFFECT_PARAM_UP = 7,   // Motor Controller -> Display (effect's secondary parameter up)
+    MSG_EFFECT_PARAM_DOWN = 8, // Motor Controller -> Display (effect's secondary parameter down)
 };
 
 // Display -> Motor Controller: Telemetry
@@ -34,6 +38,26 @@ struct BrightnessDownMsg {
 struct SetEffectMsg {
     uint8_t type = MSG_SET_EFFECT;
     uint8_t effect_number;  // 1-10 (1-based, matches remote buttons)
+} __attribute__((packed));
+
+// Motor Controller -> Display: Cycle effect mode forward
+struct EffectModeNextMsg {
+    uint8_t type = MSG_EFFECT_MODE_NEXT;
+} __attribute__((packed));
+
+// Motor Controller -> Display: Cycle effect mode backward
+struct EffectModePrevMsg {
+    uint8_t type = MSG_EFFECT_MODE_PREV;
+} __attribute__((packed));
+
+// Motor Controller -> Display: Effect parameter up (effect-specific, e.g., palette)
+struct EffectParamUpMsg {
+    uint8_t type = MSG_EFFECT_PARAM_UP;
+} __attribute__((packed));
+
+// Motor Controller -> Display: Effect parameter down (effect-specific, e.g., palette)
+struct EffectParamDownMsg {
+    uint8_t type = MSG_EFFECT_PARAM_DOWN;
 } __attribute__((packed));
 
 #endif // POV_MESSAGES_H

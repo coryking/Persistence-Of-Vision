@@ -21,6 +21,9 @@
 // LED timing
 #define LED_BLINK_INTERVAL_MS  500  // 500ms on, 500ms off when stopped
 
+// Motor timing
+#define BRAKE_DURATION_MS 15000  // Active brake duration when motor stops (15 seconds)
+
 #define PWM_FREQ_HZ   18000  // this sounds good
 #define PWM_MAX_VALUE   255  // 8-bit resolution (0-255)
 
