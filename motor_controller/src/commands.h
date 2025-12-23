@@ -7,4 +7,7 @@ enum class Command : uint8_t {
     Effect6, Effect7, Effect8, Effect9, Effect10,
     BrightnessUp,
     BrightnessDown,
+    PowerToggle,
+    SpeedUp,
+    SpeedDown,
 };

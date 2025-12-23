@@ -1,5 +1,5 @@
 #include "led_indicator.h"
-#include "encoder_control.h"
+#include "motor_speed.h"
 #include "hardware_config.h"
 #include <Arduino.h>
 
@@ -20,15 +20,15 @@ static void setRGB(uint8_t r, uint8_t g, uint8_t b) {
     analogWrite(PIN_LED_B, 255 - b);
 }
 
-// Calculate "glowing steel" color gradient based on encoder position
+// Calculate "glowing steel" color gradient based on speed position
 static RGBColor calculateRunningColor(int pos) {
     // Clamp position to valid range
-    if (pos < ENCODER_MIN_POS) pos = ENCODER_MIN_POS;
-    if (pos > ENCODER_MAX_POS) pos = ENCODER_MAX_POS;
+    if (pos < SPEED_MIN_POS) pos = SPEED_MIN_POS;
+    if (pos > SPEED_MAX_POS) pos = SPEED_MAX_POS;
 
     // Normalize position to 0.0-1.0 range
-    float normalizedPos = (float)(pos - ENCODER_MIN_POS) /
-                          (float)(ENCODER_MAX_POS - ENCODER_MIN_POS);
+    float normalizedPos = (float)(pos - SPEED_MIN_POS) /
+                          (float)(SPEED_MAX_POS - SPEED_MIN_POS);
 
     RGBColor color;
     color.r = 255;  // Always full red (glowing hot base)
@@ -65,8 +65,8 @@ void ledLoop() {
             setRGB(blinkState ? 255 : 0, 0, 0);  // Red on/off
         }
     } else {
-        // Solid color based on encoder position
-        int pos = encoderGetPosition();  // Read from encoder module
+        // Solid color based on speed position
+        int pos = getPosition();
         RGBColor color = calculateRunningColor(pos);
         setRGB(color.r, color.g, color.b);
     }

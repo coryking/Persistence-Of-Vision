@@ -9,12 +9,7 @@
 #define PIN_MOTOR_IN2    8   // GPIO8 - Direction control (yellow wire)
 #define PIN_MOTOR_ENA    9   // GPIO9 - PWM speed control (green wire)
 
-// Rotary Encoder Pins
-#define PIN_ENCODER_CLK  3   // GPIO3 - Clock (green wire)
-#define PIN_ENCODER_DT   4   // GPIO4 - Data (blue wire)
-#define PIN_ENCODER_SW   5   // GPIO5 - Button (yellow wire)
-
-// IR Receiver Pin (for Phase 2)
+// IR Receiver Pin
 #define PIN_IR_RECV      2   // GPIO2 - IR signal (orange wire)
 
 // RGB LED Pins (active LOW - common anode)
@@ -29,13 +24,12 @@
 #define PWM_FREQ_HZ   18000  // this sounds good
 #define PWM_MAX_VALUE   255  // 8-bit resolution (0-255)
 
-// Encoder → PWM Mapping (linear, calibrated for slip ring configuration)
-// NOTE: Slip ring adds significant drag - PWM boosted to 70%-100% range
-// Old calibration (without slip ring): RPM = -8170.97 + 205.2253*PWM - 0.809611*PWM²
-// Position 0 = OFF, positions 1-40 = 70%-100% PWM
-#define ENCODER_MIN_POS      0
-#define ENCODER_MAX_POS     40
-#define PWM_MIN_PERCENT   60.0f  // Boosted for slip ring drag
-#define PWM_MAX_PERCENT  100.0f  // Full power
+// Speed → PWM Mapping (IR remote control, 10 positions)
+// NOTE: Slip ring adds significant drag - PWM boosted
+// Positions 1-10 map linearly to 65%-80% PWM
+#define SPEED_MIN_POS      1
+#define SPEED_MAX_POS     10
+#define PWM_MIN_PERCENT   65.0f  // Minimum for reliable starting
+#define PWM_MAX_PERCENT   80.0f  // Safe maximum speed
 
 #endif // HARDWARE_CONFIG_H

@@ -58,6 +58,9 @@ Command remoteInputPoll() {
         case SAGETV_BTN_0: cmd = Command::Effect10; break;
         case SAGETV_BTN_VOL_UP: cmd = Command::BrightnessUp; break;
         case SAGETV_BTN_VOL_DOWN: cmd = Command::BrightnessDown; break;
+        case SAGETV_BTN_POWER: cmd = Command::PowerToggle; break;
+        case SAGETV_BTN_FAST_FWD: cmd = Command::SpeedUp; break;
+        case SAGETV_BTN_REWIND: cmd = Command::SpeedDown; break;
         default:
             Serial.printf("[IR] Unknown code 0x%04X\n", code);
             return Command::None;

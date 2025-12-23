@@ -6,6 +6,5 @@
 void motorInit();
 void motorSetSpeed(uint8_t pwm);
 void motorStop();
-uint8_t positionToPWM(int pos);  // Convert encoder position to PWM
 
 #endif

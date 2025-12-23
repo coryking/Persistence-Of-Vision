@@ -1,5 +1,8 @@
 #include "command_processor.h"
 #include "espnow_comm.h"
+#include "motor_speed.h"
+#include "motor_control.h"
+#include "led_indicator.h"
 
 void processCommand(Command cmd) {
     switch (cmd) {
@@ -15,6 +18,27 @@ void processCommand(Command cmd) {
         case Command::Effect10: sendSetEffect(10); break;
         case Command::BrightnessUp:   sendBrightnessUp();   break;
         case Command::BrightnessDown: sendBrightnessDown(); break;
+        case Command::PowerToggle:
+            togglePower();
+            motorSetSpeed(getCurrentPWM());
+            if (isEnabled()) {
+                ledShowRunning();
+            } else {
+                ledShowStopped();
+            }
+            break;
+        case Command::SpeedUp:
+            if (isEnabled()) {
+                speedUp();
+                motorSetSpeed(getCurrentPWM());
+            }
+            break;
+        case Command::SpeedDown:
+            if (isEnabled()) {
+                speedDown();
+                motorSetSpeed(getCurrentPWM());
+            }
+            break;
         case Command::None:
         default:
             break;

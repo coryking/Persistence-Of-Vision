@@ -25,18 +25,3 @@ void motorSetSpeed(uint8_t pwm) {
 void motorStop() {
     ledcWrite(PIN_MOTOR_ENA, 0);
 }
-
-// Convert encoder position (0-40) to PWM value (0-255)
-uint8_t positionToPWM(int pos) {
-    if (pos <= ENCODER_MIN_POS) return 0;  // OFF
-
-    // Clamp to valid range
-    if (pos > ENCODER_MAX_POS) pos = ENCODER_MAX_POS;
-
-    // Linear map: position 1-40 → PWM_MIN-PWM_MAX
-    float pwmPercent = PWM_MIN_PERCENT +
-                       ((float)(pos - 1) / (ENCODER_MAX_POS - 1)) *
-                       (PWM_MAX_PERCENT - PWM_MIN_PERCENT);
-
-    return (uint8_t)((pwmPercent / 100.0f) * PWM_MAX_VALUE);
-}
