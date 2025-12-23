@@ -5,6 +5,7 @@
 See docs/led_display/ for LED display-specific documentation:
 
 - **TIMING_ANALYSIS.md** - Deep dive on jitter, why NeoPixelBus is critical
+- **HARDWARE_TIMING_EXPLORATION.md** - ESP32 hardware timing alternatives (RMT, GPTimer, PCNT)
 - **FREERTOS_INTEGRATION.md** - FreeRTOS patterns and pitfalls
 - **PROJECT_COMPARISON.md** - Why queue-based hall sensor works, flag-based fails
 - **EFFECT_SYSTEM_DESIGN.md** - Effect architecture and scheduler design

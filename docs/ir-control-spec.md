@@ -12,7 +12,7 @@ Remember, this is an art project. You are my main coding dude responsible for ke
 
 ## Known Issues
 
-**WiFi + Wireless USB Power Incompatibility:** ESP-NOW (WiFi) cannot be used while powering the display via wireless USB power. The wireless power coil runs at 5V instead of 12V, so when the ESP32 transmits WiFi packets it draws too much current and crashes. Use 12V barrel jack power when testing ESP-NOW communication.
+**WiFi + Wireless USB Power Incompatibility:** ESP-NOW (WiFi) cannot be used while powering the display via wireless USB power. The wireless power coil runs at 5V instead of 12V, so when the ESP32 transmits WiFi packets it draws too much current and crashes. 
 
 ## Phase 2 - Control Effects
 
