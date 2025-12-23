@@ -11,10 +11,8 @@
 #include "RevolutionTimer.h"
 #include "HallEffectDriver.h"
 #include "RenderContext.h"
-#include "EffectRegistry.h"
-#include "EffectScheduler.h"
+#include "EffectManager.h"
 #include "ESPNowComm.h"
-#include "DisplayState.h"
 #include "effects/NoiseField.h"
 #include "effects/NoiseFieldRGB.h"
 #include "effects/SolidArms.h"
@@ -60,11 +58,8 @@ ArmAlignment armAlignmentEffect;
 PulseChaser pulseChaserEffect;
 MomentumFlywheel momentumFlywheelEffect;
 
-// Effect registry
-EffectRegistry effectRegistry;
-
-// Effect scheduler (manages NVS persistence)
-EffectScheduler effectScheduler;
+// Effect manager
+EffectManager effectManager;
 
 // Render context (reused each frame)
 RenderContext renderCtx;
@@ -92,14 +87,13 @@ void hallProcessingTask(void* pvParameters) {
             // Detect motor start (stopped → rotating transition)
             bool isRotating = revTimer.isCurrentlyRotating();
             if (!wasRotating && isRotating) {
-              revolutionCount = 1;
-              revsSinceTelemetry = 0;  // Reset telemetry counter on motor start
-                effectScheduler.onMotorStart();  // Advance effect, save to NVS
+                revolutionCount = 1;
+                revsSinceTelemetry = 0;  // Reset telemetry counter on motor start
             }
             wasRotating = isRotating;
 
             // Notify current effect of revolution
-            effectRegistry.onRevolution(revTimer.getMicrosecondsPerRevolution(), event.triggerTimestamp, revolutionCount++);
+            effectManager.onRevolution(revTimer.getMicrosecondsPerRevolution(), event.triggerTimestamp, revolutionCount++);
 
             if (revTimer.isWarmupComplete() && revTimer.getRevolutionCount() == WARMUP_REVOLUTIONS) {
                 Serial.println("Warm-up complete! Display active.");
@@ -176,17 +170,17 @@ void startHallProcessingTask() {
 }
 
 void registerEffects() {
-    //effectRegistry.registerEffect(&noiseFieldEffect);
-    //effectRegistry.registerEffect(&noiseFieldRGBEffect);
-    effectRegistry.registerEffect(&solidArmsEffect);
-    //effectRegistry.registerEffect(&rpmArcEffect);
-    //effectRegistry.registerEffect(&perArmBlobsEffect);
-    //effectRegistry.registerEffect(&virtualBlobsEffect);
-    //effectRegistry.registerEffect(&armAlignmentEffect);
-    effectRegistry.registerEffect(&pulseChaserEffect);
-    effectRegistry.registerEffect(&momentumFlywheelEffect);
+    effectManager.registerEffect(&noiseFieldEffect);
+    effectManager.registerEffect(&noiseFieldRGBEffect);
+    effectManager.registerEffect(&solidArmsEffect);
+    effectManager.registerEffect(&rpmArcEffect);
+    effectManager.registerEffect(&perArmBlobsEffect);
+    effectManager.registerEffect(&virtualBlobsEffect);
+    effectManager.registerEffect(&armAlignmentEffect);
+    effectManager.registerEffect(&pulseChaserEffect);
+    effectManager.registerEffect(&momentumFlywheelEffect);
 
-    Serial.printf("Registered %d effects\n", effectRegistry.getEffectCount());
+    Serial.printf("Registered %d effects\n", effectManager.getEffectCount());
 }
 
 // ============================================================================
@@ -210,14 +204,17 @@ void setup() {
     // Initialize ESP-NOW communication with motor controller
     setupESPNow();
 
-    // Initialize scheduler (loads NVS, advances effect, saves, starts registry)
-    effectScheduler.begin(&effectRegistry);
+    // Initialize effect manager (creates queue, starts first effect)
+    effectManager.begin();
 
-    Serial.printf("Starting with effect %u\n", effectRegistry.getCurrentIndex());
+    Serial.printf("Starting with effect 1\n");
     Serial.println("\n=== POV Display Ready ===");
 }
 
 void loop() {
+    // Process any pending effect/brightness commands
+    effectManager.processCommands();
+
     // ========== PRECISION TIMING MODEL ==========
     // We render for a FUTURE angular position, then wait until the disc
     // reaches that position before firing Show(). This ensures the angle
@@ -263,7 +260,7 @@ void loop() {
     renderCtx.arms[2].angleUnits = (target.angleUnits + INSIDE_ARM_PHASE) % ANGLE_FULL_CIRCLE;
 
     // Render current effect
-    Effect* current = effectRegistry.current();
+    Effect* current = effectManager.current();
     if (current) {
         current->render(renderCtx);
     }
@@ -284,7 +281,7 @@ void loop() {
 
     FrameProfiler::frameEnd(frameHandle,
                             renderCtx.frameCount,
-                            effectRegistry.getCurrentIndex(),
+                            0,  // effect index not tracked in new architecture
                             target.slotNumber,
                             target.angleUnits,
                             microsecondsPerRev,

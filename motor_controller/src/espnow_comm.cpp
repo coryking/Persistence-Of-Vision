@@ -93,3 +93,12 @@ void sendBrightnessDown() {
         Serial.println("[ESPNOW] Sent brightness DOWN");
     }
 }
+
+void sendSetEffect(uint8_t effectNumber) {
+    SetEffectMsg msg;
+    msg.effect_number = effectNumber;
+    esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
+    if (result == ESP_OK) {
+        Serial.printf("[ESPNOW] Effect -> %d\n", effectNumber);
+    }
+}

@@ -5,9 +5,24 @@
 #include "RevolutionTimer.h"
 #include "RenderContext.h"
 #include "hardware_config.h"
-#include "DisplayState.h"
 #include "esp_timer.h"
 #include <NeoPixelBus.h>
+
+// Forward declare (defined in main.cpp)
+class EffectManager;
+extern EffectManager effectManager;
+
+// Perceptual brightness mapping (gamma 2.2)
+// Input: 0-10, Output: 0-255 for nscale8()
+// Human vision perceives brightness logarithmically, so linear 50% feels
+// much brighter than halfway. Gamma correction compensates for this.
+inline uint8_t brightnessToScale(uint8_t brightness) {
+    if (brightness == 0) return 0;
+    if (brightness >= 10) return 255;
+    // gamma 2.2: output = 255 * (input/10)^2.2
+    float normalized = brightness / 10.0f;
+    return static_cast<uint8_t>(255.0f * powf(normalized, 2.2f));
+}
 
 /**
  * SlotTiming - Precision timing helpers for POV display
@@ -77,8 +92,8 @@ inline void waitForTargetTime(timestamp_t targetTime) {
  */
 template<typename T_STRIP>
 void copyPixelsToStrip(const RenderContext& ctx, T_STRIP& ledStrip) {
-    // Get runtime brightness (atomic read, no lock needed)
-    uint8_t brightness = g_displayState.brightness.load();
+    // Get runtime brightness from EffectManager
+    uint8_t brightness = effectManager.getBrightness();
     uint8_t scale = brightnessToScale(brightness);  // Gamma-corrected 0-255
 
     for (int a = 0; a < 3; a++) {

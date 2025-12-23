@@ -1,0 +1,213 @@
+#ifndef EFFECT_MANAGER_H
+#define EFFECT_MANAGER_H
+
+#include "Effect.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+
+/**
+ * Command types for cross-core communication
+ */
+enum class EffectCommandType : uint8_t {
+    SET_EFFECT = 1,
+    BRIGHTNESS_UP = 2,
+    BRIGHTNESS_DOWN = 3,
+};
+
+/**
+ * Command sent from ESP-NOW callback (Core 0) to main loop (Core 1)
+ */
+struct EffectCommand {
+    EffectCommandType type;
+    uint8_t value;  // effect number for SET_EFFECT, unused for brightness
+};
+
+/**
+ * Manages effect lifecycle, brightness, and cross-core command processing
+ *
+ * Responsibilities:
+ * - Effect registration and switching
+ * - Brightness state (0-10 scale)
+ * - Command queue for cross-core communication
+ * - Revolution event forwarding to current effect
+ *
+ * Usage:
+ *   EffectManager manager;
+ *   manager.registerEffect(&effect1);
+ *   manager.registerEffect(&effect2);
+ *   manager.begin();  // Creates queue, starts first effect
+ *
+ *   // ESP-NOW callback sends commands:
+ *   EffectCommand cmd = {EffectCommandType::SET_EFFECT, 5};
+ *   xQueueSend(manager.getCommandQueue(), &cmd, 0);
+ *
+ *   // Main loop processes commands:
+ *   manager.processCommands();
+ *   Effect* effect = manager.current();
+ *   effect->render(ctx);
+ */
+class EffectManager {
+public:
+    static constexpr uint8_t MAX_EFFECTS = 8;
+    static constexpr uint8_t DEFAULT_BRIGHTNESS = 5;  // 0-10 scale
+
+    EffectManager() : effectCount(0), currentIndex(0), brightness(DEFAULT_BRIGHTNESS), commandQueue(nullptr) {}
+
+    /**
+     * Register an effect (call during setup)
+     *
+     * @param effect Pointer to effect instance (must outlive manager)
+     * @return Index of registered effect, or 255 if registry is full
+     */
+    uint8_t registerEffect(Effect* effect) {
+        if (effectCount >= MAX_EFFECTS) return 255;
+        effects[effectCount] = effect;
+        return effectCount++;
+    }
+
+    /**
+     * Initialize manager: create command queue, start first effect
+     * Call after all effects are registered
+     */
+    void begin() {
+        // Create command queue (size 10 - handles burst button presses)
+        commandQueue = xQueueCreate(10, sizeof(EffectCommand));
+        if (!commandQueue) {
+            Serial.println("[EffectManager] ERROR: Failed to create command queue!");
+        }
+
+        // Start first effect
+        if (effectCount > 0 && effects[currentIndex]) {
+            effects[currentIndex]->begin();
+        }
+    }
+
+    /**
+     * Get command queue handle (for ESP-NOW callback to send commands)
+     */
+    QueueHandle_t getCommandQueue() { return commandQueue; }
+
+    /**
+     * Process pending commands from queue (call from main loop)
+     * Polls queue non-blocking, processes all pending commands
+     */
+    void processCommands() {
+        if (!commandQueue) return;
+
+        EffectCommand cmd;
+        while (xQueueReceive(commandQueue, &cmd, 0) == pdPASS) {
+            switch (cmd.type) {
+                case EffectCommandType::SET_EFFECT:
+                    changeEffect(cmd.value);
+                    break;
+                case EffectCommandType::BRIGHTNESS_UP:
+                    incrementBrightness();
+                    break;
+                case EffectCommandType::BRIGHTNESS_DOWN:
+                    decrementBrightness();
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Get currently active effect
+     * @return Pointer to current effect, or nullptr if none registered
+     */
+    Effect* current() {
+        return (currentIndex < effectCount) ? effects[currentIndex] : nullptr;
+    }
+
+    /**
+     * Get total number of registered effects
+     */
+    uint8_t getEffectCount() const { return effectCount; }
+
+    /**
+     * Get current brightness (0-10 scale)
+     */
+    uint8_t getBrightness() const { return brightness; }
+
+    /**
+     * Switch to specific effect by number (1-based, matches remote buttons)
+     * No-op if number invalid or already current
+     *
+     * @param effectNumber 1-based effect number (1-10)
+     */
+    void changeEffect(uint8_t effectNumber) {
+        if (effectNumber < 1 || effectNumber > effectCount) {
+            Serial.printf("[EffectManager] Invalid effect %d (have %d effects)\n", effectNumber, effectCount);
+            return;
+        }
+
+        uint8_t newIndex = effectNumber - 1;  // Convert to 0-based
+        if (newIndex == currentIndex) return;
+
+        // End current effect
+        if (effects[currentIndex]) {
+            effects[currentIndex]->end();
+        }
+
+        // Switch to new effect
+        currentIndex = newIndex;
+
+        // Begin new effect
+        if (effects[currentIndex]) {
+            effects[currentIndex]->begin();
+        }
+
+        Serial.printf("[EffectManager] Effect -> %d\n", effectNumber);
+    }
+
+    /**
+     * Set brightness (0-10 scale, clamped internally)
+     */
+    void setBrightness(uint8_t level) {
+        if (level > 10) level = 10;
+        brightness = level;
+        Serial.printf("[EffectManager] Brightness -> %d\n", brightness);
+    }
+
+    /**
+     * Increment brightness (clamps at 10)
+     */
+    void incrementBrightness() {
+        if (brightness < 10) {
+            brightness++;
+            Serial.printf("[EffectManager] Brightness UP -> %d\n", brightness);
+        }
+    }
+
+    /**
+     * Decrement brightness (clamps at 0)
+     */
+    void decrementBrightness() {
+        if (brightness > 0) {
+            brightness--;
+            Serial.printf("[EffectManager] Brightness DOWN -> %d\n", brightness);
+        }
+    }
+
+    /**
+     * Notify current effect of revolution boundary
+     * Call from hall sensor processing task
+     *
+     * @param usPerRev Microseconds per revolution
+     * @param timestamp Revolution timestamp
+     * @param revolutionCount Total revolution count
+     */
+    void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) {
+        if (currentIndex < effectCount && effects[currentIndex]) {
+            effects[currentIndex]->onRevolution(usPerRev, timestamp, revolutionCount);
+        }
+    }
+
+private:
+    Effect* effects[MAX_EFFECTS];
+    uint8_t effectCount;
+    uint8_t currentIndex;     // 0-based internally
+    uint8_t brightness;       // 0-10 scale
+    QueueHandle_t commandQueue;
+};
+
+#endif // EFFECT_MANAGER_H

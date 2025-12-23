@@ -1,5 +1,5 @@
 #include "ESPNowComm.h"
-#include "DisplayState.h"
+#include "EffectManager.h"
 #include "messages.h"
 
 #include <WiFi.h>
@@ -9,11 +9,11 @@
 
 #include "espnow_config.h"
 
-// Global display state instance
-DisplayState g_displayState;
+// Forward declare global (defined in main.cpp)
+extern EffectManager effectManager;
 
 // ESP-NOW receive callback - runs on WiFi task (Core 0)
-// Keep this fast - just update atomics and log
+// Keep this fast - just send commands to queue
 static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
     if (len < 1) return;
 
@@ -21,19 +21,13 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
 
     switch (msgType) {
         case MSG_BRIGHTNESS_UP: {
-            uint8_t current = g_displayState.brightness.load();
-            if (current < 10) {
-                g_displayState.brightness.store(current + 1);
-            }
-            Serial.printf("[ESPNOW] Brightness UP -> %d\n", g_displayState.brightness.load());
+            EffectCommand cmd = {EffectCommandType::BRIGHTNESS_UP, 0};
+            xQueueSend(effectManager.getCommandQueue(), &cmd, 0);
             break;
         }
         case MSG_BRIGHTNESS_DOWN: {
-            uint8_t current = g_displayState.brightness.load();
-            if (current > 0) {
-                g_displayState.brightness.store(current - 1);
-            }
-            Serial.printf("[ESPNOW] Brightness DOWN -> %d\n", g_displayState.brightness.load());
+            EffectCommand cmd = {EffectCommandType::BRIGHTNESS_DOWN, 0};
+            xQueueSend(effectManager.getCommandQueue(), &cmd, 0);
             break;
         }
         case MSG_SET_EFFECT: {
@@ -42,11 +36,8 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
                 return;
             }
             const SetEffectMsg* msg = reinterpret_cast<const SetEffectMsg*>(data);
-            // Only accept valid effect numbers (1-10)
-            if (msg->effect_number >= 1 && msg->effect_number <= 10) {
-                g_displayState.effectNumber.store(msg->effect_number);
-                Serial.printf("[ESPNOW] Effect -> %d\n", msg->effect_number);
-            }
+            EffectCommand cmd = {EffectCommandType::SET_EFFECT, msg->effect_number};
+            xQueueSend(effectManager.getCommandQueue(), &cmd, 0);
             break;
         }
         default:
