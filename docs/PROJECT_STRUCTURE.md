@@ -90,6 +90,8 @@ docs/
 ├── PROJECT_STRUCTURE.md      # This file - authoritative structure reference
 ├── ir-control-spec.md        # IR remote control implementation spec
 ├── led_display/              # LED display-specific docs
+│   ├── BUILD.md              # Build system, environments, debugging, IntelliSense
+│   ├── ESP32_REFERENCE.md    # Integer math system, angle units, FPU performance
 │   ├── HARDWARE.md           # Physical hardware (power system, components, sensors)
 │   ├── TIMING_ANALYSIS.md    # Jitter analysis, why NeoPixelBus matters
 │   ├── POV_DISPLAY.md        # Art-first philosophy, polar coordinates

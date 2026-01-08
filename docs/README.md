@@ -4,6 +4,8 @@
 
 See docs/led_display/ for LED display-specific documentation:
 
+- **BUILD.md** - Build system, environments, debugging, IntelliSense setup
+- **ESP32_REFERENCE.md** - Integer math system, angle units, FPU performance
 - **HARDWARE.md** - Physical hardware (power system, components, sensors)
 - **TIMING_ANALYSIS.md** - Deep dive on jitter, why NeoPixelBus is critical
 - **HARDWARE_TIMING_EXPLORATION.md** - ESP32 hardware timing alternatives (RMT, GPTimer, PCNT)
