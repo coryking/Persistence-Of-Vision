@@ -13,6 +13,9 @@ enum MessageType : uint8_t {
     MSG_EFFECT_MODE_PREV = 6,  // Motor Controller -> Display (cycle effect's internal mode backward)
     MSG_EFFECT_PARAM_UP = 7,   // Motor Controller -> Display (effect's secondary parameter up)
     MSG_EFFECT_PARAM_DOWN = 8, // Motor Controller -> Display (effect's secondary parameter down)
+    // Calibration messages (Display -> Motor Controller)
+    MSG_ACCEL_SAMPLES = 10,    // Batched accelerometer samples
+    MSG_HALL_EVENT = 11,       // Individual hall trigger event
 };
 
 // Display -> Motor Controller: Telemetry
@@ -64,5 +67,37 @@ struct EffectParamUpMsg {
 struct EffectParamDownMsg {
     uint8_t type = MSG_EFFECT_PARAM_DOWN;
 } __attribute__((packed));
+
+// =============================================================================
+// Calibration Messages (Display -> Motor Controller)
+// Used by CalibrationEffect for rotor balancing data collection
+// =============================================================================
+
+// Single accelerometer sample (nested struct for batching)
+struct AccelSample {
+    uint16_t delta_us;           // Offset from base timestamp (max 65ms)
+    int16_t x;                   // Raw X axis (256 LSB/g in full resolution)
+    int16_t y;                   // Raw Y axis
+    int16_t z;                   // Raw Z axis
+} __attribute__((packed));       // 8 bytes per sample
+
+// Display -> Motor Controller: Batched accelerometer samples
+// Sent periodically during calibration (~40 batches/sec at 400Hz sampling)
+struct AccelSampleMsg {
+    uint8_t type = MSG_ACCEL_SAMPLES;
+    uint32_t base_timestamp_us;  // Base time for batch (esp_timer_get_time())
+    uint8_t sample_count;        // Actual samples in this batch (1-20)
+    AccelSample samples[20];     // Up to 20 samples per batch
+} __attribute__((packed));
+// Size: 1 + 4 + 1 + (20 * 8) = 166 bytes max
+
+// Display -> Motor Controller: Hall sensor trigger event
+// Sent for each hall trigger during calibration (~20-47/sec at 1200-2800 RPM)
+struct HallEventMsg {
+    uint8_t type = MSG_HALL_EVENT;
+    uint32_t timestamp_us;       // Hall trigger time (same clock as accel samples)
+    uint32_t period_us;          // Time since previous hall trigger
+} __attribute__((packed));
+// Size: 9 bytes
 
 #endif // POV_MESSAGES_H

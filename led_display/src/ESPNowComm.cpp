@@ -2,6 +2,7 @@
 #include "EffectManager.h"
 #include "messages.h"
 
+#include <cstddef>  // for offsetof
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
@@ -128,5 +129,34 @@ void sendTelemetry(uint32_t timestamp_us, uint32_t hall_avg_us, uint16_t revolut
     if (result == ESP_OK) {
         Serial.printf("[ESPNOW] Sent telemetry: hall=%uus revs=%u notRot=%u skip=%u render=%u\n",
                       hall_avg_us, revolutions, notRotatingCount, skipCount, renderCount);
+    }
+}
+
+// =============================================================================
+// Calibration data functions
+// =============================================================================
+
+void sendAccelSamples(const AccelSampleMsg& msg) {
+    // Calculate actual message size based on sample count
+    size_t msgSize = offsetof(AccelSampleMsg, samples) + (msg.sample_count * sizeof(AccelSample));
+
+    esp_err_t result = esp_now_send(MOTOR_CONTROLLER_MAC,
+                                    reinterpret_cast<const uint8_t*>(&msg),
+                                    msgSize);
+    if (result != ESP_OK) {
+        Serial.println("[ESPNOW] AccelSamples send failed");
+    }
+}
+
+void sendHallEvent(uint32_t timestamp_us, uint32_t period_us) {
+    HallEventMsg msg;
+    msg.timestamp_us = timestamp_us;
+    msg.period_us = period_us;
+
+    esp_err_t result = esp_now_send(MOTOR_CONTROLLER_MAC,
+                                    reinterpret_cast<uint8_t*>(&msg),
+                                    sizeof(msg));
+    if (result != ESP_OK) {
+        Serial.println("[ESPNOW] HallEvent send failed");
     }
 }

@@ -52,7 +52,7 @@ struct EffectCommand {
  */
 class EffectManager {
 public:
-    static constexpr uint8_t MAX_EFFECTS = 8;
+    static constexpr uint8_t MAX_EFFECTS = 12;
     static constexpr uint8_t DEFAULT_BRIGHTNESS = 5;  // 0-10 scale
 
     EffectManager() : effectCount(0), currentIndex(0), brightness(DEFAULT_BRIGHTNESS), commandQueue(nullptr) {}

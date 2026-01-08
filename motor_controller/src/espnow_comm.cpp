@@ -5,6 +5,9 @@
 #include "messages.h"
 #include "espnow_config.h"
 
+// Track if we're in calibration mode (suppress normal telemetry logging)
+static bool s_calibrationMode = false;
+
 // ESP-NOW receive callback - runs on WiFi task
 static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
     if (len < 1) return;
@@ -17,6 +20,12 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
                 Serial.println("[ESPNOW] Telemetry msg too short");
                 return;
             }
+            // Telemetry arriving means calibration ended (display skips telemetry during calibration)
+            if (s_calibrationMode) {
+                Serial.println("# CAL_STOP");
+                s_calibrationMode = false;
+            }
+
             const TelemetryMsg* msg = reinterpret_cast<const TelemetryMsg*>(data);
             // Debug counters help diagnose strobe: notRot should be 0 during spin,
             // skip should be low, render should be high
@@ -30,6 +39,41 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
                 msg->renderCount);
             break;
         }
+
+        case MSG_ACCEL_SAMPLES: {
+            if (len < 6) {  // Minimum: type + base_timestamp + count
+                Serial.println("[ESPNOW] AccelSamples msg too short");
+                return;
+            }
+            const AccelSampleMsg* msg = reinterpret_cast<const AccelSampleMsg*>(data);
+
+            // Enter calibration mode on first accel message
+            if (!s_calibrationMode) {
+                s_calibrationMode = true;
+                Serial.println("# CAL_START");
+            }
+
+            // Print each sample as CSV line: A,timestamp,x,y,z
+            for (uint8_t i = 0; i < msg->sample_count; i++) {
+                const AccelSample& s = msg->samples[i];
+                uint32_t timestamp = msg->base_timestamp_us + s.delta_us;
+                Serial.printf("A,%lu,%d,%d,%d\n", timestamp, s.x, s.y, s.z);
+            }
+            break;
+        }
+
+        case MSG_HALL_EVENT: {
+            if (len < sizeof(HallEventMsg)) {
+                Serial.println("[ESPNOW] HallEvent msg too short");
+                return;
+            }
+            const HallEventMsg* msg = reinterpret_cast<const HallEventMsg*>(data);
+
+            // Print hall event as CSV line: H,timestamp,period
+            Serial.printf("H,%lu,%lu\n", msg->timestamp_us, msg->period_us);
+            break;
+        }
+
         default:
             Serial.printf("[ESPNOW] Unknown message type: %u\n", msgType);
             break;

@@ -1,0 +1,45 @@
+#ifndef CALIBRATION_EFFECT_H
+#define CALIBRATION_EFFECT_H
+
+#include "Effect.h"
+#include "Accelerometer.h"
+#include "messages.h"
+#include <esp_timer.h>
+
+/**
+ * Calibration Effect for rotor balancing
+ *
+ * When active:
+ * - Streams accelerometer samples over ESP-NOW
+ * - Enables hall event streaming (via global flag)
+ * - Keeps LEDs off to maximize CPU for sampling
+ *
+ * Data is sent to motor controller for serial output.
+ * Analyze in spreadsheet to find imbalance phase angle.
+ */
+class CalibrationEffect : public Effect {
+public:
+    void begin() override;
+    void end() override;
+    void render(RenderContext& ctx) override;
+    void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) override;
+
+private:
+    // Sample buffer for batching
+    static constexpr size_t BATCH_SIZE = 10;  // Send every 10 samples
+    AccelSampleMsg m_msg;
+    uint32_t m_batchStartTime = 0;
+
+    // Polling timing
+    uint32_t m_lastSampleTime = 0;
+    static constexpr uint32_t SAMPLE_INTERVAL_US = 2500;  // 400 Hz
+
+    void flushBatch();
+    void addSample(const Accelerometer::Reading& reading, uint32_t timestamp);
+};
+
+// Global flag: when true, hallProcessingTask sends HallEventMsg for each trigger
+// Set by CalibrationEffect::begin(), cleared by CalibrationEffect::end()
+extern volatile bool g_calibrationActive;
+
+#endif // CALIBRATION_EFFECT_H

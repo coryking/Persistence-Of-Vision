@@ -8,10 +8,6 @@
  * - Hall effect sensor triggers color changes (Red -> Green -> Blue -> White)
  * - Serial output shows hall triggers and color values
  *
- * Pin Configuration:
- * - D10/GPIO 9 (Blue wire):   SPI Data (MOSI)
- * - D8/GPIO 7 (Purple wire):  SPI Clock (SCK)
- * - D7/GPIO 44 (Brown wire):  Hall effect sensor (active LOW)
  */
 
 #include <Arduino.h>
@@ -20,7 +16,7 @@
 // Pin Definitions
 #define LED_DATA D10     // Blue wire - SPI Data (MOSI)
 #define LED_CLOCK D8     // Purple wire - SPI Clock (SCK)
-#define HALL_PIN D7      // Brown wire - Hall effect sensor
+#define HALL_PIN D5      // Brown wire - Hall effect sensor
 
 // LED Configuration
 #define NUM_LEDS 33     // 11 LEDs per arm × 3 arms

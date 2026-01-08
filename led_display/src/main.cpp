@@ -22,6 +22,8 @@
 #include "effects/ArmAlignment.h"
 #include "effects/PulseChaser.h"
 #include "effects/MomentumFlywheel.h"
+#include "effects/CalibrationEffect.h"
+#include "Accelerometer.h"
 #include "timing_utils.h"
 #include "hardware_config.h"
 #include "SlotTiming.h"
@@ -57,6 +59,7 @@ VirtualBlobs virtualBlobsEffect;
 ArmAlignment armAlignmentEffect;
 PulseChaser pulseChaserEffect;
 MomentumFlywheel momentumFlywheelEffect;
+CalibrationEffect calibrationEffect;
 
 // Effect manager
 EffectManager effectManager;
@@ -85,10 +88,17 @@ void hallProcessingTask(void* pvParameters) {
     bool wasRotating = false;  // Track motor state
     static uint16_t revolutionCount = 1;
     static uint16_t revsSinceTelemetry = 0;  // Track revolutions for telemetry
+    static timestamp_t lastHallTimestamp = 0;  // For period calculation
 
     while (1) {
         if (xQueueReceive(g_hallEventQueue, &event, portMAX_DELAY) == pdPASS) {
             revTimer.addTimestamp(event.triggerTimestamp);
+
+            // Calculate period since last hall trigger
+            uint32_t period_us = (lastHallTimestamp > 0)
+                ? static_cast<uint32_t>(event.triggerTimestamp - lastHallTimestamp)
+                : 0;
+            lastHallTimestamp = event.triggerTimestamp;
 
             // Detect motor start (stopped → rotating transition)
             bool isRotating = revTimer.isCurrentlyRotating();
@@ -98,6 +108,14 @@ void hallProcessingTask(void* pvParameters) {
             }
             wasRotating = isRotating;
 
+            // If calibration is active, send hall event for each trigger
+            if (g_calibrationActive) {
+                sendHallEvent(
+                    static_cast<uint32_t>(event.triggerTimestamp),
+                    period_us
+                );
+            }
+
             // Notify current effect of revolution
             effectManager.onRevolution(revTimer.getMicrosecondsPerRevolution(), event.triggerTimestamp, revolutionCount++);
 
@@ -105,9 +123,9 @@ void hallProcessingTask(void* pvParameters) {
                 Serial.println("Warm-up complete! Display active.");
             }
 
-            // Send telemetry every ROLLING_AVERAGE_SIZE revolutions
+            // Send telemetry every ROLLING_AVERAGE_SIZE revolutions (skip during calibration)
             revsSinceTelemetry++;
-            if (revsSinceTelemetry >= ROLLING_AVERAGE_SIZE) {
+            if (revsSinceTelemetry >= ROLLING_AVERAGE_SIZE && !g_calibrationActive) {
                 // Capture and reset debug counters atomically-ish (good enough for diagnostics)
                 uint16_t notRotating = g_notRotatingCount;
                 uint16_t skip = g_skipCount;
@@ -184,6 +202,14 @@ void startHallProcessingTask() {
     Serial.println("Hall processing task started");
 }
 
+void setupAccelerometer() {
+    if (accel.begin()) {
+        Serial.println("Accelerometer initialized");
+    } else {
+        Serial.println("WARNING: Accelerometer init failed - calibration unavailable");
+    }
+}
+
 void registerEffects() {
     effectManager.registerEffect(&noiseFieldEffect);
     effectManager.registerEffect(&noiseFieldRGBEffect);
@@ -194,6 +220,7 @@ void registerEffects() {
     effectManager.registerEffect(&armAlignmentEffect);
     effectManager.registerEffect(&pulseChaserEffect);
     effectManager.registerEffect(&momentumFlywheelEffect);
+    effectManager.registerEffect(&calibrationEffect);  // Effect 10 for rotor balancing
 
     Serial.printf("Registered %d effects\n", effectManager.getEffectCount());
 }
@@ -214,6 +241,7 @@ void setup() {
     setupLedStrip();
     setupHallSensor();
     startHallProcessingTask();
+    setupAccelerometer();
     registerEffects();
 
     // Initialize ESP-NOW communication with motor controller

@@ -1,6 +1,7 @@
 #ifndef HARDWARE_CONFIG_H
 #define HARDWARE_CONFIG_H
 
+#include <Arduino.h>
 #include <cstdint>
 
 namespace HardwareConfig {
@@ -16,18 +17,17 @@ namespace HardwareConfig {
 
     // Hardware pin assignments (Seeed XIAO ESP32S3)
     // See docs/led_display/HARDWARE.md for physical hardware details
-    constexpr uint8_t HALL_PIN = D4;       // Brown wire - Hall effect sensor
+    constexpr uint8_t HALL_PIN = D5;       // Brown wire - Hall effect sensor
     constexpr uint8_t SPI_DATA_PIN = D10;  // Blue wire - SK9822 Data (MOSI)
     constexpr uint8_t SPI_CLK_PIN = D8;    // Purple wire - SK9822 Clock (SCK)
 
-    // ADXL345 Accelerometer (SPI mode)
+    // ADXL345 Accelerometer (I2C mode - CS and SDO set HIGH in software)
     // Wire colors: SCL=Brown, SDA=Orange, SDO=Purple, INT1=Green, CS=Blue
-    constexpr uint8_t ACCEL_SCLK_PIN = D9;  // Brown wire - SPI Clock
-    constexpr uint8_t ACCEL_MOSI_PIN = D2;  // Orange wire - SPI MOSI (SDA on ADXL345)
-    constexpr uint8_t ACCEL_MISO_PIN = D3;  // Purple wire - SPI MISO (SDO on ADXL345)
-    constexpr uint8_t ACCEL_CS_PIN = D1;    // Blue wire - Chip Select
-    constexpr uint8_t ACCEL_INT1_PIN = D0;  // Green wire - Interrupt 1
-    // INT2 not connected
+    constexpr uint8_t ACCEL_SCL_PIN = D9;   // Brown wire - I2C Clock
+    constexpr uint8_t ACCEL_SDA_PIN = D2;   // Orange wire - I2C Data
+    constexpr uint8_t ACCEL_SDO_PIN = D3;   // Purple wire - Set HIGH for addr 0x1D
+    constexpr uint8_t ACCEL_CS_PIN = D1;    // Blue wire - Set HIGH to enable I2C mode
+    constexpr uint8_t ACCEL_INT1_PIN = D0;  // Green wire - Interrupt 1 (unused)
 
     // Physical arm layout (indexed by logical position)
     // Logical arm[0] = Outer (furthest from center, +240° from hall sensor)
