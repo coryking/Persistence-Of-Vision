@@ -1,0 +1,36 @@
+Handson Technology
+User Guide
+
+L298N Dual H-Bridge Motor Driver
+This dua l bidirectional motor driver, is based on the very popular L298 Dual H-Bridge Motor Driver
+Integrated Circuit. The circuit will allow you to easily and independently control two motors of up to 2A
+each in both directions.It is ideal for robotic applications and well suited for connection to a microcontroller
+requiring just a couple of control lines per motor. It can also be interfaced with simple manual switches,
+TTL logic gates, relays, etc. This board equipped with power LED indicators, on-board +5V regulator and
+protection diodes.
+
+SKU: MDU-1049
+Brief Data:
+
+Input Voltage: 3.2V~40Vdc.
+Driver: L298N Dual H Bridge DC Motor Driver
+Power Supply: DC 5 V - 35 V
+Peak current: 2 Amp
+Operating current range: 0 ~ 36mA
+Control signal input voltage range :
+Low: -0.3V ≤ Vin ≤ 1.5V.
+High: 2.3V ≤ Vin ≤ Vss.
+Enable signal input voltage range :
+o
+Low: -0.3 ≤ Vin ≤ 1.5V (control signal is invalid).
+o
+High: 2.3V ≤ Vin ≤ Vss (control signal active).
+Maximum power consumption: 20W (when the temperature T = 75 ℃).
+Storage temperature: -25 ℃ ~ +130 ℃.
+On-board +5V regulated Output supply (supply to controller board i.e. Arduino).
+Size: 3.4cm x 4.3cm x 2.7cm
+
+1
+
+www.handsontec.com
+

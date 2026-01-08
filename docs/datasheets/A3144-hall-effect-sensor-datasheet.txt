@@ -1,0 +1,23 @@
+A3141, A3142, A3143, and A3144
+Sensitive Hall Effect Switches for High-Temperature Operation
+
+Discontinued Product
+These parts are no longer in production The device should not be
+purchased for new design applications. Samples are no longer available.
+
+Date of status change: October 31, 2005
+
+Recommended Substitutions:
+For new customers and applications:
+â€¢ for the A3141, refer to the A1101
+â€¢ for the A3142, refer to the A1102
+â€¢ for the A3143, refer to the A1103
+â€¢ for the A3144, refer to the A1104
+
+NOTE: For detailed information on purchasing options, contact your
+local Allegro field applications engineer or sales representative.
+Allegro MicroSystems, Inc. reserves the right to make, from time to time, revisions to the anticipated product life cycle plan for a
+product to accommodate changes in production capabilities, alternative product availabilities, or market demand. The information
+included herein is believed to be accurate and reliable. However, Allegro MicroSystems, Inc. assumes no responsibility for its use; nor
+for any infringements of patents or other rights of third parties which may result from its use.
+

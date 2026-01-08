@@ -17,11 +17,16 @@ enum MessageType : uint8_t {
 
 // Display -> Motor Controller: Telemetry
 // Sent every ROLLING_AVERAGE_SIZE revolutions
+// All counters are reset after each send (delta since last telemetry)
 struct TelemetryMsg {
     uint8_t type = MSG_TELEMETRY;
     uint32_t timestamp_us;         // ESP timestamp (esp_timer_get_time())
-    uint16_t hall_avg_us;          // Rolling average hall sensor period (microseconds)
+    uint32_t hall_avg_us;          // Rolling average hall sensor period (microseconds) - needs 32-bit for <916 RPM
     uint16_t revolutions;          // Revolutions since last message
+    // Debug counters for strobe diagnosis (reset each telemetry send)
+    uint16_t notRotatingCount;     // Times handleNotRotating was called
+    uint16_t skipCount;            // Times we skipped (behind schedule)
+    uint16_t renderCount;          // Times we actually rendered + Show()
 } __attribute__((packed));
 
 // Motor Controller -> Display: Increment brightness

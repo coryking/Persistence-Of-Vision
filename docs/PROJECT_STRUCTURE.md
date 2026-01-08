@@ -70,7 +70,7 @@ led_display/
 └── platformio.ini            # Build config (ESP32-S3, pioarduino platform)
 ```
 
-**Hardware:** Seeed XIAO ESP32-S3, SK9822 LEDs (3 arms × 11 LEDs), hall effect sensor
+**Hardware:** Seeed XIAO ESP32-S3, SK9822 LEDs (3 arms × 11 LEDs), hall effect sensor, ADXL345 accelerometer
 
 ## Test Projects (`test_projects/`)
 
@@ -90,6 +90,7 @@ docs/
 ├── PROJECT_STRUCTURE.md      # This file - authoritative structure reference
 ├── ir-control-spec.md        # IR remote control implementation spec
 ├── led_display/              # LED display-specific docs
+│   ├── HARDWARE.md           # Physical hardware (power system, components, sensors)
 │   ├── TIMING_ANALYSIS.md    # Jitter analysis, why NeoPixelBus matters
 │   ├── POV_DISPLAY.md        # Art-first philosophy, polar coordinates
 │   ├── PROJECT_COMPARISON.md # Why queue-based hall sensor works

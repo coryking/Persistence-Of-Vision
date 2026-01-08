@@ -1,0 +1,47 @@
+From amazon
+
+"Taidacent 12V Input 12V2.5A Output High Current Low Heat Low Temperature Wireless Charging Module Wireless Power Supply Module (12V2.5A)"
+
+
+Product description
+Parameter
+Input voltage	12V
+Transmitter module size	13mm*20mm
+Transmitting coil	inner diameter 30mm outer diameter 81mm, inductance 14uH
+Receiving module	30mm*53mm
+Receiving coil	inner diameter 30mm outer diameter 81mm, inductance 14uH
+Receive output	Receive maximum current 12V2.5A
+Use distance	5mm~20mm
+XKT901-17
+Relation between receiving coil distance and output voltage and current
+When the distance is 5mm, the receiving output is 12V2.5A
+
+When the distance is 6mm, the receiving output is 12V2.3A
+
+When the distance is 7mm, the receiving output is 12V2.2A
+
+When the distance is 8mm, the receiving output is 12V2A; When the distance is 9mm, the receiving output is 12V2A
+
+When the distance is 10mm, the receiving output is 12V1.9A
+
+When the distance is 11mm, the receiving output is 12V1.5A
+
+When the distance is 12mm, the receiving output is 12V1.2A
+
+When the distance is 13mm, the receiving output is 12V1A; When the distance is 14mm, the receiving output is 12V1A
+
+When the distance is 15mm, the receiving output is 12V900mA
+
+When the distance is 16mm, the receiving output is 12V800mA
+
+When the distance is 17mm, the receiving output is 12V700mA
+
+When the distance is 18mm, the receiving output is 12V600mA
+
+When the distance is 19mm, the receiving output is 12V500mA
+
+When the distance is 20mm, the receiving output is 10V800mA
+
+Note that the sensing distance must be greater than 5mm, it will be damaged by overvoltage if placed close! ! !
+
+https://www.amazon.com/dp/B07W1Y97CC?th=1

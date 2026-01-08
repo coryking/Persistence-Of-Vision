@@ -53,66 +53,12 @@ This is an embedded systems project testing SPI performance for driving SK9822/A
 **See docs/PROJECT_STRUCTURE.md for complete project layout and where to find things in the codebase.**
 
 **The POV Display Vision**
-The ultimate goal is a spinning LED display with three arms arranged 120° apart. Each arm has 10 SK9822 LEDs, creating an interlaced 30-row radial display when spinning. A hall effect sensor detects rotation, subdividing each revolution into 360 angular columns (1° resolution) (as an example).
+The ultimate goal is a spinning LED display with three arms arranged 120° apart. Each arm has 11 SK9822 LEDs, creating an interlaced 33-row radial display when spinning. A hall effect sensor detects rotation, subdividing each revolution into 360 angular columns (1° resolution) (as an example).
 
 **The Timing Challenge:**
 
 - Operating range: 700-2800 RPM
 - See docs/Timing and Dimensionality Calculations.md for exact timing budgets at different RPMs
-
-### Why Exact Timing Matters
-
-POV displays work by persistence of vision - LEDs flash at precise angular positions as the disc rotates. **For this project, performance IS correctness.**
-
-**Jitter (timing inconsistency) causes visual artifacts:**
-
-- Image wobble (pixels appear at inconsistent angles)
-- Radial misalignment (multi-arm synchronization breaks)
-- Blurring (when LEDs update at wrong positions)
-- Beat patterns (when update timing drifts relative to rotation)
-
-**A slow but consistent update is better than a fast but jittery one.**
-
-**What causes jitter:**
-
-- **Interrupt latency**: Wi-Fi, USB, other peripherals stealing cycles
-- **Blocking operations**: Serial.print(), delay(), filesystem access in rendering path
-- **Memory allocations**: malloc/free in time-critical paths
-- **Task priority inversion**: Low-priority task holding resource needed by high-priority task
-- **Inconsistent ISR priority**: Competing interrupts
-- **Cache misses, branch mispredictions**: In tight loops
-
-**Current architecture (what's working):**
-
-- **Queue-based hall sensor** (not flag-based - see docs/PROJECT_COMPARISON.md for why)
-- **High-priority FreeRTOS task** for hall processing
-- **ISR timestamp capture** with IRAM_ATTR and esp_timer_get_time()
-- **NeoPixelBus library** (fast SPI - see docs/TIMING_ANALYSIS.md)
-- **No mutexes on RevolutionTimer** (atomic reads work fine, stale data doesn't matter)
-- **Pure integer math** in render path (no floats - see Integer Math System below)
-
-**Design implications:**
-
-- If timing looks inconsistent, check for jitter sources (blocking calls, malloc in loops, etc.)
-- Keep rendering path non-blocking (tight loop when active, delay() only during warmup)
-- Pre-allocate buffers if you can, but don't obsess
-- See timing budgets in docs if you need to understand constraints
-
-**Reference:** See docs/TIMING_ANALYSIS.md for deep dive on jitter sources and mitigation.
-
-### Why SK9822/APA102?
-
-4-wire clocked SPI protocol (unlike WS2812B's timing-sensitive 3-wire)
-Can drive up to 20-30MHz on hardware SPI
-Much more forgiving timing for high-speed updates
-Each arm's 11 LEDs can theoretically update in ~5.5μs at maximum SPI speed
-
-### Why ESP32-S3?
-
-- Tiny form factor (using Seeed XIAO ESP32S3)
-- WiFi for programming/control
-- Slip ring power delivery enables full brightness on all LEDs
-- Hardware SPI with DMA support
 
 ## Build System: PlatformIO + uv
 
@@ -163,15 +109,8 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 
 ## Hardware Configuration
 
-**See `include/hardware_config.h` for current hardware configuration.**
-
-**Summary:**
-- **Board**: Seeed XIAO ESP32S3
-- **LEDs**: 33 total SK9822 (APA102-compatible DotStar), 11 per arm, 3 arms
-- **Pin Assignments**: D10 (data/blue), D8 (clock/purple), D7 (hall/brown)
-- **Color Order**: BGR
-- **Power**: Slip ring configuration (full brightness capability)
-- **USB Port**: `/dev/cu.usbmodem2101` (macOS)
+**Pin assignments:** See `include/hardware_config.h`
+**Physical hardware:** See `docs/led_display/HARDWARE.md`
 
 **CRITICAL: When writing effect render loops, NEVER hardcode LED counts!**
 
@@ -271,13 +210,6 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 - Aliasing patterns from rotation speed might create interesting moiré effects
 - Beat patterns between update rate and rotation could be exploited artistically
 - **Point out unexpected visual behaviors instead of immediately "fixing" them**
-
-**Avoid common jitter sources:**
-
-- malloc/free in rendering loop (pre-allocate if needed)
-- Serial.print() during active rendering
-- Filesystem access in time-critical paths
-- Blocking operations in rendering loop
 
 ### When to Ask vs Just Do It
 

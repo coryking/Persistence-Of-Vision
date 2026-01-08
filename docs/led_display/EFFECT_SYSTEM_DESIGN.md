@@ -8,7 +8,7 @@ This POV display is **not** a rectangular framebuffer. It's three physical arms 
 - **Arm 1** (middle, hall trigger) is at angle θ
 - **Arm 2** (outer) is at angle θ + 240°
 
-Each arm has 10 radial LEDs. The "virtual 30-pixel radial line" is a useful fiction for some effects, but those 30 pixels are physically at three different angular positions right now.
+Each arm has 11 radial LEDs. The "virtual 33-pixel radial line" is a useful fiction for some effects, but those 33 pixels are physically at three different angular positions right now.
 
 **Previous approaches that failed:**
 - POV_Top used triple-buffering and treated the display as X×Y pixels. This abstracted away the physical reality and never worked reliably.
@@ -41,17 +41,17 @@ struct RenderContext {
     // === The Three Arms (physical reality) ===
     struct Arm {
         angle_t angleUnits;       // THIS arm's angle in units (3600 = 360°)
-        CRGB pixels[10];          // THIS arm's LEDs: [0]=hub, [9]=tip
+        CRGB pixels[LEDS_PER_ARM]; // THIS arm's LEDs: [0]=hub, [10]=tip
     } arms[3];                    // [0]=inner(+120°), [1]=middle(0°), [2]=outer(+240°)
 
     // === Virtual Pixel Access ===
-    // Virtual pixels 0-29 map to physical LEDs in radial order:
+    // Virtual pixels 0-32 map to physical LEDs in radial order:
     //   virt 0 = arm0:led0 (innermost)
     //   virt 1 = arm1:led0
     //   virt 2 = arm2:led0
     //   virt 3 = arm0:led1
     //   ...
-    //   virt 29 = arm2:led9 (outermost)
+    //   virt 32 = arm2:led10 (outermost)
 
     CRGB& virt(uint8_t v) {
         return arms[v % 3].pixels[v / 3];
@@ -63,7 +63,7 @@ struct RenderContext {
 
     // Fill virtual pixel range with solid color
     void fillVirtual(uint8_t start, uint8_t end, CRGB color) {
-        for (uint8_t v = start; v < end && v < 30; v++) {
+        for (uint8_t v = start; v < end && v < TOTAL_LEDS; v++) {
             virt(v) = color;
         }
     }
@@ -74,7 +74,7 @@ struct RenderContext {
                              uint8_t paletteStart = 0,
                              uint8_t paletteEnd = 255) {
         if (end <= start) return;
-        for (uint8_t v = start; v < end && v < 30; v++) {
+        for (uint8_t v = start; v < end && v < TOTAL_LEDS; v++) {
             uint8_t palIdx = map(v - start, 0, end - start - 1, paletteStart, paletteEnd);
             virt(v) = ColorFromPalette(palette, palIdx);
         }

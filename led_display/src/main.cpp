@@ -67,6 +67,12 @@ RenderContext renderCtx;
 // Global frame counter (shared via RenderContext)
 uint32_t globalFrameCount = 0;
 
+// Debug counters for strobe diagnosis (reset each telemetry send)
+// Written by loop(), read by hallProcessingTask - slight race is OK for diagnostics
+static volatile uint16_t g_notRotatingCount = 0;
+static volatile uint16_t g_skipCount = 0;
+static volatile uint16_t g_renderCount = 0;
+
 // Hall sensor event queue (set during setup - either simulator or real hardware)
 static QueueHandle_t g_hallEventQueue = nullptr;
 
@@ -102,10 +108,19 @@ void hallProcessingTask(void* pvParameters) {
             // Send telemetry every ROLLING_AVERAGE_SIZE revolutions
             revsSinceTelemetry++;
             if (revsSinceTelemetry >= ROLLING_AVERAGE_SIZE) {
+                // Capture and reset debug counters atomically-ish (good enough for diagnostics)
+                uint16_t notRotating = g_notRotatingCount;
+                uint16_t skip = g_skipCount;
+                uint16_t render = g_renderCount;
+                g_notRotatingCount = 0;
+                g_skipCount = 0;
+                g_renderCount = 0;
+
                 sendTelemetry(
                     static_cast<uint32_t>(esp_timer_get_time()),
-                    static_cast<uint16_t>(revTimer.getMicrosecondsPerRevolution()),
-                    revsSinceTelemetry
+                    static_cast<uint32_t>(revTimer.getMicrosecondsPerRevolution()),
+                    revsSinceTelemetry,
+                    notRotating, skip, render
                 );
                 revsSinceTelemetry = 0;
             }
@@ -225,6 +240,7 @@ void loop() {
 
     // 2. Handle not-rotating state
     if (!timing.isRotating || !timing.warmupComplete) {
+        g_notRotatingCount++;
         handleNotRotating(strip);
         g_lastRenderedSlot = -1;  // Reset on stop so we start fresh
         return;
@@ -237,6 +253,7 @@ void loop() {
     timestamp_t now = esp_timer_get_time();
     if (now > target.targetTime) {
         // We're behind - skip this slot and try the next one
+        g_skipCount++;
         g_lastRenderedSlot = target.slotNumber;
         return;
     }
@@ -275,6 +292,7 @@ void loop() {
 
     // 7. Fire at exact angular position
     strip.Show();
+    g_renderCount++;
 
     // 8. Update state for next iteration
     g_lastRenderedSlot = target.slotNumber;

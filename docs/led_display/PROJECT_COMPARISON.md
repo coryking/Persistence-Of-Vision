@@ -6,7 +6,7 @@ Quick reference guide for understanding the different POV display projects and t
 
 ### POV_Project (Current - this repository)
 **Location**: `/Users/coryking/projects/POV_Project`
-**Hardware**: ESP32-S3, 3 arms × 10 LEDs (30 total SK9822), single hall sensor
+**Hardware**: ESP32-S3, 3 arms × 11 LEDs (33 total SK9822), single hall sensor
 **Status**: Active development
 **RPM Range**: 1200-1940 RPM measured
 

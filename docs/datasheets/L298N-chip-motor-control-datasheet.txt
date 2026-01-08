@@ -1,0 +1,54 @@
+L298
+Datasheet
+
+Dual full-bridge driver
+Features
+
+Multiwatt15 V
+
+Multiwatt15 H
+
+â€¢
+â€¢
+â€¢
+â€¢
+â€¢
+
+Operating supply voltage up to 46 V.
+Total dc current up to 4 A.
+Low saturation voltage.
+Overtemperature protection.
+Logical "0" input voltage up to 1.5 V (high noise immunity).
+
+Applications
+
+PowerSO-20
+
+â€¢
+â€¢
+
+Dual brush DC motors
+Stepper motors
+
+Description
+
+Product summary
+L298
+
+Product label
+
+The L298 is an integrated monolithic circuit in a 15-lead multiwatt and PowerSO-20
+packages. It is a high-voltage, high-current dual full-bridge driver designed to accept
+standard TTL logic levels and drive inductive loads such as relays, solenoids, DC
+and stepping motors.
+Two enable inputs are provided to enable or disable the device independently of the
+input signals. The emitters of the lower transistors of each bridge are connected
+together and the corresponding external terminal can be used for the connection of
+an external sensing resistor. An additional supply input is provided so that the logic
+works at a lower voltage.
+
+DS0218 - Rev 5 - October 2023
+For further information contact your local STMicroelectronics sales office.
+
+www.st.com
+

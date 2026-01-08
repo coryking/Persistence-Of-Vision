@@ -114,14 +114,19 @@ void setupESPNow() {
         MOTOR_CONTROLLER_MAC[3], MOTOR_CONTROLLER_MAC[4], MOTOR_CONTROLLER_MAC[5]);
 }
 
-void sendTelemetry(uint32_t timestamp_us, uint16_t hall_avg_us, uint16_t revolutions) {
+void sendTelemetry(uint32_t timestamp_us, uint32_t hall_avg_us, uint16_t revolutions,
+                   uint16_t notRotatingCount, uint16_t skipCount, uint16_t renderCount) {
     TelemetryMsg msg;
     msg.timestamp_us = timestamp_us;
     msg.hall_avg_us = hall_avg_us;
     msg.revolutions = revolutions;
+    msg.notRotatingCount = notRotatingCount;
+    msg.skipCount = skipCount;
+    msg.renderCount = renderCount;
 
     esp_err_t result = esp_now_send(MOTOR_CONTROLLER_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
     if (result == ESP_OK) {
-        Serial.printf("[ESPNOW] Sent telemetry: hall=%uus revs=%u\n", hall_avg_us, revolutions);
+        Serial.printf("[ESPNOW] Sent telemetry: hall=%uus revs=%u notRot=%u skip=%u render=%u\n",
+                      hall_avg_us, revolutions, notRotatingCount, skipCount, renderCount);
     }
 }

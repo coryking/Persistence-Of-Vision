@@ -18,10 +18,16 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
                 return;
             }
             const TelemetryMsg* msg = reinterpret_cast<const TelemetryMsg*>(data);
-            Serial.printf("[TELEMETRY] ts=%lu hall_avg=%uus revs=%u\n",
-                msg->timestamp_us,
+            // Debug counters help diagnose strobe: notRot should be 0 during spin,
+            // skip should be low, render should be high
+            uint32_t rpm = (msg->hall_avg_us > 0) ? (60000000UL / msg->hall_avg_us) : 0;
+            Serial.printf("[TELEMETRY] %lu RPM (%luus) revs=%u | notRot=%u skip=%u render=%u\n",
+                rpm,
                 msg->hall_avg_us,
-                msg->revolutions);
+                msg->revolutions,
+                msg->notRotatingCount,
+                msg->skipCount,
+                msg->renderCount);
             break;
         }
         default:

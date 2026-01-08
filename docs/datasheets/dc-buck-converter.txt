@@ -1,0 +1,13 @@
+"EBOOT Mini MP1584EN DC-DC Buck Converter Adjustable Power Module 24V to 12V 9V 5V 3V(12 Pack)"
+
+Description:
+
+Size: 1.7*2.2cm
+Input Voltage:4.5V-28V
+Output Voltage:0.8-20V
+Output Current: 3A(Max)
+Working Temperature:-45c-85c
+Switching Frequency: 1.5MHz
+Conversion efficiency: 96%
+
+https://www.amazon.com/dp/B014Y3OT6Y
