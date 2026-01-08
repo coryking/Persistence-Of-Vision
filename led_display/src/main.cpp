@@ -189,7 +189,7 @@ void startHallProcessingTask() {
     BaseType_t taskCreated = xTaskCreate(
         hallProcessingTask,
         "hallProcessor",
-        2048,
+        4096,  // Increased from 2048 - was causing stack overflow
         nullptr,
         3,
         nullptr
