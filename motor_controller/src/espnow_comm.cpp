@@ -47,7 +47,7 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
         }
 
         case MSG_ACCEL_SAMPLES: {
-            if (len < 6) {  // Minimum: type + base_timestamp + count
+            if (len < 2) {  // Minimum: type + count
                 Serial.println("[ESPNOW] AccelSamples msg too short");
                 return;
             }
@@ -62,8 +62,7 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
             // Print each sample as CSV line: A,timestamp,x,y,z
             for (uint8_t i = 0; i < msg->sample_count; i++) {
                 const AccelSample& s = msg->samples[i];
-                uint32_t timestamp = msg->base_timestamp_us + s.delta_us;
-                Serial.printf("A,%lu,%d,%d,%d\n", timestamp, s.x, s.y, s.z);
+                Serial.printf("A,%llu,%d,%d,%d\n", s.timestamp_us, s.x, s.y, s.z);
             }
             break;
         }
@@ -76,7 +75,7 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
             const HallEventMsg* msg = reinterpret_cast<const HallEventMsg*>(data);
 
             // Print hall event as CSV line: H,timestamp,period
-            Serial.printf("H,%lu,%lu\n", msg->timestamp_us, msg->period_us);
+            Serial.printf("H,%llu,%lu\n", msg->timestamp_us, msg->period_us);
             break;
         }
 

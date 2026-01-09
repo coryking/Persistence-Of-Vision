@@ -74,23 +74,22 @@ struct EffectParamDownMsg {
 // Used by CalibrationEffect for rotor balancing data collection
 // =============================================================================
 
-// Single accelerometer sample (nested struct for batching)
+// Single accelerometer sample with absolute timestamp
 struct AccelSample {
-    uint16_t delta_us;           // Offset from base timestamp (max 65ms)
+    timestamp_t timestamp_us;    // Absolute timestamp (esp_timer_get_time()) - 64-bit
     accel_raw_t x;               // Raw X axis (256 LSB/g in full resolution)
     accel_raw_t y;               // Raw Y axis
     accel_raw_t z;               // Raw Z axis
-} __attribute__((packed));       // 8 bytes per sample
+} __attribute__((packed));       // 14 bytes per sample
 
 // Display -> Motor Controller: Batched accelerometer samples
 // Sent periodically during calibration (~40 batches/sec at 400Hz sampling)
 struct AccelSampleMsg {
     uint8_t type = MSG_ACCEL_SAMPLES;
-    timestamp_t base_timestamp_us;  // Base time for batch (esp_timer_get_time()) - 64-bit
-    uint8_t sample_count;           // Actual samples in this batch (1-20)
-    AccelSample samples[20];        // Up to 20 samples per batch
+    uint8_t sample_count;           // Actual samples in this batch (1-16)
+    AccelSample samples[16];        // Up to 16 samples per batch
 } __attribute__((packed));
-// Size: 1 + 8 + 1 + (20 * 8) = 170 bytes max
+// Size: 1 + 1 + (16 * 14) = 226 bytes max (under 250-byte ESP-NOW limit)
 
 // Display -> Motor Controller: Hall sensor trigger event
 // Sent for each hall trigger during calibration (~20-47/sec at 1200-2800 RPM)

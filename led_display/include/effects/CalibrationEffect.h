@@ -28,14 +28,13 @@ private:
     // Sample buffer for batching
     static constexpr size_t BATCH_SIZE = 10;  // Send every 10 samples
     AccelSampleMsg m_msg;
-    uint32_t m_batchStartTime = 0;
 
     // Polling timing
-    uint32_t m_lastSampleTime = 0;
+    timestamp_t m_lastSampleTime = 0;
     static constexpr uint32_t SAMPLE_INTERVAL_US = 2500;  // 400 Hz
 
     void flushBatch();
-    void addSample(const Accelerometer::Reading& reading, uint32_t timestamp);
+    void addSample(const Accelerometer::Reading& reading, timestamp_t timestamp);
 };
 
 // Global flag: when true, hallProcessingTask sends HallEventMsg for each trigger

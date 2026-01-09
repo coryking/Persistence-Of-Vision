@@ -11,7 +11,6 @@ void CalibrationEffect::begin() {
 
     // Initialize batch
     m_msg.sample_count = 0;
-    m_batchStartTime = 0;
     m_lastSampleTime = 0;
 
     // Enable hall event streaming
@@ -43,7 +42,7 @@ void CalibrationEffect::render(RenderContext& ctx) {
     }
 
     // Poll accelerometer at ~400Hz
-    uint32_t now = esp_timer_get_time();
+    timestamp_t now = esp_timer_get_time();
     if (now - m_lastSampleTime >= SAMPLE_INTERVAL_US) {
         m_lastSampleTime = now;
 
@@ -62,16 +61,10 @@ void CalibrationEffect::onRevolution(timestamp_t usPerRev, timestamp_t timestamp
     (void)revolutionCount;
 }
 
-void CalibrationEffect::addSample(const Accelerometer::Reading& reading, uint32_t timestamp) {
-    // Start new batch if needed
-    if (m_msg.sample_count == 0) {
-        m_batchStartTime = timestamp;
-        m_msg.base_timestamp_us = timestamp;
-    }
-
-    // Add sample to batch
+void CalibrationEffect::addSample(const Accelerometer::Reading& reading, timestamp_t timestamp) {
+    // Add sample to batch with absolute timestamp
     AccelSample& sample = m_msg.samples[m_msg.sample_count];
-    sample.delta_us = static_cast<uint16_t>(timestamp - m_batchStartTime);
+    sample.timestamp_us = timestamp;
     sample.x = reading.x;
     sample.y = reading.y;
     sample.z = reading.z;
@@ -91,5 +84,4 @@ void CalibrationEffect::flushBatch() {
 
     // Reset batch
     m_msg.sample_count = 0;
-    m_batchStartTime = 0;
 }
