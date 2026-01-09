@@ -14,4 +14,8 @@ enum class Command : uint8_t {
     EffectModePrev,    // Cycle effect mode backward
     EffectParamUp,     // Effect parameter up
     EffectParamDown,   // Effect parameter down
+    CaptureRecord,     // Start telemetry capture
+    CaptureStop,       // Stop telemetry capture
+    CapturePlay,       // Dump captured telemetry as CSV
+    CaptureDelete,     // Delete captured telemetry files
 };

@@ -2,17 +2,9 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <WiFi.h>
-#include <LittleFS.h>
 #include "messages.h"
 #include "espnow_config.h"
-
-// Track if we're in calibration mode (suppress normal telemetry logging)
-static bool s_calibrationMode = false;
-static File s_calFile;
-static const char* CAL_FILENAME = "/calibration.csv";
-
-// Forward declaration
-static void dumpCalibrationFile();
+#include "telemetry_capture.h"
 
 // ESP-NOW receive callback - runs on WiFi task
 static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
@@ -20,62 +12,31 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
 
     uint8_t msgType = data[0];
 
+    // Route high-rate telemetry to capture (or discard if not recording)
+    // No serial output for these - prevents buffer overflow
+    if (msgType == MSG_ACCEL_SAMPLES || msgType == MSG_HALL_EVENT) {
+        if (isCapturing()) {
+            captureWrite(msgType, data, len);
+        }
+        return;
+    }
+
     switch (msgType) {
         case MSG_TELEMETRY: {
             if (len < sizeof(TelemetryMsg)) {
                 Serial.println("[ESPNOW] Telemetry msg too short");
                 return;
             }
-            // Telemetry arriving means calibration ended (display skips telemetry during calibration)
-            if (s_calibrationMode) {
-                Serial.println("# CAL_STOP");
-                s_calibrationMode = false;
+
+            // Capture if recording
+            if (isCapturing()) {
+                captureWrite(msgType, data, len);
             }
 
+            // Keep RPM display (low rate, useful feedback)
             const TelemetryMsg* msg = reinterpret_cast<const TelemetryMsg*>(data);
-            // Debug counters help diagnose strobe: notRot should be 0 during spin,
-            // skip should be low, render should be high
             uint32_t rpm = (msg->hall_avg_us > 0) ? (60000000UL / msg->hall_avg_us) : 0;
-            Serial.printf("[TELEMETRY] %lu RPM (%luus) revs=%u | notRot=%u skip=%u render=%u\n",
-                rpm,
-                msg->hall_avg_us,
-                msg->revolutions,
-                msg->notRotatingCount,
-                msg->skipCount,
-                msg->renderCount);
-            break;
-        }
-
-        case MSG_ACCEL_SAMPLES: {
-            if (len < 2) {  // Minimum: type + count
-                Serial.println("[ESPNOW] AccelSamples msg too short");
-                return;
-            }
-            const AccelSampleMsg* msg = reinterpret_cast<const AccelSampleMsg*>(data);
-
-            // Enter calibration mode on first accel message
-            if (!s_calibrationMode) {
-                s_calibrationMode = true;
-                Serial.println("# CAL_START");
-            }
-
-            // Print each sample as CSV line: A,timestamp,x,y,z
-            for (uint8_t i = 0; i < msg->sample_count; i++) {
-                const AccelSample& s = msg->samples[i];
-                Serial.printf("A,%llu,%d,%d,%d\n", s.timestamp_us, s.x, s.y, s.z);
-            }
-            break;
-        }
-
-        case MSG_HALL_EVENT: {
-            if (len < sizeof(HallEventMsg)) {
-                Serial.println("[ESPNOW] HallEvent msg too short");
-                return;
-            }
-            const HallEventMsg* msg = reinterpret_cast<const HallEventMsg*>(data);
-
-            // Print hall event as CSV line: H,timestamp,period
-            Serial.printf("H,%llu,%lu\n", msg->timestamp_us, msg->period_us);
+            Serial.printf("[TELEMETRY] %lu RPM\n", rpm);
             break;
         }
 

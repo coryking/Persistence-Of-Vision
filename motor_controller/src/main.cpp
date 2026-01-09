@@ -6,6 +6,7 @@
 #include "espnow_comm.h"
 #include "remote_input.h"
 #include "command_processor.h"
+#include "telemetry_capture.h"
 
 void setup() {
     Serial.begin(921600);
@@ -16,6 +17,7 @@ void setup() {
     ledInit();
     setupESPNow();
     remoteInputInit();
+    captureInit();
 
     ledShowStopped();
     Serial.println("Ready. Use IR remote: POWER=on/off, REW/FF=speed control");

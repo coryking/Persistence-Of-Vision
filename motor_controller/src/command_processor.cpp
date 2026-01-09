@@ -3,6 +3,7 @@
 #include "motor_speed.h"
 #include "motor_control.h"
 #include "led_indicator.h"
+#include "telemetry_capture.h"
 
 void processCommand(Command cmd) {
     switch (cmd) {
@@ -43,6 +44,10 @@ void processCommand(Command cmd) {
                 motorSetSpeed(getCurrentPWM());
             }
             break;
+        case Command::CaptureRecord: captureStart(); break;
+        case Command::CaptureStop:   captureStop(); break;
+        case Command::CapturePlay:   capturePlay(); break;
+        case Command::CaptureDelete: captureDelete(); break;
         case Command::None:
         default:
             break;
