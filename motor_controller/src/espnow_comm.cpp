@@ -2,11 +2,17 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <WiFi.h>
+#include <LittleFS.h>
 #include "messages.h"
 #include "espnow_config.h"
 
 // Track if we're in calibration mode (suppress normal telemetry logging)
 static bool s_calibrationMode = false;
+static File s_calFile;
+static const char* CAL_FILENAME = "/calibration.csv";
+
+// Forward declaration
+static void dumpCalibrationFile();
 
 // ESP-NOW receive callback - runs on WiFi task
 static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {

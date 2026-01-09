@@ -8,7 +8,7 @@
 #include "command_processor.h"
 
 void setup() {
-    Serial.begin(115200);
+    Serial.begin(921600);
     Serial.println("POV Motor Controller - ESP32-S3-Zero");
 
     motorInit();
