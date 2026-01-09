@@ -3,7 +3,7 @@
 
 #include <cmath>
 #include <algorithm>
-#include "types.h"
+#include "geometry.h"
 #include "RenderContext.h"
 #include "fl/noise.h"
 #include "fl/map_range.h"

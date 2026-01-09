@@ -2,6 +2,7 @@
 #define POV_MESSAGES_H
 
 #include <stdint.h>
+#include "types.h"
 
 // Message types for ESP-NOW communication between motor controller and display
 enum MessageType : uint8_t {
@@ -23,8 +24,8 @@ enum MessageType : uint8_t {
 // All counters are reset after each send (delta since last telemetry)
 struct TelemetryMsg {
     uint8_t type = MSG_TELEMETRY;
-    uint32_t timestamp_us;         // ESP timestamp (esp_timer_get_time())
-    uint32_t hall_avg_us;          // Rolling average hall sensor period (microseconds) - needs 32-bit for <916 RPM
+    timestamp_t timestamp_us;      // ESP timestamp (esp_timer_get_time()) - 64-bit
+    period_t hall_avg_us;          // Rolling average hall sensor period (microseconds)
     uint16_t revolutions;          // Revolutions since last message
     // Debug counters for strobe diagnosis (reset each telemetry send)
     uint16_t notRotatingCount;     // Times handleNotRotating was called
@@ -76,28 +77,28 @@ struct EffectParamDownMsg {
 // Single accelerometer sample (nested struct for batching)
 struct AccelSample {
     uint16_t delta_us;           // Offset from base timestamp (max 65ms)
-    int16_t x;                   // Raw X axis (256 LSB/g in full resolution)
-    int16_t y;                   // Raw Y axis
-    int16_t z;                   // Raw Z axis
+    accel_raw_t x;               // Raw X axis (256 LSB/g in full resolution)
+    accel_raw_t y;               // Raw Y axis
+    accel_raw_t z;               // Raw Z axis
 } __attribute__((packed));       // 8 bytes per sample
 
 // Display -> Motor Controller: Batched accelerometer samples
 // Sent periodically during calibration (~40 batches/sec at 400Hz sampling)
 struct AccelSampleMsg {
     uint8_t type = MSG_ACCEL_SAMPLES;
-    uint32_t base_timestamp_us;  // Base time for batch (esp_timer_get_time())
-    uint8_t sample_count;        // Actual samples in this batch (1-20)
-    AccelSample samples[20];     // Up to 20 samples per batch
+    timestamp_t base_timestamp_us;  // Base time for batch (esp_timer_get_time()) - 64-bit
+    uint8_t sample_count;           // Actual samples in this batch (1-20)
+    AccelSample samples[20];        // Up to 20 samples per batch
 } __attribute__((packed));
-// Size: 1 + 4 + 1 + (20 * 8) = 166 bytes max
+// Size: 1 + 8 + 1 + (20 * 8) = 170 bytes max
 
 // Display -> Motor Controller: Hall sensor trigger event
 // Sent for each hall trigger during calibration (~20-47/sec at 1200-2800 RPM)
 struct HallEventMsg {
     uint8_t type = MSG_HALL_EVENT;
-    uint32_t timestamp_us;       // Hall trigger time (same clock as accel samples)
-    uint32_t period_us;          // Time since previous hall trigger
+    timestamp_t timestamp_us;    // Hall trigger time (same clock as accel samples) - 64-bit
+    period_t period_us;          // Time since previous hall trigger
 } __attribute__((packed));
-// Size: 9 bytes
+// Size: 13 bytes
 
 #endif // POV_MESSAGES_H

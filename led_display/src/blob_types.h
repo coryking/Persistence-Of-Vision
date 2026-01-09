@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include "esp_timer.h"
 #include <FastLED.h>
-#include "types.h"
+#include "geometry.h"
 
 // Arm indices (physical position)
 // arm[0] = outer (furthest from center), arm[1] = middle (hall sensor), arm[2] = inside (closest to center)

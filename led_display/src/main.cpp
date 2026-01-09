@@ -7,7 +7,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
-#include "types.h"
+#include "geometry.h"
 #include "RevolutionTimer.h"
 #include "HallEffectDriver.h"
 #include "RenderContext.h"

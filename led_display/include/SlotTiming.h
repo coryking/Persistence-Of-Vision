@@ -1,7 +1,7 @@
 #ifndef SLOT_TIMING_H
 #define SLOT_TIMING_H
 
-#include "types.h"
+#include "geometry.h"
 #include "RevolutionTimer.h"
 #include "RenderContext.h"
 #include "hardware_config.h"

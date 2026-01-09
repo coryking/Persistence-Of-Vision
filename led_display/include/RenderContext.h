@@ -2,7 +2,7 @@
 #define RENDER_CONTEXT_H
 
 #include <FastLED.h>
-#include "types.h"
+#include "geometry.h"
 #include "hardware_config.h"
 
 /**

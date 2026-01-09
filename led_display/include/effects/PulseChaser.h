@@ -2,7 +2,7 @@
 #define PULSE_CHASER_H
 
 #include "Effect.h"
-#include "types.h"
+#include "geometry.h"
 
 /**
  * Pulse Chaser - Hand-spin effect with chasing pulses

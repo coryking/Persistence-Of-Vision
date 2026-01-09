@@ -1,7 +1,7 @@
 #ifndef REVOLUTION_TIMER_H
 #define REVOLUTION_TIMER_H
 
-#include "types.h"
+#include "geometry.h"
 #include "RollingAverage.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
