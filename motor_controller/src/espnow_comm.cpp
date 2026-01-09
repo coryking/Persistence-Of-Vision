@@ -123,7 +123,8 @@ void setupESPNow() {
         return;
     }
 
-    Serial.printf("[ESPNOW] Ready. Display MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+    Serial.printf("[ESPNOW] My MAC: %s\n", WiFi.macAddress().c_str());
+    Serial.printf("[ESPNOW] Target (display) MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
         DISPLAY_MAC[0], DISPLAY_MAC[1], DISPLAY_MAC[2],
         DISPLAY_MAC[3], DISPLAY_MAC[4], DISPLAY_MAC[5]);
 }

@@ -67,12 +67,28 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
     }
 }
 
-// ESP-NOW send callback - optional, for debugging
+// ESP-NOW send callback
 // Note: ESP-IDF 5.x uses wifi_tx_info_t instead of mac address
 static void onDataSent(const wifi_tx_info_t* tx_info, esp_now_send_status_t status) {
     if (status != ESP_NOW_SEND_SUCCESS) {
-        Serial.println("[ESPNOW] Send failed");
+        Serial.println("[ESPNOW] No ACK from peer");
     }
+}
+
+// Helper to send and log errors
+static bool espnowSend(const uint8_t* data, size_t len, const char* msgName) {
+    esp_err_t result = esp_now_send(MOTOR_CONTROLLER_MAC, data, len);
+    if (result != ESP_OK) {
+        // Possible errors:
+        // ESP_ERR_ESPNOW_NOT_INIT - not initialized
+        // ESP_ERR_ESPNOW_ARG - invalid argument
+        // ESP_ERR_ESPNOW_NO_MEM - internal TX buffer full
+        // ESP_ERR_ESPNOW_NOT_FOUND - peer not registered
+        // ESP_ERR_ESPNOW_IF - WiFi interface mismatch
+        Serial.printf("[ESPNOW] %s queue failed: %s\n", msgName, esp_err_to_name(result));
+        return false;
+    }
+    return true;
 }
 
 void setupESPNow() {
@@ -110,7 +126,8 @@ void setupESPNow() {
         return;
     }
 
-    Serial.printf("[ESPNOW] Ready. Motor controller MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+    Serial.printf("[ESPNOW] My MAC: %s\n", WiFi.macAddress().c_str());
+    Serial.printf("[ESPNOW] Target (motor controller) MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
         MOTOR_CONTROLLER_MAC[0], MOTOR_CONTROLLER_MAC[1], MOTOR_CONTROLLER_MAC[2],
         MOTOR_CONTROLLER_MAC[3], MOTOR_CONTROLLER_MAC[4], MOTOR_CONTROLLER_MAC[5]);
 }
@@ -125,8 +142,7 @@ void sendTelemetry(uint32_t timestamp_us, uint32_t hall_avg_us, uint16_t revolut
     msg.skipCount = skipCount;
     msg.renderCount = renderCount;
 
-    esp_err_t result = esp_now_send(MOTOR_CONTROLLER_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
-    if (result == ESP_OK) {
+    if (espnowSend(reinterpret_cast<uint8_t*>(&msg), sizeof(msg), "Telemetry")) {
         Serial.printf("[ESPNOW] Sent telemetry: hall=%uus revs=%u notRot=%u skip=%u render=%u\n",
                       hall_avg_us, revolutions, notRotatingCount, skipCount, renderCount);
     }
@@ -139,24 +155,12 @@ void sendTelemetry(uint32_t timestamp_us, uint32_t hall_avg_us, uint16_t revolut
 void sendAccelSamples(const AccelSampleMsg& msg) {
     // Calculate actual message size based on sample count
     size_t msgSize = offsetof(AccelSampleMsg, samples) + (msg.sample_count * sizeof(AccelSample));
-
-    esp_err_t result = esp_now_send(MOTOR_CONTROLLER_MAC,
-                                    reinterpret_cast<const uint8_t*>(&msg),
-                                    msgSize);
-    if (result != ESP_OK) {
-        Serial.println("[ESPNOW] AccelSamples send failed");
-    }
+    espnowSend(reinterpret_cast<const uint8_t*>(&msg), msgSize, "AccelSamples");
 }
 
 void sendHallEvent(uint32_t timestamp_us, uint32_t period_us) {
     HallEventMsg msg;
     msg.timestamp_us = timestamp_us;
     msg.period_us = period_us;
-
-    esp_err_t result = esp_now_send(MOTOR_CONTROLLER_MAC,
-                                    reinterpret_cast<uint8_t*>(&msg),
-                                    sizeof(msg));
-    if (result != ESP_OK) {
-        Serial.println("[ESPNOW] HallEvent send failed");
-    }
+    espnowSend(reinterpret_cast<uint8_t*>(&msg), sizeof(msg), "HallEvent");
 }
