@@ -174,3 +174,59 @@ def save_csv_files(files: list[DumpedFile], output_dir: Path) -> list[Path]:
         saved.append(path)
 
     return saved
+
+
+def enrich_accel_csv(output_dir: Path) -> bool:
+    """Add rotation_num and micros_since_hall computed from hall event timestamps.
+
+    These columns were previously computed in firmware but are now computed in
+    post-processing to decouple telemetry from the LED render loop.
+
+    Returns True if enrichment was performed, False if files not found.
+    """
+    import numpy as np
+    import pandas as pd
+
+    accel_path = output_dir / "MSG_ACCEL_SAMPLES.csv"
+    hall_path = output_dir / "MSG_HALL_EVENT.csv"
+
+    if not accel_path.exists() or not hall_path.exists():
+        return False  # Nothing to enrich
+
+    accel = pd.read_csv(accel_path)
+    hall = pd.read_csv(hall_path)
+
+    if accel.empty or hall.empty:
+        return False
+
+    # Sort hall events by timestamp
+    hall = hall.sort_values('timestamp_us').reset_index(drop=True)
+
+    # Get timestamp arrays
+    hall_timestamps = hall['timestamp_us'].values
+    accel_timestamps = accel['timestamp_us'].values
+
+    # For each accel sample, find which hall interval it belongs to
+    # searchsorted returns insertion point; -1 gives the hall event before each sample
+    indices = np.searchsorted(hall_timestamps, accel_timestamps, side='right') - 1
+    indices_clipped = np.clip(indices, 0, len(hall) - 1)
+
+    # Assign rotation_num from the hall event that precedes each sample
+    accel['rotation_num'] = hall['rotation_num'].values[indices_clipped]
+
+    # Compute microseconds since that hall event
+    accel['micros_since_hall'] = accel_timestamps - hall_timestamps[indices_clipped]
+
+    # Handle samples before first hall event (shouldn't happen in normal operation)
+    before_first = indices < 0
+    accel.loc[before_first, 'rotation_num'] = 0
+    accel.loc[before_first, 'micros_since_hall'] = 0
+
+    # Reorder columns to match original format expected by analysis tools
+    cols = ['timestamp_us', 'sequence_num', 'rotation_num', 'micros_since_hall', 'x', 'y', 'z']
+    accel = accel[cols]
+
+    # Overwrite with enriched data
+    accel.to_csv(accel_path, index=False)
+
+    return True

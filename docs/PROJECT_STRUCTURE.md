@@ -57,6 +57,7 @@ ESP32-S3 firmware for the spinning POV display.
 led_display/
 ├── src/
 │   ├── main.cpp              # Main render loop, FreeRTOS task setup
+│   ├── TelemetryTask.cpp     # Decoupled accelerometer sampling task
 │   └── effects/              # Effect implementations
 ├── include/
 │   ├── hardware_config.h     # Pin definitions, LED counts, timing constants
@@ -66,6 +67,7 @@ led_display/
 │   ├── RevolutionTimer.h     # Hall sensor timing, rolling average calculation
 │   ├── SlotTiming.h          # Render slot calculation, copyPixelsToStrip()
 │   ├── RollingAverage.h      # Circular buffer for smoothing
+│   ├── TelemetryTask.h       # Telemetry task interface
 │   └── types.h               # angle_t, interval_t, key constants
 └── platformio.ini            # Build config (ESP32-S3, pioarduino platform)
 ```

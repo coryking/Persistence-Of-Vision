@@ -13,6 +13,7 @@ from .serial_comm import (
     DeviceConnection,
     DeviceError,
     save_csv_files,
+    enrich_accel_csv,
     DEFAULT_PORT,
 )
 
@@ -176,16 +177,23 @@ def dump(
 
             saved = save_csv_files(files, output_dir)
 
+            # Enrich accel CSV with rotation_num and micros_since_hall
+            # (computed from hall event timestamps, no longer in firmware)
+            enriched = enrich_accel_csv(output_dir)
+
             if json_output:
                 data = {
                     "files": [str(p) for p in saved],
-                    "output_dir": str(output_dir)
+                    "output_dir": str(output_dir),
+                    "enriched": enriched
                 }
                 print(json.dumps(data))
             else:
                 console.print(f"[green]Saved {len(saved)} files to {output_dir}[/green]")
                 for p in saved:
                     console.print(f"  {p.name}")
+                if enriched:
+                    console.print("[dim]Added rotation_num and micros_since_hall to accel CSV[/dim]")
 
     except DeviceError as e:
         err_console.print(f"[red]Error:[/red] {e}")

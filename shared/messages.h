@@ -75,38 +75,41 @@ struct EffectParamDownMsg {
 // Used by CalibrationEffect for rotor balancing data collection
 // =============================================================================
 
-// ESP-NOW maximum payload size
-static constexpr size_t ESP_NOW_MAX_PAYLOAD = 250;
+// ESP-NOW v2.0 payload limit (ESP-IDF 5.4+)
+// Both devices are ESP32-S3 on ESP-IDF 5.5, so v2.0 is available.
+// Note: esp_now.h defines ESP_NOW_MAX_DATA_LEN (250) and ESP_NOW_MAX_DATA_LEN_V2 (1470)
+static constexpr size_t ESPNOW_MAX_PAYLOAD_V2 = 1470;
 
-// Single accelerometer sample with absolute timestamp and rotation tracking
-struct AccelSample {
-    timestamp_t timestamp_us;    // Absolute timestamp (esp_timer_get_time()) - 64-bit
-    sequence_t sequence_num;     // Monotonic counter for drop detection (wraps at 65535)
-    rotation_t rotation_num;     // Which revolution this sample is from
-    period_t micros_since_hall;  // Microseconds since last hall trigger (for phase calculation)
-    accel_raw_t x;               // X axis (float from ADXL345_WE library)
-    accel_raw_t y;               // Y axis
-    accel_raw_t z;               // Z axis
+// Individual sample for wire transmission (delta timestamps for efficiency)
+// 8 bytes per sample (vs 28 bytes with absolute timestamps)
+struct AccelSampleWire {
+    uint16_t delta_us;           // 2 bytes - offset from batch base_timestamp (max 65ms)
+    accel_raw_t x, y, z;         // 6 bytes (3 × int16_t)
 } __attribute__((packed));
 
-// AccelSampleMsg header size (type + sample_count)
-static constexpr size_t ACCEL_MSG_HEADER_SIZE = sizeof(uint8_t) + sizeof(uint8_t);
+// Maximum samples per batch
+// At 800Hz, 50 samples = 62.5ms of data = ~16 packets/sec (vs ~100 with old format)
+// Header: 12 bytes, Per sample: 8 bytes
+// Max with v2.0: (1470 - 12) / 8 = 182 samples, but 50 provides reasonable latency
+static constexpr size_t ACCEL_SAMPLES_MAX_BATCH = 50;
 
-// Maximum samples per batch, calculated from ESP-NOW limit
-static constexpr size_t ACCEL_SAMPLES_MAX_BATCH =
-    (ESP_NOW_MAX_PAYLOAD - ACCEL_MSG_HEADER_SIZE) / sizeof(AccelSample);
+// AccelSampleMsg header size (type + sample_count + base_timestamp + start_sequence)
+static constexpr size_t ACCEL_MSG_HEADER_SIZE =
+    sizeof(uint8_t) + sizeof(uint8_t) + sizeof(timestamp_t) + sizeof(sequence_t);
 
-// Display -> Motor Controller: Batched accelerometer samples
-// Sent periodically during calibration (~33 batches/sec at 400Hz sampling)
+// Display -> Motor Controller: Batched accelerometer samples with delta timestamps
+// Motor controller expands deltas to absolute timestamps when writing to file
 struct AccelSampleMsg {
     uint8_t type = MSG_ACCEL_SAMPLES;
-    uint8_t sample_count;                       // Actual samples in this batch
-    AccelSample samples[ACCEL_SAMPLES_MAX_BATCH];
+    uint8_t sample_count;                           // Actual samples in this batch
+    timestamp_t base_timestamp;                     // Absolute time of first sample
+    sequence_t start_sequence;                      // Sequence number of first sample
+    AccelSampleWire samples[ACCEL_SAMPLES_MAX_BATCH];
 } __attribute__((packed));
 
-// Verify message fits in ESP-NOW payload
-static_assert(sizeof(AccelSampleMsg) <= ESP_NOW_MAX_PAYLOAD,
-              "AccelSampleMsg exceeds ESP-NOW payload limit");
+// Verify message fits in ESP-NOW v2.0 payload
+static_assert(sizeof(AccelSampleMsg) <= ESPNOW_MAX_PAYLOAD_V2,
+              "AccelSampleMsg exceeds ESP-NOW v2.0 payload limit");
 
 // Display -> Motor Controller: Hall sensor trigger event
 // Sent for each hall trigger during calibration (~20-47/sec at 1200-2800 RPM)

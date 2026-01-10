@@ -1,0 +1,160 @@
+#include "TelemetryTask.h"
+#include "Accelerometer.h"
+#include "ESPNowComm.h"
+#include "messages.h"
+#include "types.h"
+
+#include <Arduino.h>
+#include <esp_timer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+// Task configuration
+static constexpr size_t TELEMETRY_TASK_STACK = 4096;
+static constexpr UBaseType_t TELEMETRY_TASK_PRIORITY = 2;  // Below hallProcessingTask (3)
+static constexpr BaseType_t TELEMETRY_TASK_CORE = 0;       // Same as WiFi stack
+
+// Flush timeout: send partial batch after this many microseconds
+// 500ms is conservative - at 800Hz normal operation fills 50-sample batch in 62ms
+static constexpr uint64_t BATCH_FLUSH_TIMEOUT_US = 500000;
+
+// Task state
+static TaskHandle_t s_taskHandle = nullptr;
+static volatile bool s_enabled = false;
+
+// Batch buffer and state
+static AccelSampleMsg s_msg;
+static sequence_t s_sequenceNum = 0;
+static timestamp_t s_lastSendTime = 0;
+
+/**
+ * Add a sample to the current batch
+ */
+static void addSampleToBatch(timestamp_t timestamp, int16_t x, int16_t y, int16_t z) {
+    uint8_t idx = s_msg.sample_count;
+
+    if (idx == 0) {
+        // First sample in batch - set base timestamp and sequence
+        s_msg.base_timestamp = timestamp;
+        s_msg.start_sequence = s_sequenceNum;
+        s_msg.samples[idx].delta_us = 0;
+    } else {
+        // Subsequent samples - compute delta from base
+        uint64_t delta = timestamp - s_msg.base_timestamp;
+        // Clamp to 16-bit (max 65535 us = ~65ms, batch spans ~62ms max at 800Hz)
+        s_msg.samples[idx].delta_us = (delta > 65535) ? 65535 : static_cast<uint16_t>(delta);
+    }
+
+    s_msg.samples[idx].x = x;
+    s_msg.samples[idx].y = y;
+    s_msg.samples[idx].z = z;
+
+    s_msg.sample_count++;
+    s_sequenceNum++;
+}
+
+/**
+ * Send the current batch via ESP-NOW and reset
+ */
+static void sendBatch() {
+    if (s_msg.sample_count == 0) return;
+    sendAccelSamples(s_msg);
+    s_msg.sample_count = 0;
+    s_lastSendTime = esp_timer_get_time();
+}
+
+/**
+ * FreeRTOS task function
+ */
+static void telemetryTaskFunc(void* pvParameters) {
+    (void)pvParameters;
+
+    while (true) {
+        // Wait for enable signal
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        Serial.println("[TELEM] Telemetry task started");
+
+        // Reset batch state
+        s_msg.sample_count = 0;
+        s_sequenceNum = 0;
+        s_lastSendTime = esp_timer_get_time();
+
+        // Processing loop - runs while enabled
+        while (s_enabled) {
+            timestamp_t sampleTimestamp;
+
+            // Try to get a timestamp from the queue (10ms timeout)
+            if (xQueueReceive(g_accelTimestampQueue, &sampleTimestamp, pdMS_TO_TICKS(10)) == pdTRUE) {
+                // Read the actual accelerometer values
+                xyzFloat reading;
+                if (accel.read(reading)) {
+                    // Convert float to int16_t (ADXL345 returns whole numbers as float)
+                    int16_t x = static_cast<int16_t>(reading.x);
+                    int16_t y = static_cast<int16_t>(reading.y);
+                    int16_t z = static_cast<int16_t>(reading.z);
+
+                    addSampleToBatch(sampleTimestamp, x, y, z);
+
+                    // Send batch when full
+                    if (s_msg.sample_count >= ACCEL_SAMPLES_MAX_BATCH) {
+                        sendBatch();
+                    }
+                }
+            }
+
+            // Time-based flush: send partial batch if timeout exceeded
+            if (s_msg.sample_count > 0) {
+                timestamp_t now = esp_timer_get_time();
+                if ((now - s_lastSendTime) >= BATCH_FLUSH_TIMEOUT_US) {
+                    sendBatch();
+                }
+            }
+        }
+
+        // Flush remaining samples on stop
+        if (s_msg.sample_count > 0) {
+            sendBatch();
+        }
+
+        Serial.printf("[TELEM] Telemetry task stopped (%u samples sent)\n", s_sequenceNum);
+    }
+}
+
+void telemetryTaskInit() {
+    // Initialize message type
+    s_msg.type = MSG_ACCEL_SAMPLES;
+    s_msg.sample_count = 0;
+
+    BaseType_t result = xTaskCreatePinnedToCore(
+        telemetryTaskFunc,
+        "telemetryTask",
+        TELEMETRY_TASK_STACK,
+        nullptr,
+        TELEMETRY_TASK_PRIORITY,
+        &s_taskHandle,
+        TELEMETRY_TASK_CORE
+    );
+
+    if (result != pdPASS) {
+        Serial.println("[TELEM] Failed to create telemetry task!");
+        return;
+    }
+
+    Serial.println("[TELEM] Telemetry task initialized (waiting for start)");
+}
+
+void telemetryTaskStart() {
+    if (!s_taskHandle) {
+        Serial.println("[TELEM] Task not initialized!");
+        return;
+    }
+
+    s_enabled = true;
+    xTaskNotifyGive(s_taskHandle);
+}
+
+void telemetryTaskStop() {
+    s_enabled = false;
+    // Task will flush and return to waiting state on next queue timeout
+}

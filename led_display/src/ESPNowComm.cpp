@@ -111,6 +111,12 @@ void setupESPNow() {
         return;
     }
 
+    // Verify ESP-NOW version (need v2 for 1470 byte payloads)
+    uint32_t version;
+    if (esp_now_get_version(&version) == ESP_OK) {
+        Serial.printf("[ESPNOW] Version: %lu (need 2 for v2.0 large payloads)\n", version);
+    }
+
     // Register callbacks
     esp_now_register_recv_cb(onDataRecv);
     esp_now_register_send_cb(onDataSent);
@@ -154,7 +160,9 @@ void sendTelemetry(uint32_t timestamp_us, uint32_t hall_avg_us, uint16_t revolut
 
 void sendAccelSamples(const AccelSampleMsg& msg) {
     // Calculate actual message size based on sample count
-    size_t msgSize = offsetof(AccelSampleMsg, samples) + (msg.sample_count * sizeof(AccelSample));
+    // Header: type(1) + sample_count(1) + base_timestamp(8) + start_sequence(2) = 12 bytes
+    // Plus sample_count * sizeof(AccelSampleWire) = sample_count * 8 bytes
+    size_t msgSize = ACCEL_MSG_HEADER_SIZE + (msg.sample_count * sizeof(AccelSampleWire));
     espnowSend(reinterpret_cast<const uint8_t*>(&msg), msgSize, "AccelSamples");
 }
 

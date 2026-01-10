@@ -24,6 +24,7 @@
 #include "effects/MomentumFlywheel.h"
 #include "effects/CalibrationEffect.h"
 #include "Accelerometer.h"
+#include "TelemetryTask.h"
 #include "timing_utils.h"
 #include "hardware_config.h"
 #include "SlotTiming.h"
@@ -221,6 +222,8 @@ void startHallProcessingTask() {
 void setupAccelerometer() {
     if (accel.begin()) {
         Serial.println("Accelerometer initialized");
+        // Initialize telemetry task (waits for CalibrationEffect to start it)
+        telemetryTaskInit();
     } else {
         Serial.println("WARNING: Accelerometer init failed - calibration unavailable");
     }

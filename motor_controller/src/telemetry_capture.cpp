@@ -22,15 +22,15 @@ static const uint32_t QUEUE_SEND_TIMEOUT_MS = 100;    // Blocking queue send tim
 static const char* TELEMETRY_DIR = "/telemetry";
 
 // Binary record formats (packed structs for file storage)
+// Note: rotation_num and micros_since_hall are computed in Python post-processing
+// from timestamp correlation with hall events
 struct AccelRecord {
-    timestamp_t timestamp;      // 64-bit absolute timestamp
-    sequence_t sequence_num;    // Sample sequence for drop detection
-    rotation_t rotation_num;    // Which revolution this sample is from
-    period_t micros_since_hall; // Microseconds since last hall trigger (for phase)
-    accel_raw_t x;              // X axis (float from ADXL345_WE library)
+    timestamp_t timestamp;      // 64-bit absolute timestamp (expanded from delta)
+    sequence_t sequence_num;    // Sample sequence for drop detection (expanded from start + index)
+    accel_raw_t x;              // X axis (int16_t - ADXL345 raw values)
     accel_raw_t y;              // Y axis
     accel_raw_t z;              // Z axis
-} __attribute__((packed));
+} __attribute__((packed));  // 16 bytes total
 
 struct HallRecord {
     timestamp_t timestamp;      // 64-bit: when hall sensor triggered
@@ -228,13 +228,13 @@ static void dumpFileCSV(uint8_t msgType, File& file, size_t dataSize) {
             size_t recordCount = dataSize / sizeof(AccelRecord);
             Serial.printf("=== FILE: %s.bin (%zu records) ===\n",
                           getMsgTypeName(msgType), recordCount);
-            Serial.println("timestamp_us,sequence_num,rotation_num,micros_since_hall,x,y,z");
+            // Note: rotation_num and micros_since_hall computed in Python post-processing
+            Serial.println("timestamp_us,sequence_num,x,y,z");
 
             AccelRecord rec;
             while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%u,%u,%u,%.2f,%.2f,%.2f\n",
-                              rec.timestamp, rec.sequence_num, rec.rotation_num,
-                              rec.micros_since_hall, rec.x, rec.y, rec.z);
+                Serial.printf("%llu,%u,%d,%d,%d\n",
+                              rec.timestamp, rec.sequence_num, rec.x, rec.y, rec.z);
             }
             break;
         }
@@ -310,7 +310,7 @@ static void waitForKeypress() {
 static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
     switch (msgType) {
         case MSG_ACCEL_SAMPLES: {
-            // Validate minimum size: header
+            // Validate minimum size: header (type + count + base_timestamp + start_sequence)
             if (len < ACCEL_MSG_HEADER_SIZE) return;
             const AccelSampleMsg* msg = reinterpret_cast<const AccelSampleMsg*>(data);
 
@@ -318,17 +318,17 @@ static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
             if (msg->sample_count == 0 || msg->sample_count > ACCEL_SAMPLES_MAX_BATCH) return;
 
             // Validate length matches sample_count
-            size_t expected = ACCEL_MSG_HEADER_SIZE + (msg->sample_count * sizeof(AccelSample));
+            size_t expected = ACCEL_MSG_HEADER_SIZE + (msg->sample_count * sizeof(AccelSampleWire));
             if (len < expected) return;
 
-            // Build batch of records
+            // Expand delta timestamps to absolute and build records
             AccelRecord records[ACCEL_SAMPLES_MAX_BATCH];
             for (uint8_t i = 0; i < msg->sample_count; i++) {
-                const AccelSample& s = msg->samples[i];
-                records[i].timestamp = s.timestamp_us;
-                records[i].sequence_num = s.sequence_num;
-                records[i].rotation_num = s.rotation_num;
-                records[i].micros_since_hall = s.micros_since_hall;
+                const AccelSampleWire& s = msg->samples[i];
+                // Expand delta to absolute timestamp
+                records[i].timestamp = msg->base_timestamp + s.delta_us;
+                // Expand sequence number
+                records[i].sequence_num = msg->start_sequence + i;
                 records[i].x = s.x;
                 records[i].y = s.y;
                 records[i].z = s.z;
@@ -698,12 +698,12 @@ static void dumpFileScript(uint8_t msgType, File& file, size_t dataSize) {
 
     switch (msgType) {
         case MSG_ACCEL_SAMPLES: {
-            Serial.println("timestamp_us,sequence_num,rotation_num,micros_since_hall,x,y,z");
+            // Note: rotation_num and micros_since_hall computed in Python post-processing
+            Serial.println("timestamp_us,sequence_num,x,y,z");
             AccelRecord rec;
             while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%u,%u,%u,%.2f,%.2f,%.2f\n",
-                              rec.timestamp, rec.sequence_num, rec.rotation_num,
-                              rec.micros_since_hall, rec.x, rec.y, rec.z);
+                Serial.printf("%llu,%u,%d,%d,%d\n",
+                              rec.timestamp, rec.sequence_num, rec.x, rec.y, rec.z);
             }
             break;
         }

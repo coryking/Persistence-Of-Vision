@@ -38,15 +38,21 @@ The POV display rotor exhibits significant vibration at high speed (2300-2800 RP
 
 ## Telemetry Data Fields
 
-Each accelerometer sample includes fields for phase analysis:
+Accelerometer samples and hall events are captured separately and correlated in post-processing.
+
+**Wire format (ESP-NOW):** Uses delta timestamps for efficiency (8 bytes/sample vs 28 originally). Motor controller expands to absolute timestamps when storing.
+
+**CSV format after `pov telemetry dump`:**
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `timestamp_us` | u64 | Absolute microsecond timestamp (from DATA_READY interrupt) |
 | `sequence_num` | u16 | Monotonic counter - gaps indicate dropped samples |
-| `rotation_num` | u16 | Which revolution this sample is from (links to hall events) |
-| `micros_since_hall` | u32 | Microseconds since last hall trigger |
-| `x`, `y`, `z` | float | Accelerometer raw values (±16g range, 3.9mg/LSB) |
+| `rotation_num` | u16 | Which revolution this sample is from (computed in post-processing) |
+| `micros_since_hall` | u64 | Microseconds since last hall trigger (computed in post-processing) |
+| `x`, `y`, `z` | i16 | Accelerometer raw values (±16g range, 3.9mg/LSB) |
+
+**Post-processing:** The `pov telemetry dump` command automatically enriches the accel CSV by correlating timestamps with hall events to compute `rotation_num` and `micros_since_hall`.
 
 **Computing phase:**
 ```python
@@ -54,7 +60,7 @@ phase = accel['micros_since_hall'] / hall['period_us']  # 0.0 to 1.0
 angle_deg = phase * 360  # 0° to 360°
 ```
 
-Hall events include `rotation_num` to definitively link samples to rotations without timestamp correlation.
+Hall events include `rotation_num` which is used during post-processing to link samples to rotations.
 
 ## Accelerometer Physics
 
@@ -148,11 +154,14 @@ No integration or coordinate transforms required.
 
 DATA_READY interrupt is connected: INT1 → GPIO D0 (green wire).
 
-**Implementation (FreeRTOS queue pattern):**
+**Implementation (decoupled FreeRTOS task):**
 1. ADXL345 fires DATA_READY interrupt when new sample ready
-2. ISR captures `esp_timer_get_time()` timestamp and queues it
-3. CalibrationEffect's render() drains queue, reads samples with accurate timestamps
-4. Samples batched and sent via ESP-NOW to motor controller
+2. ISR captures `esp_timer_get_time()` timestamp and queues it (64-slot buffer)
+3. TelemetryTask (dedicated FreeRTOS task on Core 0) drains queue, reads samples
+4. Samples batched with delta timestamps and sent via ESP-NOW to motor controller
+5. Motor controller expands deltas to absolute timestamps when storing
+
+This architecture decouples telemetry from the LED render loop, preventing sample drops when render() skips or busy-waits. The ~62ms batch window (50 samples at 800Hz) with 500ms timeout ensures data is sent even if sampling rate varies.
 
 This gives ~1° timestamp accuracy vs ~34° error from polling at 2800 RPM.
 

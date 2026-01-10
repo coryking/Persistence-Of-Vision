@@ -19,9 +19,10 @@ typedef uint64_t interval_t;
 // 32-bit is sufficient: max useful period ~1 second at 60 RPM = 1,000,000 µs
 typedef uint32_t period_t;
 
-// Accelerometer axis value (float for compatibility with ADXL345_WE library)
-// Typedef'd so sensor changes only require updating this one place
-typedef float accel_raw_t;
+// Accelerometer axis value (int16_t - ADXL345 outputs 13-bit signed integers)
+// The ADXL345_WE library returns float, but values are always whole numbers.
+// Using int16_t saves 6 bytes per sample (18 bytes → 6 bytes for x,y,z).
+typedef int16_t accel_raw_t;
 
 // Sample sequence number for drop detection (wraps at 65535)
 typedef uint16_t sequence_t;

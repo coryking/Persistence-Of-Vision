@@ -54,15 +54,17 @@ MSG_HALL_EVENT.bin<TAB>456<TAB>789
 **DUMP output format:**
 ```
 >>> MSG_ACCEL_SAMPLES.bin
-timestamp_us,sequence_num,rotation_num,micros_since_hall,x,y,z
-1234567890,1,42,15234,0.12,-0.34,9.81
-1234569140,2,42,16484,0.11,-0.35,9.80
+timestamp_us,sequence_num,x,y,z
+1234567890,1,12,-34,981
+1234569140,2,11,-35,980
 >>> MSG_HALL_EVENT.bin
 timestamp_us,period_us,rotation_num
 1234567890,25000,42
 1234592890,25000,43
 >>>
 ```
+
+Note: `rotation_num` and `micros_since_hall` are computed in Python post-processing by correlating accel timestamps with hall events. The `pov telemetry dump` command automatically adds these columns to the CSV output.
 
 ## Architecture
 
@@ -135,13 +137,16 @@ The first byte is the message type (from `messages.h`), followed by packed binar
 
 | Message Type | Record Size | Fields |
 |--------------|-------------|--------|
-| MSG_ACCEL_SAMPLES (10) | 28 bytes | timestamp_us (u64), sequence_num (u16), rotation_num (u16), micros_since_hall (u32), x/y/z (float each) |
+| MSG_ACCEL_SAMPLES (10) | 16 bytes | timestamp_us (u64), sequence_num (u16), x/y/z (i16 each) |
 | MSG_HALL_EVENT (11) | 14 bytes | timestamp_us (u64), period_us (u32), rotation_num (u16) |
 | MSG_TELEMETRY (1) | 20 bytes | timestamp_us (u64), hall_avg_us (u32), revolutions (u16), counters... |
 
 **Field descriptions:**
 - `sequence_num` - Monotonic sample counter for drop detection (gaps indicate missed samples)
-- `rotation_num` - Links accel samples to specific rotations (matches hall events)
+- `x/y/z` - Raw ADXL345 values as int16 (13-bit signed, ±16g range)
+
+**Computed in post-processing** (added by `pov telemetry dump`):
+- `rotation_num` - Links accel samples to specific rotations (computed from timestamp correlation with hall events)
 - `micros_since_hall` - Microseconds since last hall trigger (compute phase as `micros_since_hall / period_us`)
 
 ## Files

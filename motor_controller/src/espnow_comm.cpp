@@ -74,6 +74,12 @@ void setupESPNow() {
         return;
     }
 
+    // Verify ESP-NOW version (need v2 for 1470 byte payloads)
+    uint32_t version;
+    if (esp_now_get_version(&version) == ESP_OK) {
+        Serial.printf("[ESPNOW] Version: %lu (need 2 for v2.0 large payloads)\n", version);
+    }
+
     // Register callbacks
     esp_now_register_recv_cb(onDataRecv);
     esp_now_register_send_cb(onDataSent);

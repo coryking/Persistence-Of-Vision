@@ -11,8 +11,8 @@ Accelerometer accel;
 // Queue for DATA_READY timestamps from ISR
 QueueHandle_t g_accelTimestampQueue = nullptr;
 
-// Queue size - enough to buffer samples during I2C reads
-static constexpr size_t ACCEL_QUEUE_SIZE = 16;
+// Queue size - 80ms buffer at 800Hz (allows telemetry task some slack)
+static constexpr size_t ACCEL_QUEUE_SIZE = 64;
 
 // ADXL345 I2C address (SDO pin HIGH = 0x1D, LOW = 0x53)
 static constexpr uint8_t ADXL345_ADDR = 0x1D;
