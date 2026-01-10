@@ -9,10 +9,20 @@ enum class CaptureState : uint8_t {
 };
 
 void captureInit();       // Call from setup() - mounts LittleFS
-void captureStart();      // RECORD: delete all, start recording
-void captureStop();       // STOP: close files, print summary
-void capturePlay();       // PLAY: dump all files as CSV
-void captureDelete();     // DELETE: delete all telemetry files
+void captureStart();      // RECORD: delete all, start recording (prints OK/ERR)
+void captureStop();       // STOP: close files, print summary (prints OK/ERR)
+void capturePlay();       // PLAY: dump all files as CSV (interactive, for IR remote)
+void captureDelete();     // DELETE: delete all telemetry files (prints OK)
+
+// Serial command interface (script-friendly output)
+void captureStatus();     // Print state: IDLE, RECORDING, or FULL
+void captureList();       // Print files: filename<TAB>records<TAB>bytes per line
+void captureDump();       // Dump all files with >>> markers, no prompts
+
+// Serial command wrappers (print OK/ERR instead of verbose output)
+void captureStartSerial();   // START command - prints OK or ERR:
+void captureStopSerial();    // STOP command - prints OK or ERR:
+void captureDeleteSerial();  // DELETE command - prints OK
 
 // Write telemetry data - handles lazy file creation
 // msgType: the MessageType enum value (determines file)

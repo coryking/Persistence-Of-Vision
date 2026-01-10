@@ -77,6 +77,9 @@ static bool s_fileOpen[MAX_MSG_TYPES];
 static uint32_t s_recordCounts[MAX_MSG_TYPES];
 static uint32_t s_bytesWritten[MAX_MSG_TYPES];
 
+// Forward declaration (defined later)
+static const char* getMsgTypeName(uint8_t msgType);
+
 // Check if filesystem has enough space
 static bool hasSpace() {
     size_t used = LittleFS.usedBytes();
@@ -84,9 +87,9 @@ static bool hasSpace() {
     return (total - used) > FS_RESERVE_BYTES;
 }
 
-// Get filename for a message type
+// Get filename for a message type (human-readable names)
 static String getFilename(uint8_t msgType) {
-    return String(TELEMETRY_DIR) + "/" + String(msgType) + ".bin";
+    return String(TELEMETRY_DIR) + "/" + getMsgTypeName(msgType) + ".bin";
 }
 
 // Open file for a message type (lazy creation)
@@ -110,6 +113,9 @@ static bool ensureFileOpen(uint8_t msgType) {
         Serial.printf("[CAPTURE] Failed to create %s\n", filename.c_str());
         return false;
     }
+
+    // Write header byte (msgType) as first byte - self-describing format
+    s_files[msgType].write(msgType);
 
     Serial.printf("[CAPTURE] Opened %s for writing\n", filename.c_str());
     s_fileOpen[msgType] = true;
@@ -209,15 +215,15 @@ static const char* getMsgTypeName(uint8_t msgType) {
     }
 }
 
-// Dump a file as CSV
-static void dumpFileCSV(uint8_t msgType, File& file) {
-    size_t fileSize = file.size();
-
+// Dump a file as CSV (interactive format with headers)
+// Expects file position to be at start of records (past header byte)
+// dataSize = bytes of record data (file size minus header byte)
+static void dumpFileCSV(uint8_t msgType, File& file, size_t dataSize) {
     switch (msgType) {
         case MSG_ACCEL_SAMPLES: {
-            size_t recordCount = fileSize / sizeof(AccelRecord);
-            Serial.printf("=== FILE: %u.bin (%s, %zu records) ===\n",
-                          msgType, getMsgTypeName(msgType), recordCount);
+            size_t recordCount = dataSize / sizeof(AccelRecord);
+            Serial.printf("=== FILE: %s.bin (%zu records) ===\n",
+                          getMsgTypeName(msgType), recordCount);
             Serial.println("timestamp_us,x,y,z");
 
             AccelRecord rec;
@@ -228,27 +234,27 @@ static void dumpFileCSV(uint8_t msgType, File& file) {
         }
 
         case MSG_HALL_EVENT: {
-            size_t recordCount = fileSize / sizeof(HallRecord);
-            Serial.printf("=== FILE: %u.bin (%s, %zu records) ===\n",
-                          msgType, getMsgTypeName(msgType), recordCount);
+            size_t recordCount = dataSize / sizeof(HallRecord);
+            Serial.printf("=== FILE: %s.bin (%zu records) ===\n",
+                          getMsgTypeName(msgType), recordCount);
             Serial.println("timestamp_us,period_us");
 
             HallRecord rec;
             while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%lu\n", rec.timestamp, rec.period_us);
+                Serial.printf("%llu,%u\n", rec.timestamp, rec.period_us);
             }
             break;
         }
 
         case MSG_TELEMETRY: {
-            size_t recordCount = fileSize / sizeof(TelemetryRecord);
-            Serial.printf("=== FILE: %u.bin (%s, %zu records) ===\n",
-                          msgType, getMsgTypeName(msgType), recordCount);
+            size_t recordCount = dataSize / sizeof(TelemetryRecord);
+            Serial.printf("=== FILE: %s.bin (%zu records) ===\n",
+                          getMsgTypeName(msgType), recordCount);
             Serial.println("timestamp_us,hall_avg_us,revolutions,not_rotating,skip,render");
 
             TelemetryRecord rec;
             while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%lu,%u,%u,%u,%u\n",
+                Serial.printf("%llu,%u,%u,%u,%u,%u\n",
                               rec.timestamp, rec.hall_avg_us, rec.revolutions,
                               rec.notRotatingCount, rec.skipCount, rec.renderCount);
             }
@@ -257,7 +263,8 @@ static void dumpFileCSV(uint8_t msgType, File& file) {
 
         default: {
             // Unknown type - dump as hex
-            Serial.printf("=== FILE: %u.bin (UNKNOWN, %zu bytes) ===\n", msgType, fileSize);
+            Serial.printf("=== FILE: %s.bin (UNKNOWN, %zu bytes) ===\n",
+                          getMsgTypeName(msgType), dataSize);
             Serial.println("offset,hex");
 
             uint8_t buf[16];
@@ -552,26 +559,25 @@ void capturePlay() {
     File file = dir.openNextFile();
     while (file) {
         if (!file.isDirectory()) {
-            // Extract message type from filename (e.g., "10.bin" -> 10)
             String name = file.name();
-            int dotPos = name.indexOf('.');
-            if (dotPos > 0) {
-                uint8_t msgType = name.substring(0, dotPos).toInt();
-                String fullPath = String(TELEMETRY_DIR) + "/" + name;
-                file.close();
+            String fullPath = String(TELEMETRY_DIR) + "/" + name;
+            file.close();
 
-                // Reopen for reading
-                File readFile = LittleFS.open(fullPath, "r");
-                if (readFile) {
-                    if (anyFiles) {
-                        waitForKeypress();
-                    }
-                    dumpFileCSV(msgType, readFile);
-                    readFile.close();
-                    anyFiles = true;
+            // Open for reading
+            File readFile = LittleFS.open(fullPath, "r");
+            if (readFile && readFile.size() > 1) {
+                // Read header byte to get message type
+                uint8_t msgType = readFile.read();
+                size_t dataSize = readFile.size() - 1;  // Exclude header byte
+
+                if (anyFiles) {
+                    waitForKeypress();
                 }
-            } else {
-                file.close();
+                dumpFileCSV(msgType, readFile, dataSize);
+                readFile.close();
+                anyFiles = true;
+            } else if (readFile) {
+                readFile.close();
             }
         } else {
             file.close();
@@ -627,4 +633,216 @@ CaptureState getCaptureState() {
 
 bool isCapturing() {
     return s_state == CaptureState::RECORDING;
+}
+
+// ============================================================================
+// Serial Command Interface (script-friendly output)
+// ============================================================================
+
+void captureStatus() {
+    switch (s_state) {
+        case CaptureState::IDLE:      Serial.println("IDLE"); break;
+        case CaptureState::RECORDING: Serial.println("RECORDING"); break;
+        case CaptureState::FULL:      Serial.println("FULL"); break;
+    }
+}
+
+void captureList() {
+    File dir = LittleFS.open(TELEMETRY_DIR);
+    if (!dir || !dir.isDirectory()) {
+        Serial.println();  // Empty list - just blank line
+        return;
+    }
+
+    File file = dir.openNextFile();
+    while (file) {
+        if (!file.isDirectory() && file.size() > 1) {
+            // Read header byte to get message type
+            uint8_t msgType = file.read();
+            size_t dataSize = file.size() - 1;
+
+            // Calculate record count based on type
+            size_t recordCount = 0;
+            switch (msgType) {
+                case MSG_ACCEL_SAMPLES: recordCount = dataSize / sizeof(AccelRecord); break;
+                case MSG_HALL_EVENT:    recordCount = dataSize / sizeof(HallRecord); break;
+                case MSG_TELEMETRY:     recordCount = dataSize / sizeof(TelemetryRecord); break;
+                default:                recordCount = dataSize; break;  // Unknown - show bytes
+            }
+
+            // Output: filename<TAB>records<TAB>bytes
+            Serial.printf("%s.bin\t%zu\t%zu\n", getMsgTypeName(msgType), recordCount, dataSize);
+        }
+        file.close();
+        file = dir.openNextFile();
+    }
+    dir.close();
+
+    Serial.println();  // Blank line = end of list
+}
+
+// Script-friendly dump with >>> markers
+static void dumpFileScript(uint8_t msgType, File& file, size_t dataSize) {
+    // Print filename marker
+    Serial.printf(">>> %s.bin\n", getMsgTypeName(msgType));
+
+    switch (msgType) {
+        case MSG_ACCEL_SAMPLES: {
+            Serial.println("timestamp_us,x,y,z");
+            AccelRecord rec;
+            while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
+                Serial.printf("%llu,%.2f,%.2f,%.2f\n", rec.timestamp, rec.x, rec.y, rec.z);
+            }
+            break;
+        }
+
+        case MSG_HALL_EVENT: {
+            Serial.println("timestamp_us,period_us");
+            HallRecord rec;
+            while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
+                Serial.printf("%llu,%u\n", rec.timestamp, rec.period_us);
+            }
+            break;
+        }
+
+        case MSG_TELEMETRY: {
+            Serial.println("timestamp_us,hall_avg_us,revolutions,not_rotating,skip,render");
+            TelemetryRecord rec;
+            while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
+                Serial.printf("%llu,%u,%u,%u,%u,%u\n",
+                              rec.timestamp, rec.hall_avg_us, rec.revolutions,
+                              rec.notRotatingCount, rec.skipCount, rec.renderCount);
+            }
+            break;
+        }
+
+        default: {
+            // Unknown - dump raw hex
+            Serial.println("offset,hex");
+            uint8_t buf[16];
+            size_t offset = 0;
+            while (size_t n = file.read(buf, sizeof(buf))) {
+                Serial.printf("%04zu,", offset);
+                for (size_t i = 0; i < n; i++) {
+                    Serial.printf("%02X ", buf[i]);
+                }
+                Serial.println();
+                offset += n;
+            }
+            break;
+        }
+    }
+}
+
+void captureDump() {
+    // Don't stop recording - just dump what's there
+    // (Unlike capturePlay which stops first)
+
+    File dir = LittleFS.open(TELEMETRY_DIR);
+    if (!dir || !dir.isDirectory()) {
+        Serial.println(">>>");  // Empty dump marker
+        return;
+    }
+
+    File file = dir.openNextFile();
+    while (file) {
+        if (!file.isDirectory()) {
+            String name = file.name();
+            String fullPath = String(TELEMETRY_DIR) + "/" + name;
+            file.close();
+
+            File readFile = LittleFS.open(fullPath, "r");
+            if (readFile && readFile.size() > 1) {
+                uint8_t msgType = readFile.read();
+                size_t dataSize = readFile.size() - 1;
+                dumpFileScript(msgType, readFile, dataSize);
+                readFile.close();
+            } else if (readFile) {
+                readFile.close();
+            }
+        } else {
+            file.close();
+        }
+        file = dir.openNextFile();
+    }
+    dir.close();
+
+    Serial.println(">>>");  // End of dump marker
+}
+
+void captureStartSerial() {
+    if (s_state == CaptureState::RECORDING) {
+        Serial.println("ERR: Already recording");
+        return;
+    }
+    if (!s_taskStopped) {
+        Serial.println("ERR: Task busy");
+        return;
+    }
+
+    // Delete existing files
+    deleteAllFiles();
+
+    // Drain stale messages
+    if (s_captureQueue) {
+        CaptureMessage msg;
+        while (xQueueReceive(s_captureQueue, &msg, 0) == pdPASS) {}
+    }
+
+    // Reset tracking
+    for (size_t i = 0; i < MAX_MSG_TYPES; i++) {
+        s_recordCounts[i] = 0;
+        s_bytesWritten[i] = 0;
+    }
+
+    s_state = CaptureState::RECORDING;
+
+    if (s_captureTask) {
+        xTaskNotifyGive(s_captureTask);
+    }
+
+    Serial.println("OK");
+}
+
+void captureStopSerial() {
+    if (s_state != CaptureState::RECORDING && s_state != CaptureState::FULL) {
+        Serial.println("ERR: Not recording");
+        return;
+    }
+
+    CaptureMessage msg = {};
+    msg.type = CaptureMessageType::STOP;
+    xQueueSend(s_captureQueue, &msg, pdMS_TO_TICKS(QUEUE_SEND_TIMEOUT_MS));
+
+    uint32_t startMs = millis();
+    while (!s_taskStopped && (millis() - startMs) < TASK_STOP_TIMEOUT_MS) {
+        vTaskDelay(pdMS_TO_TICKS(TASK_STOP_POLL_MS));
+    }
+
+    s_state = CaptureState::IDLE;
+    Serial.println("OK");
+}
+
+void captureDeleteSerial() {
+    // Stop if recording
+    if (s_state == CaptureState::RECORDING || s_state == CaptureState::FULL) {
+        CaptureMessage msg = {};
+        msg.type = CaptureMessageType::STOP;
+        xQueueSend(s_captureQueue, &msg, pdMS_TO_TICKS(QUEUE_SEND_TIMEOUT_MS));
+
+        uint32_t startMs = millis();
+        while (!s_taskStopped && (millis() - startMs) < TASK_STOP_TIMEOUT_MS) {
+            vTaskDelay(pdMS_TO_TICKS(TASK_STOP_POLL_MS));
+        }
+        s_state = CaptureState::IDLE;
+    }
+
+    deleteAllFiles();
+
+    for (size_t i = 0; i < MAX_MSG_TYPES; i++) {
+        s_recordCounts[i] = 0;
+        s_bytesWritten[i] = 0;
+    }
+
+    Serial.println("OK");
 }

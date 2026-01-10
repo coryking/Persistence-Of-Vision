@@ -1,0 +1,11 @@
+[project]
+name = "pov-workspace"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = ["pov-tools"]
+
+[tool.uv.workspace]
+members = ["tools"]
+
+[tool.uv.sources]
+pov-tools = { workspace = true }

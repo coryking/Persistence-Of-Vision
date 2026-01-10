@@ -7,6 +7,7 @@
 #include "remote_input.h"
 #include "command_processor.h"
 #include "telemetry_capture.h"
+#include "serial_command.h"
 
 void setup() {
     Serial.begin(921600);
@@ -27,5 +28,6 @@ void loop() {
     ledLoop();
     motorLoop();  // Handle brake timing (non-blocking)
     processCommand(remoteInputPoll());
+    serialCommandPoll();
     delay(10);
 }

@@ -21,7 +21,7 @@ See **docs/PROJECT_STRUCTURE.md** for the complete, authoritative project layout
 
 - **docs/** - Unified documentation (see PROJECT_STRUCTURE.md for details)
 
-- **tools/** - Shared scripts and utilities
+- **tools/** - Python CLI tools (`pov` command for telemetry capture, etc.)
 
 ## Build System
 
@@ -38,6 +38,19 @@ cd motor_controller
 uv sync
 uv run pio run
 ```
+
+## CLI Tools
+
+The `pov` CLI provides telemetry capture and analysis tools:
+
+```bash
+# From project root
+uv sync                     # Install CLI
+pov telemetry status        # Check motor controller state
+pov telemetry dump          # Download telemetry CSVs
+```
+
+All CLI commands support `--json` for structured output (useful for LLM integration).
 
 ## Future Integration
 

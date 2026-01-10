@@ -52,3 +52,7 @@ src/CMakeLists.txt
 # Backups
 *.tar.gz
 *_backup_*
+
+# Telemetry data output (from pov telemetry dump)
+telemetry/
+!telemetry/.gitkeep

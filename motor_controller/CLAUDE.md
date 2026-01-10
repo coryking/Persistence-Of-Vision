@@ -107,6 +107,22 @@ All pins and constants are defined in `src/hardware_config.h`:
 
 Captures high-rate telemetry from the LED display to LittleFS for offline analysis. Uses a FreeRTOS task for file writes to avoid blocking ESP-NOW callbacks.
 
-**IR Remote**: RECORD/STOP/PLAY/DELETE buttons control capture.
+**Control Methods**:
+- **IR Remote**: RECORD/STOP/DELETE buttons (PLAY removed - use CLI instead)
+- **Serial Commands**: START/STOP/DUMP/DELETE/STATUS/LIST (script-friendly)
+- **Python CLI**: `pov telemetry <command>` (recommended for LLM use)
 
-See `docs/motor_controller/telemetry_capture.md` for architecture details.
+**CLI Commands** (from project root after `uv sync`):
+```bash
+pov telemetry status              # Get state + file list
+pov telemetry start               # Start recording
+pov telemetry stop                # Stop recording
+pov telemetry dump                # Download CSVs to telemetry/
+pov telemetry list                # List files on device
+pov telemetry delete              # Delete all files
+pov telemetry view MSG_ACCEL_SAMPLES  # Preview a file
+```
+
+All commands support `--json` for structured output.
+
+See `docs/motor_controller/telemetry_capture.md` for architecture and protocol details.
