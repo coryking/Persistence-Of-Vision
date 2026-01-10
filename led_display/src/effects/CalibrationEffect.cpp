@@ -51,7 +51,7 @@ void CalibrationEffect::render(RenderContext& ctx) {
     if (now - m_lastSampleTime >= SAMPLE_INTERVAL_US) {
         m_lastSampleTime = now;
 
-        Accelerometer::Reading reading;
+        xyzFloat reading;
         if (accel.read(reading)) {
             addSample(reading, now);
         }
@@ -68,7 +68,7 @@ void CalibrationEffect::onRevolution(timestamp_t usPerRev, timestamp_t timestamp
     m_hue = (m_hue + 1) % 256;
 }
 
-void CalibrationEffect::addSample(const Accelerometer::Reading& reading, timestamp_t timestamp) {
+void CalibrationEffect::addSample(const xyzFloat& reading, timestamp_t timestamp) {
     // Add sample to batch with absolute timestamp
     AccelSample& sample = m_msg.samples[m_msg.sample_count];
     sample.timestamp_us = timestamp;
@@ -78,7 +78,7 @@ void CalibrationEffect::addSample(const Accelerometer::Reading& reading, timesta
     m_msg.sample_count++;
 
     // Flush batch if full
-    if (m_msg.sample_count >= BATCH_SIZE) {
+    if (m_msg.sample_count >= ACCEL_SAMPLES_MAX_BATCH) {
         flushBatch();
     }
 }

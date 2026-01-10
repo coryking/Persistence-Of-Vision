@@ -1,36 +1,28 @@
 #ifndef ACCELEROMETER_H
 #define ACCELEROMETER_H
 
-#include <cstdint>
+#include <ADXL345_WE.h>
 
 /**
- * ADXL345 Accelerometer wrapper for rotor balancing calibration
+ * ADXL345 Accelerometer wrapper using ADXL345_WE library
  *
- * Uses I2C (Wire) with direct register access - no external library needed.
  * CS and SDO pins are set HIGH in software to enable I2C mode at address 0x1D.
- * Configured for full resolution mode (256 LSB/g) at 400Hz sample rate.
+ * Configured for full resolution mode at 400Hz sample rate, ±4g range.
  */
 class Accelerometer {
 public:
-    // Raw accelerometer reading (256 LSB/g in full resolution mode)
-    struct Reading {
-        int16_t x;
-        int16_t y;
-        int16_t z;
-    };
-
     /**
-     * Initialize accelerometer on SPI bus
-     * @return true if device ID verified (0xE5), false on failure
+     * Initialize accelerometer
+     * @return true if device initialized successfully, false on failure
      */
     bool begin();
 
     /**
      * Read current acceleration values
-     * @param reading Output struct for X, Y, Z values
+     * @param reading Output xyzFloat struct for X, Y, Z values
      * @return true on success
      */
-    bool read(Reading& reading);
+    bool read(xyzFloat& reading);
 
     /**
      * Check if accelerometer was initialized successfully
@@ -38,6 +30,7 @@ public:
     bool isReady() const { return m_ready; }
 
 private:
+    ADXL345_WE* m_adxl = nullptr;
     bool m_ready = false;
 };
 

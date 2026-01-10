@@ -24,9 +24,9 @@ static const char* TELEMETRY_DIR = "/telemetry";
 // Binary record formats (packed structs for file storage)
 struct AccelRecord {
     timestamp_t timestamp;  // 64-bit absolute timestamp
-    accel_raw_t x;          // Raw X axis (256 LSB/g)
-    accel_raw_t y;          // Raw Y axis
-    accel_raw_t z;          // Raw Z axis
+    accel_raw_t x;          // X axis (float from ADXL345_WE library)
+    accel_raw_t y;          // Y axis
+    accel_raw_t z;          // Z axis
 } __attribute__((packed));
 
 struct HallRecord {
@@ -222,7 +222,7 @@ static void dumpFileCSV(uint8_t msgType, File& file) {
 
             AccelRecord rec;
             while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%d,%d,%d\n", rec.timestamp, rec.x, rec.y, rec.z);
+                Serial.printf("%llu,%.2f,%.2f,%.2f\n", rec.timestamp, rec.x, rec.y, rec.z);
             }
             break;
         }
@@ -297,19 +297,19 @@ static void waitForKeypress() {
 static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
     switch (msgType) {
         case MSG_ACCEL_SAMPLES: {
-            // Validate minimum size: header (2 bytes)
-            if (len < 2) return;
+            // Validate minimum size: header
+            if (len < ACCEL_MSG_HEADER_SIZE) return;
             const AccelSampleMsg* msg = reinterpret_cast<const AccelSampleMsg*>(data);
 
             // Validate sample_count bounds
-            if (msg->sample_count == 0 || msg->sample_count > 16) return;
+            if (msg->sample_count == 0 || msg->sample_count > ACCEL_SAMPLES_MAX_BATCH) return;
 
             // Validate length matches sample_count
-            size_t expected = 2 + (msg->sample_count * sizeof(AccelSample));
+            size_t expected = ACCEL_MSG_HEADER_SIZE + (msg->sample_count * sizeof(AccelSample));
             if (len < expected) return;
 
             // Build batch of records
-            AccelRecord records[16];
+            AccelRecord records[ACCEL_SAMPLES_MAX_BATCH];
             for (uint8_t i = 0; i < msg->sample_count; i++) {
                 const AccelSample& s = msg->samples[i];
                 records[i].timestamp = s.timestamp_us;

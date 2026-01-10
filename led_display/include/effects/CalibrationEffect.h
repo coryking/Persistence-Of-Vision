@@ -25,8 +25,7 @@ public:
     void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) override;
 
 private:
-    // Sample buffer for batching
-    static constexpr size_t BATCH_SIZE = 10;  // Send every 10 samples
+    // Sample buffer for batching - uses max from messages.h
     AccelSampleMsg m_msg;
 
     // Polling timing
@@ -37,7 +36,7 @@ private:
     uint16_t m_hue = 0;
 
     void flushBatch();
-    void addSample(const Accelerometer::Reading& reading, timestamp_t timestamp);
+    void addSample(const xyzFloat& reading, timestamp_t timestamp);
 };
 
 // Global flag: when true, hallProcessingTask sends HallEventMsg for each trigger

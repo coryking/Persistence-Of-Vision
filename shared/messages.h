@@ -2,6 +2,7 @@
 #define POV_MESSAGES_H
 
 #include <stdint.h>
+#include <cstddef>
 #include "types.h"
 
 // Message types for ESP-NOW communication between motor controller and display
@@ -74,22 +75,35 @@ struct EffectParamDownMsg {
 // Used by CalibrationEffect for rotor balancing data collection
 // =============================================================================
 
+// ESP-NOW maximum payload size
+static constexpr size_t ESP_NOW_MAX_PAYLOAD = 250;
+
 // Single accelerometer sample with absolute timestamp
 struct AccelSample {
     timestamp_t timestamp_us;    // Absolute timestamp (esp_timer_get_time()) - 64-bit
-    accel_raw_t x;               // Raw X axis (256 LSB/g in full resolution)
-    accel_raw_t y;               // Raw Y axis
-    accel_raw_t z;               // Raw Z axis
-} __attribute__((packed));       // 14 bytes per sample
+    accel_raw_t x;               // X axis (float from ADXL345_WE library)
+    accel_raw_t y;               // Y axis
+    accel_raw_t z;               // Z axis
+} __attribute__((packed));
+
+// AccelSampleMsg header size (type + sample_count)
+static constexpr size_t ACCEL_MSG_HEADER_SIZE = sizeof(uint8_t) + sizeof(uint8_t);
+
+// Maximum samples per batch, calculated from ESP-NOW limit
+static constexpr size_t ACCEL_SAMPLES_MAX_BATCH =
+    (ESP_NOW_MAX_PAYLOAD - ACCEL_MSG_HEADER_SIZE) / sizeof(AccelSample);
 
 // Display -> Motor Controller: Batched accelerometer samples
-// Sent periodically during calibration (~40 batches/sec at 400Hz sampling)
+// Sent periodically during calibration (~33 batches/sec at 400Hz sampling)
 struct AccelSampleMsg {
     uint8_t type = MSG_ACCEL_SAMPLES;
-    uint8_t sample_count;           // Actual samples in this batch (1-16)
-    AccelSample samples[16];        // Up to 16 samples per batch
+    uint8_t sample_count;                       // Actual samples in this batch
+    AccelSample samples[ACCEL_SAMPLES_MAX_BATCH];
 } __attribute__((packed));
-// Size: 1 + 1 + (16 * 14) = 226 bytes max (under 250-byte ESP-NOW limit)
+
+// Verify message fits in ESP-NOW payload
+static_assert(sizeof(AccelSampleMsg) <= ESP_NOW_MAX_PAYLOAD,
+              "AccelSampleMsg exceeds ESP-NOW payload limit");
 
 // Display -> Motor Controller: Hall sensor trigger event
 // Sent for each hall trigger during calibration (~20-47/sec at 1200-2800 RPM)
