@@ -54,11 +54,13 @@ MSG_HALL_EVENT.bin<TAB>456<TAB>789
 **DUMP output format:**
 ```
 >>> MSG_ACCEL_SAMPLES.bin
-timestamp_us,x,y,z
-1234567890,0.12,-0.34,9.81
+timestamp_us,sequence_num,rotation_num,micros_since_hall,x,y,z
+1234567890,1,42,15234,0.12,-0.34,9.81
+1234569140,2,42,16484,0.11,-0.35,9.80
 >>> MSG_HALL_EVENT.bin
-timestamp_us,period_us
-1234567890,25000
+timestamp_us,period_us,rotation_num
+1234567890,25000,42
+1234592890,25000,43
 >>>
 ```
 
@@ -133,9 +135,14 @@ The first byte is the message type (from `messages.h`), followed by packed binar
 
 | Message Type | Record Size | Fields |
 |--------------|-------------|--------|
-| MSG_ACCEL_SAMPLES (10) | 20 bytes | timestamp_us (u64), x/y/z (float each) |
-| MSG_HALL_EVENT (11) | 12 bytes | timestamp_us (u64), period_us (u32) |
+| MSG_ACCEL_SAMPLES (10) | 28 bytes | timestamp_us (u64), sequence_num (u16), rotation_num (u16), micros_since_hall (u32), x/y/z (float each) |
+| MSG_HALL_EVENT (11) | 14 bytes | timestamp_us (u64), period_us (u32), rotation_num (u16) |
 | MSG_TELEMETRY (1) | 20 bytes | timestamp_us (u64), hall_avg_us (u32), revolutions (u16), counters... |
+
+**Field descriptions:**
+- `sequence_num` - Monotonic sample counter for drop detection (gaps indicate missed samples)
+- `rotation_num` - Links accel samples to specific rotations (matches hall events)
+- `micros_since_hall` - Microseconds since last hall trigger (compute phase as `micros_since_hall / period_us`)
 
 ## Files
 

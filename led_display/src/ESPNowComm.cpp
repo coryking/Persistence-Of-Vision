@@ -158,9 +158,10 @@ void sendAccelSamples(const AccelSampleMsg& msg) {
     espnowSend(reinterpret_cast<const uint8_t*>(&msg), msgSize, "AccelSamples");
 }
 
-void sendHallEvent(uint32_t timestamp_us, uint32_t period_us) {
+void sendHallEvent(timestamp_t timestamp_us, period_t period_us, rotation_t rotation_num) {
     HallEventMsg msg;
     msg.timestamp_us = timestamp_us;
     msg.period_us = period_us;
+    msg.rotation_num = rotation_num;
     espnowSend(reinterpret_cast<uint8_t*>(&msg), sizeof(msg), "HallEvent");
 }

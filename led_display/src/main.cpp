@@ -111,8 +111,9 @@ void hallProcessingTask(void* pvParameters) {
             // If calibration is active, send hall event for each trigger
             if (g_calibrationActive) {
                 sendHallEvent(
-                    static_cast<uint32_t>(event.triggerTimestamp),
-                    period_us
+                    event.triggerTimestamp,
+                    period_us,
+                    static_cast<rotation_t>(revolutionCount)
                 );
             }
 

@@ -2,7 +2,7 @@
 name = "pov-workspace"
 version = "0.0.0"
 requires-python = ">=3.11"
-dependencies = ["pov-tools"]
+dependencies = ["pov-tools", "pandas", "numpy", "matplotlib", "scipy"]
 
 [tool.uv.workspace]
 members = ["tools"]

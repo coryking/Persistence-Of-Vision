@@ -36,6 +36,26 @@ The POV display rotor exhibits significant vibration at high speed (2300-2800 RP
 
 **Key insight:** This approach doesn't tell you the magnitude of imbalance in absolute terms (gram-centimeters), but it tells you the *angle* of the imbalance. This collapses a 2D search problem (angle + radius) into a 1D search (radius only along a known line).
 
+## Telemetry Data Fields
+
+Each accelerometer sample includes fields for phase analysis:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `timestamp_us` | u64 | Absolute microsecond timestamp (from DATA_READY interrupt) |
+| `sequence_num` | u16 | Monotonic counter - gaps indicate dropped samples |
+| `rotation_num` | u16 | Which revolution this sample is from (links to hall events) |
+| `micros_since_hall` | u32 | Microseconds since last hall trigger |
+| `x`, `y`, `z` | float | Accelerometer raw values (±16g range, 3.9mg/LSB) |
+
+**Computing phase:**
+```python
+phase = accel['micros_since_hall'] / hall['period_us']  # 0.0 to 1.0
+angle_deg = phase * 360  # 0° to 360°
+```
+
+Hall events include `rotation_num` to definitively link samples to rotations without timestamp correlation.
+
 ## Accelerometer Physics
 
 ### Reference Frame Matters
@@ -56,6 +76,8 @@ The phase of this Z-axis oscillation relative to a rotational reference point (H
 
 The accelerometer does not need to be precisely centered on the rotation axis.
 
+**Current mounting:** 25-35mm from center, double-stick foam tape, approximately flat but not precisely aligned. The imperfect alignment means useful signal may appear on any axis, not just Z.
+
 **At center (r=0):**
 - No centrifugal acceleration
 - Gravity rotates through X/Y once per revolution (useful for low-speed RPM and direction detection)
@@ -65,6 +87,15 @@ The accelerometer does not need to be precisely centered on the rotation axis.
 - Constant centrifugal acceleration (ω²r) pointing outward in rotating frame
 - Gravity signal gets swamped by centrifugal at high RPM
 - Z-axis wobble still visible
+
+**Centrifugal force reality check** (at ~30mm radius, ±16g range):
+
+| RPM | Centrifugal (g) | Within ±16g? |
+|-----|-----------------|--------------|
+| 724 | 17.5g | Barely (may clip) |
+| 2800 | 263g | No - saturated |
+
+The X/Y axes (radial) will saturate at operating speed. The Z-axis (axial wobble) is perpendicular to centrifugal and should show the tilt signal needed for balancing.
 
 The wobble signal comes from gravity's projection changing as the disc tilts—this is roughly constant across the disc surface. Mount the accelerometer wherever is mechanically convenient; perfect centering is unnecessary.
 
@@ -98,25 +129,36 @@ No integration or coordinate transforms required.
 
 **I2C considerations:**
 
-- Standard mode (100kHz) or fast mode (400kHz) available
-- Practical throughput: ~400-500 samples/second achievable with basic I2C code on ESP32
+- Fast mode (400kHz) used
+- 800Hz sample rate via DATA_READY interrupt
 - Reading 6 bytes (X, Y, Z as 16-bit values) per sample
-- FIFO allows burst reads to improve efficiency
+- FIFO available for future burst reads
 
-**Bandwidth adequacy:** At 2800 RPM (~47 Hz rotation), 500 samples/second provides ~10 samples per revolution. Nyquist requires >94 samples/second to capture a 47 Hz signal. 500 Hz is more than sufficient for phase detection.
+**Current configuration:**
+- ODR: 800 Hz (ADXL345_DATA_RATE_800)
+- Range: ±16g (ADXL345_RANGE_16G)
+- Full resolution mode: 3.9 mg/LSB regardless of range
+- Sampling: Interrupt-driven via DATA_READY on INT1
 
-**Resolution:** With ~10 samples per revolution, phase can be determined to within ~36° (360°/10). Since arms are 120° apart, this is adequate to identify which arm (or region between arms) contains the heavy spot.
+**Bandwidth adequacy:** At 2800 RPM (~47 Hz rotation), 800 samples/second provides ~17 samples per revolution.
+
+**Resolution:** With ~17 samples per revolution, phase can be determined to within ~21° (360°/17). Since arms are 120° apart, this is adequate to identify which arm (or region between arms) contains the heavy spot.
 
 ### Interrupt Usage
 
-The ADXL345 provides DATA_READY interrupt capability. Rather than polling, wire INT1 to a GPIO and handle data reads in an ISR or flag-based approach.
+DATA_READY interrupt is connected: INT1 → GPIO D0 (green wire).
 
-For the calibration/balancing measurement, this doesn't need to be high-priority. The ESP32's dual-core architecture allows:
+**Implementation (FreeRTOS queue pattern):**
+1. ADXL345 fires DATA_READY interrupt when new sample ready
+2. ISR captures `esp_timer_get_time()` timestamp and queues it
+3. CalibrationEffect's render() drains queue, reads samples with accurate timestamps
+4. Samples batched and sent via ESP-NOW to motor controller
 
+This gives ~1° timestamp accuracy vs ~34° error from polling at 2800 RPM.
+
+The ESP32's dual-core architecture allows:
 - Core 1: Timing-critical LED rendering (existing)
 - Core 0: Accelerometer reads, ESP-NOW communication (non-critical timing)
-
-Alternatively, run a dedicated "calibration mode" that disables LED rendering entirely and just logs accelerometer + Hall data for post-processing.
 
 ### Wiring Notes
 

@@ -8,11 +8,13 @@
 volatile bool g_calibrationActive = false;
 
 void CalibrationEffect::begin() {
-    Serial.println("[CAL] Calibration mode ACTIVE - streaming accel data");
+    Serial.println("[CAL] Calibration mode ACTIVE - streaming accel data (800Hz, interrupt-driven)");
 
-    // Initialize batch
+    // Initialize batch and counters
     m_msg.sample_count = 0;
-    m_lastSampleTime = 0;
+    m_sequenceNum = 0;
+    m_currentRotation = 0;
+    m_lastHallTimestamp = 0;
     m_hue = 0;
 
     // Enable hall event streaming
@@ -32,46 +34,54 @@ void CalibrationEffect::end() {
     g_calibrationActive = false;
 
     Serial.println("# CAL_STOP");
-    Serial.println("[CAL] Calibration mode ended");
+    Serial.printf("[CAL] Calibration mode ended (%u samples sent)\n", m_sequenceNum);
 }
 
 void CalibrationEffect::render(RenderContext& ctx) {
     // Visual feedback: one LED per arm cycles through hues each revolution
-    // This lets you see the effect is active without using serial
     for (int arm = 0; arm < HardwareConfig::NUM_ARMS; arm++) {
-        // First LED shows current hue, rest are off
         ctx.arms[arm].pixels[0] = CHSV(m_hue, 255, 128);  // Half brightness to save power
         for (int p = 1; p < HardwareConfig::LEDS_PER_ARM; p++) {
             ctx.arms[arm].pixels[p] = CRGB::Black;
         }
     }
 
-    // Poll accelerometer at ~400Hz
-    timestamp_t now = esp_timer_get_time();
-    if (now - m_lastSampleTime >= SAMPLE_INTERVAL_US) {
-        m_lastSampleTime = now;
-
+    // Process all pending accelerometer samples from interrupt queue
+    timestamp_t sampleTimestamp;
+    while (accel.getNextTimestamp(sampleTimestamp)) {
         xyzFloat reading;
         if (accel.read(reading)) {
-            addSample(reading, now);
+            addSample(reading, sampleTimestamp);
         }
     }
 }
 
 void CalibrationEffect::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) {
-    // Hall events are sent by hallProcessingTask when g_calibrationActive is true
-    (void)usPerRev;
-    (void)timestamp;
-    (void)revolutionCount;
+    // Cache rotation info for use in addSample()
+    m_currentRotation = static_cast<rotation_t>(revolutionCount);
+    m_lastHallTimestamp = timestamp;
 
     // Cycle hue each revolution for visual feedback (0-255 for FastLED)
-    m_hue = (m_hue + 1) % 256;
+    m_hue = static_cast<uint8_t>((m_hue + 1) % 256);
+
+    (void)usPerRev;  // Unused
 }
 
 void CalibrationEffect::addSample(const xyzFloat& reading, timestamp_t timestamp) {
-    // Add sample to batch with absolute timestamp
+    // Build sample with all fields
     AccelSample& sample = m_msg.samples[m_msg.sample_count];
     sample.timestamp_us = timestamp;
+    sample.sequence_num = m_sequenceNum++;
+    sample.rotation_num = m_currentRotation;
+
+    // Compute microseconds since last hall trigger for phase calculation
+    // Guard against timestamp being before hall (shouldn't happen, but be safe)
+    if (timestamp >= m_lastHallTimestamp) {
+        sample.micros_since_hall = static_cast<period_t>(timestamp - m_lastHallTimestamp);
+    } else {
+        sample.micros_since_hall = 0;
+    }
+
     sample.x = reading.x;
     sample.y = reading.y;
     sample.z = reading.z;

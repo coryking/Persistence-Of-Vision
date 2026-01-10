@@ -10,12 +10,12 @@
  * Calibration Effect for rotor balancing
  *
  * When active:
- * - Streams accelerometer samples over ESP-NOW
+ * - Streams accelerometer samples over ESP-NOW (interrupt-driven at 800Hz)
  * - Enables hall event streaming (via global flag)
- * - Keeps LEDs off to maximize CPU for sampling
+ * - Minimal LED activity to maximize CPU for sampling
  *
  * Data is sent to motor controller for serial output.
- * Analyze in spreadsheet to find imbalance phase angle.
+ * Each sample includes rotation_num and micros_since_hall for phase analysis.
  */
 class CalibrationEffect : public Effect {
 public:
@@ -28,12 +28,15 @@ private:
     // Sample buffer for batching - uses max from messages.h
     AccelSampleMsg m_msg;
 
-    // Polling timing
-    timestamp_t m_lastSampleTime = 0;
-    static constexpr uint32_t SAMPLE_INTERVAL_US = 2500;  // 400 Hz
+    // Rotation tracking (updated by onRevolution callback)
+    rotation_t m_currentRotation = 0;
+    timestamp_t m_lastHallTimestamp = 0;
 
-    // Visual feedback - hue cycles 0-359 each revolution
-    uint16_t m_hue = 0;
+    // Sequence counter for drop detection (monotonically incrementing)
+    sequence_t m_sequenceNum = 0;
+
+    // Visual feedback - hue cycles 0-255 each revolution
+    uint8_t m_hue = 0;
 
     void flushBatch();
     void addSample(const xyzFloat& reading, timestamp_t timestamp);

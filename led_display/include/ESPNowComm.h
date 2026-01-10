@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include "messages.h"
+#include "types.h"
 
 // Initialize ESP-NOW communication with motor controller
 // Sets up WiFi in STA mode, configures channel/power, adds motor controller as peer
@@ -24,6 +25,6 @@ void sendAccelSamples(const AccelSampleMsg& msg);
 
 // Send hall event (individual trigger)
 // Called by hallProcessingTask when g_calibrationActive is true
-void sendHallEvent(uint32_t timestamp_us, uint32_t period_us);
+void sendHallEvent(timestamp_t timestamp_us, period_t period_us, rotation_t rotation_num);
 
 #endif // ESPNOW_COMM_H

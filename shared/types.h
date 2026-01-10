@@ -23,6 +23,12 @@ typedef uint32_t period_t;
 // Typedef'd so sensor changes only require updating this one place
 typedef float accel_raw_t;
 
+// Sample sequence number for drop detection (wraps at 65535)
+typedef uint16_t sequence_t;
+
+// Revolution counter (wraps at 65535 = ~23 min at 2800 RPM)
+typedef uint16_t rotation_t;
+
 // Time conversion macro
 #define SECONDS_TO_MICROS(s) ((s) * 1000000ULL)
 

@@ -23,15 +23,19 @@ static const char* TELEMETRY_DIR = "/telemetry";
 
 // Binary record formats (packed structs for file storage)
 struct AccelRecord {
-    timestamp_t timestamp;  // 64-bit absolute timestamp
-    accel_raw_t x;          // X axis (float from ADXL345_WE library)
-    accel_raw_t y;          // Y axis
-    accel_raw_t z;          // Z axis
+    timestamp_t timestamp;      // 64-bit absolute timestamp
+    sequence_t sequence_num;    // Sample sequence for drop detection
+    rotation_t rotation_num;    // Which revolution this sample is from
+    period_t micros_since_hall; // Microseconds since last hall trigger (for phase)
+    accel_raw_t x;              // X axis (float from ADXL345_WE library)
+    accel_raw_t y;              // Y axis
+    accel_raw_t z;              // Z axis
 } __attribute__((packed));
 
 struct HallRecord {
-    timestamp_t timestamp;  // 64-bit: when hall sensor triggered
-    period_t period_us;     // 32-bit: time since previous trigger
+    timestamp_t timestamp;      // 64-bit: when hall sensor triggered
+    period_t period_us;         // 32-bit: time since previous trigger
+    rotation_t rotation_num;    // Revolution counter (links to AccelRecord)
 } __attribute__((packed));
 
 struct TelemetryRecord {
@@ -224,11 +228,13 @@ static void dumpFileCSV(uint8_t msgType, File& file, size_t dataSize) {
             size_t recordCount = dataSize / sizeof(AccelRecord);
             Serial.printf("=== FILE: %s.bin (%zu records) ===\n",
                           getMsgTypeName(msgType), recordCount);
-            Serial.println("timestamp_us,x,y,z");
+            Serial.println("timestamp_us,sequence_num,rotation_num,micros_since_hall,x,y,z");
 
             AccelRecord rec;
             while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%.2f,%.2f,%.2f\n", rec.timestamp, rec.x, rec.y, rec.z);
+                Serial.printf("%llu,%u,%u,%u,%.2f,%.2f,%.2f\n",
+                              rec.timestamp, rec.sequence_num, rec.rotation_num,
+                              rec.micros_since_hall, rec.x, rec.y, rec.z);
             }
             break;
         }
@@ -237,11 +243,11 @@ static void dumpFileCSV(uint8_t msgType, File& file, size_t dataSize) {
             size_t recordCount = dataSize / sizeof(HallRecord);
             Serial.printf("=== FILE: %s.bin (%zu records) ===\n",
                           getMsgTypeName(msgType), recordCount);
-            Serial.println("timestamp_us,period_us");
+            Serial.println("timestamp_us,period_us,rotation_num");
 
             HallRecord rec;
             while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%u\n", rec.timestamp, rec.period_us);
+                Serial.printf("%llu,%u,%u\n", rec.timestamp, rec.period_us, rec.rotation_num);
             }
             break;
         }
@@ -320,6 +326,9 @@ static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
             for (uint8_t i = 0; i < msg->sample_count; i++) {
                 const AccelSample& s = msg->samples[i];
                 records[i].timestamp = s.timestamp_us;
+                records[i].sequence_num = s.sequence_num;
+                records[i].rotation_num = s.rotation_num;
+                records[i].micros_since_hall = s.micros_since_hall;
                 records[i].x = s.x;
                 records[i].y = s.y;
                 records[i].z = s.z;
@@ -338,6 +347,7 @@ static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
             HallRecord rec;
             rec.timestamp = msg->timestamp_us;
             rec.period_us = msg->period_us;
+            rec.rotation_num = msg->rotation_num;
             writeRecord(MSG_HALL_EVENT, &rec, sizeof(rec));
             break;
         }
@@ -688,19 +698,21 @@ static void dumpFileScript(uint8_t msgType, File& file, size_t dataSize) {
 
     switch (msgType) {
         case MSG_ACCEL_SAMPLES: {
-            Serial.println("timestamp_us,x,y,z");
+            Serial.println("timestamp_us,sequence_num,rotation_num,micros_since_hall,x,y,z");
             AccelRecord rec;
             while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%.2f,%.2f,%.2f\n", rec.timestamp, rec.x, rec.y, rec.z);
+                Serial.printf("%llu,%u,%u,%u,%.2f,%.2f,%.2f\n",
+                              rec.timestamp, rec.sequence_num, rec.rotation_num,
+                              rec.micros_since_hall, rec.x, rec.y, rec.z);
             }
             break;
         }
 
         case MSG_HALL_EVENT: {
-            Serial.println("timestamp_us,period_us");
+            Serial.println("timestamp_us,period_us,rotation_num");
             HallRecord rec;
             while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%u\n", rec.timestamp, rec.period_us);
+                Serial.printf("%llu,%u,%u\n", rec.timestamp, rec.period_us, rec.rotation_num);
             }
             break;
         }

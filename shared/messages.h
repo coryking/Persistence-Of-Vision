@@ -78,9 +78,12 @@ struct EffectParamDownMsg {
 // ESP-NOW maximum payload size
 static constexpr size_t ESP_NOW_MAX_PAYLOAD = 250;
 
-// Single accelerometer sample with absolute timestamp
+// Single accelerometer sample with absolute timestamp and rotation tracking
 struct AccelSample {
     timestamp_t timestamp_us;    // Absolute timestamp (esp_timer_get_time()) - 64-bit
+    sequence_t sequence_num;     // Monotonic counter for drop detection (wraps at 65535)
+    rotation_t rotation_num;     // Which revolution this sample is from
+    period_t micros_since_hall;  // Microseconds since last hall trigger (for phase calculation)
     accel_raw_t x;               // X axis (float from ADXL345_WE library)
     accel_raw_t y;               // Y axis
     accel_raw_t z;               // Z axis
@@ -111,7 +114,8 @@ struct HallEventMsg {
     uint8_t type = MSG_HALL_EVENT;
     timestamp_t timestamp_us;    // Hall trigger time (same clock as accel samples) - 64-bit
     period_t period_us;          // Time since previous hall trigger
+    rotation_t rotation_num;     // Revolution counter (links to AccelSample.rotation_num)
 } __attribute__((packed));
-// Size: 13 bytes
+// Size: 15 bytes
 
 #endif // POV_MESSAGES_H
