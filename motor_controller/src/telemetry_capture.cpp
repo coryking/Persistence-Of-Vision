@@ -9,6 +9,15 @@
 // Reserve space to avoid completely filling filesystem
 static const size_t FS_RESERVE_BYTES = 50 * 1024;
 
+// Maximum payload size for captured messages (generous to allow for future growth)
+static const size_t MAX_CAPTURE_PAYLOAD = 256;
+
+// Timeouts (ms)
+static const uint32_t TASK_STOP_TIMEOUT_MS = 500;     // Max wait for task to stop
+static const uint32_t TASK_STOP_POLL_MS = 10;         // Poll interval when waiting
+static const uint32_t QUEUE_RECEIVE_TIMEOUT_MS = 100; // Task queue poll interval
+static const uint32_t QUEUE_SEND_TIMEOUT_MS = 100;    // Blocking queue send timeout
+
 // Telemetry directory
 static const char* TELEMETRY_DIR = "/telemetry";
 
@@ -41,12 +50,21 @@ static CaptureState s_state = CaptureState::IDLE;
 static QueueHandle_t s_captureQueue = nullptr;
 static TaskHandle_t s_captureTask = nullptr;
 
-// Message wrapper for queue (raw ESP-NOW payload)
-// Size reduced to fit largest expected message (AccelSampleMsg = 226 bytes)
+// Task acknowledgment flag - set when task has stopped and closed files
+static volatile bool s_taskStopped = true;  // Start stopped
+
+// Message types for capture queue
+enum class CaptureMessageType : uint8_t {
+    DATA,   // Telemetry data to write
+    STOP    // Close files and acknowledge
+};
+
+// Message wrapper for queue (commands + raw ESP-NOW payload)
 struct CaptureMessage {
-    uint8_t type;
+    CaptureMessageType type;
+    uint8_t msgType;    // For DATA: which file (MSG_ACCEL_SAMPLES, etc.)
     uint8_t len;
-    uint8_t data[226];  // Max AccelSampleMsg size (2 + 16*14)
+    uint8_t data[MAX_CAPTURE_PAYLOAD];
 } __attribute__((packed));
 
 static const size_t CAPTURE_QUEUE_SIZE = 32;  // ~0.8 sec buffer at 40 batches/sec
@@ -341,17 +359,32 @@ static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
 }
 
 // FreeRTOS task that processes capture queue (runs on Core 1)
+// Task is a "writer service" - wakes up to write, sleeps when told to stop
 static void captureTask(void* pvParameters) {
     (void)pvParameters;
     CaptureMessage msg;
 
     while (true) {
-        // Block until message available
-        if (xQueueReceive(s_captureQueue, &msg, portMAX_DELAY) == pdPASS) {
-            if (s_state == CaptureState::RECORDING) {
-                processMessage(msg.type, msg.data, msg.len);
+        // Wait for wake-up notification (from captureStart)
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        s_taskStopped = false;
+
+        // Recording loop - process messages until STOP command
+        while (true) {
+            if (xQueueReceive(s_captureQueue, &msg, pdMS_TO_TICKS(QUEUE_RECEIVE_TIMEOUT_MS)) == pdPASS) {
+                if (msg.type == CaptureMessageType::STOP) {
+                    break;  // Exit recording loop
+                }
+                if (msg.type == CaptureMessageType::DATA) {
+                    processMessage(msg.msgType, msg.data, msg.len);
+                }
             }
         }
+
+        // STOP received - close files and signal done
+        closeAllFiles();
+        s_taskStopped = true;
+        // Loop back to wait for next recording session
     }
 }
 
@@ -414,10 +447,19 @@ void captureInit() {
 }
 
 void captureStart() {
-    // Close any open files first
-    closeAllFiles();
+    // Already recording - ignore
+    if (s_state == CaptureState::RECORDING) {
+        Serial.println("[CAPTURE] Already recording");
+        return;
+    }
 
-    // Delete all existing files
+    // Task must be stopped before we can manipulate files
+    if (!s_taskStopped) {
+        Serial.println("[CAPTURE] Task still running, cannot start");
+        return;
+    }
+
+    // Delete all existing files (safe - task is stopped)
     deleteAllFiles();
 
     // Drain any stale messages from queue
@@ -439,6 +481,12 @@ void captureStart() {
     }
 
     s_state = CaptureState::RECORDING;
+
+    // Wake the task to start recording
+    if (s_captureTask) {
+        xTaskNotifyGive(s_captureTask);
+    }
+
     Serial.println("[CAPTURE] CAPTURE STARTED");
 }
 
@@ -448,9 +496,22 @@ void captureStop() {
         return;
     }
 
-    closeAllFiles();
+    // Send STOP command through queue
+    CaptureMessage msg = {};
+    msg.type = CaptureMessageType::STOP;
+    xQueueSend(s_captureQueue, &msg, pdMS_TO_TICKS(QUEUE_SEND_TIMEOUT_MS));
 
-    // Print summary
+    // Wait for task to close files and acknowledge
+    uint32_t startMs = millis();
+    while (!s_taskStopped && (millis() - startMs) < TASK_STOP_TIMEOUT_MS) {
+        vTaskDelay(pdMS_TO_TICKS(TASK_STOP_POLL_MS));
+    }
+
+    if (!s_taskStopped) {
+        Serial.println("[CAPTURE] Warning: task did not acknowledge stop");
+    }
+
+    // Task has closed files - print summary
     Serial.println("[CAPTURE] CAPTURE STOPPED");
     Serial.println("--- Capture Summary ---");
 
@@ -471,7 +532,7 @@ void captureStop() {
     size_t total = LittleFS.totalBytes();
     Serial.printf("Filesystem: %zu/%zu bytes used\n", used, total);
 
-    s_state = CaptureState::STOPPED;
+    s_state = CaptureState::IDLE;
 }
 
 void capturePlay() {
@@ -527,7 +588,12 @@ void capturePlay() {
 }
 
 void captureDelete() {
-    closeAllFiles();
+    // Stop recording first if needed (task will close files)
+    if (s_state == CaptureState::RECORDING || s_state == CaptureState::FULL) {
+        captureStop();
+    }
+
+    // Task is stopped - safe to delete files
     deleteAllFiles();
 
     // Reset tracking
@@ -543,10 +609,11 @@ void captureDelete() {
 void captureWrite(uint8_t msgType, const uint8_t* data, size_t len) {
     // Called from ESP-NOW callback (WiFi task) - must be fast and non-blocking
     if (s_state != CaptureState::RECORDING) return;
-    if (len > 226 || !s_captureQueue) return;  // Max AccelSampleMsg size
+    if (len > MAX_CAPTURE_PAYLOAD || !s_captureQueue) return;
 
-    CaptureMessage msg;
-    msg.type = msgType;
+    CaptureMessage msg = {};
+    msg.type = CaptureMessageType::DATA;
+    msg.msgType = msgType;
     msg.len = static_cast<uint8_t>(len);
     memcpy(msg.data, data, len);
 

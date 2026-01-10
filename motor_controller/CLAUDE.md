@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Simple open-loop motor controller for POV display: IR remote → PWM → L298N → motor.
 
-No PID, no display, no FreeRTOS - just the essentials.
+Uses FreeRTOS for telemetry capture task. No PID, no display - just the essentials.
 
 **Hardware**:
 - Waveshare ESP32-S3-Zero
@@ -84,6 +84,7 @@ All pins and constants are defined in `src/hardware_config.h`:
 - `src/command_processor.{h,cpp}` - Routes commands to motor or ESP-NOW
 - `src/led_indicator.{h,cpp}` - RGB LED status (stopped/running)
 - `src/espnow_comm.{h,cpp}` - ESP-NOW communication with LED display
+- `src/telemetry_capture.{h,cpp}` - Telemetry capture to LittleFS (FreeRTOS task)
 - `platformio.ini` - Build configuration
 - `../shared/sagetv_buttons.h` - SageTV remote button codes
 - `../shared/messages.h` - ESP-NOW message structures
@@ -101,3 +102,11 @@ All pins and constants are defined in `src/hardware_config.h`:
 - Display ← Motor: Effect switching, brightness control via IR remote
 
 **Previous Complexity**: This project was originally built with FreeRTOS, PID control, hall effect sensor feedback, OLED display, and rotary encoder control. All removed - this is now pure open-loop control with IR remote for simplicity.
+
+## Telemetry Capture
+
+Captures high-rate telemetry from the LED display to LittleFS for offline analysis. Uses a FreeRTOS task for file writes to avoid blocking ESP-NOW callbacks.
+
+**IR Remote**: RECORD/STOP/PLAY/DELETE buttons control capture.
+
+See `docs/motor_controller/telemetry_capture.md` for architecture details.

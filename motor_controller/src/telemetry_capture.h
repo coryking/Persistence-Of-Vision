@@ -3,10 +3,9 @@
 #include "types.h"
 
 enum class CaptureState : uint8_t {
-    IDLE,       // Ready for RECORD
+    IDLE,       // Ready for RECORD (also used after STOP)
     RECORDING,  // Actively writing to files
-    FULL,       // Filesystem limit reached
-    STOPPED     // Capture complete, files closed
+    FULL        // Filesystem limit reached (still recording, just can't write more)
 };
 
 void captureInit();       // Call from setup() - mounts LittleFS
