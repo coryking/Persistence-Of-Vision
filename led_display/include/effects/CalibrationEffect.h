@@ -33,6 +33,9 @@ private:
     timestamp_t m_lastSampleTime = 0;
     static constexpr uint32_t SAMPLE_INTERVAL_US = 2500;  // 400 Hz
 
+    // Visual feedback - hue cycles 0-359 each revolution
+    uint16_t m_hue = 0;
+
     void flushBatch();
     void addSample(const Accelerometer::Reading& reading, timestamp_t timestamp);
 };

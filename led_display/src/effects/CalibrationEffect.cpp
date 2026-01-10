@@ -2,6 +2,7 @@
 #include "ESPNowComm.h"
 #include "hardware_config.h"
 #include <Arduino.h>
+#include <FastLED.h>
 
 // Global calibration flag
 volatile bool g_calibrationActive = false;
@@ -12,6 +13,7 @@ void CalibrationEffect::begin() {
     // Initialize batch
     m_msg.sample_count = 0;
     m_lastSampleTime = 0;
+    m_hue = 0;
 
     // Enable hall event streaming
     g_calibrationActive = true;
@@ -34,9 +36,12 @@ void CalibrationEffect::end() {
 }
 
 void CalibrationEffect::render(RenderContext& ctx) {
-    // Keep all LEDs off - we're not rendering, just sampling
+    // Visual feedback: one LED per arm cycles through hues each revolution
+    // This lets you see the effect is active without using serial
     for (int arm = 0; arm < HardwareConfig::NUM_ARMS; arm++) {
-        for (int p = 0; p < HardwareConfig::LEDS_PER_ARM; p++) {
+        // First LED shows current hue, rest are off
+        ctx.arms[arm].pixels[0] = CHSV(m_hue, 255, 128);  // Half brightness to save power
+        for (int p = 1; p < HardwareConfig::LEDS_PER_ARM; p++) {
             ctx.arms[arm].pixels[p] = CRGB::Black;
         }
     }
@@ -55,10 +60,12 @@ void CalibrationEffect::render(RenderContext& ctx) {
 
 void CalibrationEffect::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) {
     // Hall events are sent by hallProcessingTask when g_calibrationActive is true
-    // Nothing extra needed here
     (void)usPerRev;
     (void)timestamp;
     (void)revolutionCount;
+
+    // Cycle hue each revolution for visual feedback (0-255 for FastLED)
+    m_hue = (m_hue + 1) % 256;
 }
 
 void CalibrationEffect::addSample(const Accelerometer::Reading& reading, timestamp_t timestamp) {

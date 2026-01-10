@@ -162,14 +162,29 @@ void setupLedStrip() {
 
     // Startup blink pattern - diagnostic for reset detection
     // If you see periodic blinks during operation, ESP32 is resetting
+    // Uses 5% brightness to avoid power issues on wireless USB power
     Serial.println("Startup blink sequence...");
-    for (int i = 0; i < 3; i++) {
-        strip.ClearTo(RgbColor(64, 0, 0));  // Dim red
+    constexpr uint8_t BOOT_BRIGHTNESS = 12;  // ~5% of 255
+    const RgbColor bootColors[3] = {
+        RgbColor(BOOT_BRIGHTNESS, 0, 0),  // Red
+        RgbColor(0, BOOT_BRIGHTNESS, 0),  // Green
+        RgbColor(0, 0, BOOT_BRIGHTNESS)   // Blue
+    };
+
+    for (int flash = 0; flash < 3; flash++) {
+        // Each arm gets a different color, rotating each flash
+        for (uint16_t arm = 0; arm < HardwareConfig::NUM_ARMS; arm++) {
+            uint8_t colorIdx = (arm + flash) % 3;  // Rotate colors each flash
+            uint16_t startLed = HardwareConfig::ARM_START[arm];
+            for (uint16_t led = 0; led < HardwareConfig::LEDS_PER_ARM; led++) {
+                strip.SetPixelColor(startLed + led, bootColors[colorIdx]);
+            }
+        }
         strip.Show();
-        delay(100);
+        delay(500);
         strip.ClearTo(RgbColor(0, 0, 0));
         strip.Show();
-        delay(100);
+        delay(500);
     }
     Serial.println("Startup blink complete");
 }

@@ -2,6 +2,9 @@
 #include "messages.h"
 #include <LittleFS.h>
 #include <Arduino.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
 
 // Reserve space to avoid completely filling filesystem
 static const size_t FS_RESERVE_BYTES = 50 * 1024;
@@ -34,6 +37,20 @@ struct TelemetryRecord {
 // State
 static CaptureState s_state = CaptureState::IDLE;
 
+// FreeRTOS queue for receiving messages from ESP-NOW callback
+static QueueHandle_t s_captureQueue = nullptr;
+static TaskHandle_t s_captureTask = nullptr;
+
+// Message wrapper for queue (raw ESP-NOW payload)
+// Size reduced to fit largest expected message (AccelSampleMsg = 226 bytes)
+struct CaptureMessage {
+    uint8_t type;
+    uint8_t len;
+    uint8_t data[226];  // Max AccelSampleMsg size (2 + 16*14)
+} __attribute__((packed));
+
+static const size_t CAPTURE_QUEUE_SIZE = 32;  // ~0.8 sec buffer at 40 batches/sec
+
 // Track open file handles (sparse array indexed by msgType)
 // Only a few will be used, but keeps lookup simple
 static const size_t MAX_MSG_TYPES = 16;
@@ -59,7 +76,14 @@ static bool ensureFileOpen(uint8_t msgType) {
     if (msgType >= MAX_MSG_TYPES) return false;
 
     if (s_fileOpen[msgType]) {
-        return true;
+        // Verify file handle is still valid
+        if (!s_files[msgType]) {
+            Serial.printf("[CAPTURE] File %u handle became invalid!\n", msgType);
+            s_fileOpen[msgType] = false;
+            // Fall through to reopen
+        } else {
+            return true;
+        }
     }
 
     String filename = getFilename(msgType);
@@ -69,6 +93,7 @@ static bool ensureFileOpen(uint8_t msgType) {
         return false;
     }
 
+    Serial.printf("[CAPTURE] Opened %s for writing\n", filename.c_str());
     s_fileOpen[msgType] = true;
     s_recordCounts[msgType] = 0;
     s_bytesWritten[msgType] = 0;
@@ -96,6 +121,30 @@ static bool writeRecord(uint8_t msgType, const void* data, size_t len) {
     return true;
 }
 
+// Write a batch of records (for accel samples)
+static bool writeBatch(uint8_t msgType, const void* data, size_t len, uint32_t recordCount) {
+    if (!ensureFileOpen(msgType)) return false;
+
+    if (!hasSpace()) {
+        Serial.println("[CAPTURE] CAPTURE FULL - filesystem limit reached");
+        s_state = CaptureState::FULL;
+        return false;
+    }
+
+    File& f = s_files[msgType];
+    size_t written = f.write((const uint8_t*)data, len);
+    if (written != len) {
+        int err = f.getWriteError();
+        Serial.printf("[CAPTURE] Write failed: file=%u wrote=%zu/%zu err=%d valid=%d pos=%zu\n",
+                      msgType, written, len, err, (bool)f, f.position());
+        return false;
+    }
+
+    s_recordCounts[msgType] += recordCount;
+    s_bytesWritten[msgType] += len;
+    return true;
+}
+
 // Close all open files
 static void closeAllFiles() {
     for (size_t i = 0; i < MAX_MSG_TYPES; i++) {
@@ -110,17 +159,26 @@ static void closeAllFiles() {
 static void deleteAllFiles() {
     File dir = LittleFS.open(TELEMETRY_DIR);
     if (!dir || !dir.isDirectory()) {
+        Serial.println("[CAPTURE] No telemetry dir to clean");
         return;
     }
 
+    int count = 0;
     File file = dir.openNextFile();
     while (file) {
         String path = String(TELEMETRY_DIR) + "/" + file.name();
         file.close();
-        LittleFS.remove(path);
+        if (LittleFS.remove(path)) {
+            count++;
+        } else {
+            Serial.printf("[CAPTURE] Failed to delete %s\n", path.c_str());
+        }
         file = dir.openNextFile();
     }
     dir.close();
+    if (count > 0) {
+        Serial.printf("[CAPTURE] Deleted %d files\n", count);
+    }
 }
 
 // Get human-readable name for message type
@@ -217,6 +275,86 @@ static void waitForKeypress() {
     Serial.println();
 }
 
+// Process a single message from the queue (runs in captureTask context)
+static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
+    switch (msgType) {
+        case MSG_ACCEL_SAMPLES: {
+            // Validate minimum size: header (2 bytes)
+            if (len < 2) return;
+            const AccelSampleMsg* msg = reinterpret_cast<const AccelSampleMsg*>(data);
+
+            // Validate sample_count bounds
+            if (msg->sample_count == 0 || msg->sample_count > 16) return;
+
+            // Validate length matches sample_count
+            size_t expected = 2 + (msg->sample_count * sizeof(AccelSample));
+            if (len < expected) return;
+
+            // Build batch of records
+            AccelRecord records[16];
+            for (uint8_t i = 0; i < msg->sample_count; i++) {
+                const AccelSample& s = msg->samples[i];
+                records[i].timestamp = s.timestamp_us;
+                records[i].x = s.x;
+                records[i].y = s.y;
+                records[i].z = s.z;
+            }
+
+            // Single batched write
+            size_t totalBytes = msg->sample_count * sizeof(AccelRecord);
+            writeBatch(MSG_ACCEL_SAMPLES, records, totalBytes, msg->sample_count);
+            break;
+        }
+
+        case MSG_HALL_EVENT: {
+            if (len < sizeof(HallEventMsg)) return;
+            const HallEventMsg* msg = reinterpret_cast<const HallEventMsg*>(data);
+
+            HallRecord rec;
+            rec.timestamp = msg->timestamp_us;
+            rec.period_us = msg->period_us;
+            writeRecord(MSG_HALL_EVENT, &rec, sizeof(rec));
+            break;
+        }
+
+        case MSG_TELEMETRY: {
+            if (len < sizeof(TelemetryMsg)) return;
+            const TelemetryMsg* msg = reinterpret_cast<const TelemetryMsg*>(data);
+
+            TelemetryRecord rec;
+            rec.timestamp = msg->timestamp_us;
+            rec.hall_avg_us = msg->hall_avg_us;
+            rec.revolutions = msg->revolutions;
+            rec.notRotatingCount = msg->notRotatingCount;
+            rec.skipCount = msg->skipCount;
+            rec.renderCount = msg->renderCount;
+            writeRecord(MSG_TELEMETRY, &rec, sizeof(rec));
+            break;
+        }
+
+        default: {
+            // Unknown message type - write raw bytes for future-proofing
+            writeRecord(msgType, data, len);
+            break;
+        }
+    }
+}
+
+// FreeRTOS task that processes capture queue (runs on Core 1)
+static void captureTask(void* pvParameters) {
+    (void)pvParameters;
+    CaptureMessage msg;
+
+    while (true) {
+        // Block until message available
+        if (xQueueReceive(s_captureQueue, &msg, portMAX_DELAY) == pdPASS) {
+            if (s_state == CaptureState::RECORDING) {
+                processMessage(msg.type, msg.data, msg.len);
+            }
+        }
+    }
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -241,6 +379,35 @@ void captureInit() {
 
     s_state = CaptureState::IDLE;
 
+    // Create capture queue
+    Serial.printf("[CAPTURE] Creating queue: %zu items × %zu bytes = %zu bytes\n",
+                  CAPTURE_QUEUE_SIZE, sizeof(CaptureMessage),
+                  CAPTURE_QUEUE_SIZE * sizeof(CaptureMessage));
+    s_captureQueue = xQueueCreate(CAPTURE_QUEUE_SIZE, sizeof(CaptureMessage));
+    if (!s_captureQueue) {
+        Serial.println("[CAPTURE] Failed to create capture queue!");
+        return;
+    }
+    Serial.printf("[CAPTURE] Queue created: %p\n", (void*)s_captureQueue);
+
+    // Create capture task (pinned to Core 1, app core)
+    BaseType_t taskCreated = xTaskCreatePinnedToCore(
+        captureTask,
+        "captureTask",
+        4096,           // Stack size
+        nullptr,
+        2,              // Priority (lower than time-critical tasks)
+        &s_captureTask,
+        1               // Pin to Core 1 (app core)
+    );
+    if (taskCreated != pdPASS) {
+        Serial.println("[CAPTURE] Failed to create capture task!");
+        vQueueDelete(s_captureQueue);
+        s_captureQueue = nullptr;
+        return;
+    }
+    Serial.println("[CAPTURE] Capture task started");
+
     size_t total = LittleFS.totalBytes();
     size_t used = LittleFS.usedBytes();
     Serial.printf("[CAPTURE] LittleFS ready: %zu/%zu bytes used\n", used, total);
@@ -252,6 +419,18 @@ void captureStart() {
 
     // Delete all existing files
     deleteAllFiles();
+
+    // Drain any stale messages from queue
+    if (s_captureQueue) {
+        CaptureMessage msg;
+        int drained = 0;
+        while (xQueueReceive(s_captureQueue, &msg, 0) == pdPASS) {
+            drained++;
+        }
+        if (drained > 0) {
+            Serial.printf("[CAPTURE] Drained %d stale messages\n", drained);
+        }
+    }
 
     // Reset tracking
     for (size_t i = 0; i < MAX_MSG_TYPES; i++) {
@@ -362,58 +541,17 @@ void captureDelete() {
 }
 
 void captureWrite(uint8_t msgType, const uint8_t* data, size_t len) {
+    // Called from ESP-NOW callback (WiFi task) - must be fast and non-blocking
     if (s_state != CaptureState::RECORDING) return;
+    if (len > 226 || !s_captureQueue) return;  // Max AccelSampleMsg size
 
-    switch (msgType) {
-        case MSG_ACCEL_SAMPLES: {
-            if (len < 2) return;
-            const AccelSampleMsg* msg = reinterpret_cast<const AccelSampleMsg*>(data);
+    CaptureMessage msg;
+    msg.type = msgType;
+    msg.len = static_cast<uint8_t>(len);
+    memcpy(msg.data, data, len);
 
-            // Write each sample as individual record
-            for (uint8_t i = 0; i < msg->sample_count; i++) {
-                const AccelSample& s = msg->samples[i];
-                AccelRecord rec;
-                rec.timestamp = s.timestamp_us;
-                rec.x = s.x;
-                rec.y = s.y;
-                rec.z = s.z;
-                if (!writeRecord(MSG_ACCEL_SAMPLES, &rec, sizeof(rec))) return;
-            }
-            break;
-        }
-
-        case MSG_HALL_EVENT: {
-            if (len < sizeof(HallEventMsg)) return;
-            const HallEventMsg* msg = reinterpret_cast<const HallEventMsg*>(data);
-
-            HallRecord rec;
-            rec.timestamp = msg->timestamp_us;
-            rec.period_us = msg->period_us;
-            writeRecord(MSG_HALL_EVENT, &rec, sizeof(rec));
-            break;
-        }
-
-        case MSG_TELEMETRY: {
-            if (len < sizeof(TelemetryMsg)) return;
-            const TelemetryMsg* msg = reinterpret_cast<const TelemetryMsg*>(data);
-
-            TelemetryRecord rec;
-            rec.timestamp = msg->timestamp_us;
-            rec.hall_avg_us = msg->hall_avg_us;
-            rec.revolutions = msg->revolutions;
-            rec.notRotatingCount = msg->notRotatingCount;
-            rec.skipCount = msg->skipCount;
-            rec.renderCount = msg->renderCount;
-            writeRecord(MSG_TELEMETRY, &rec, sizeof(rec));
-            break;
-        }
-
-        default: {
-            // Unknown message type - write raw bytes for future-proofing
-            writeRecord(msgType, data, len);
-            break;
-        }
-    }
+    // Non-blocking send (drop message if queue full)
+    xQueueSend(s_captureQueue, &msg, 0);
 }
 
 CaptureState getCaptureState() {
