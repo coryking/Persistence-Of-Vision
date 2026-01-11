@@ -28,10 +28,15 @@ void sendEffectParamUp();
 // Send effect parameter down command to display
 void sendEffectParamDown();
 
-// Print ESP-NOW receive statistics (for debugging)
+// Print ESP-NOW receive statistics (for debugging) - DEPRECATED, use getters below
 void printEspNowStats();
 
 // Reset ESP-NOW receive statistics
 void resetEspNowStats();
+
+// Get ESP-NOW receive statistics (for unified STATUS command)
+uint32_t getRxHallPackets();
+uint32_t getRxAccelPackets();
+uint32_t getRxAccelSamples();
 
 #endif // ESPNOW_COMM_H

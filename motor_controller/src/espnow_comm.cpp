@@ -188,3 +188,7 @@ void resetEspNowStats() {
     s_rxHallPackets = 0;
     s_lastAccelLen = 0;
 }
+
+uint32_t getRxHallPackets() { return s_rxHallPackets; }
+uint32_t getRxAccelPackets() { return s_rxAccelPackets; }
+uint32_t getRxAccelSamples() { return s_rxAccelSamples; }

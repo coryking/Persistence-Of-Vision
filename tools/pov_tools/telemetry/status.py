@@ -1,4 +1,4 @@
-"""Status command - get capture state and file inventory."""
+"""Status command - get unified device status."""
 
 import json
 
@@ -12,24 +12,40 @@ from .utils import get_connection, console, err_console
 def status(
     port: str = typer.Option(DEFAULT_PORT, "--port", "-p", help="Serial port"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
-):
-    """Get capture state and file inventory."""
+) -> None:
+    """Get unified device status (motor, capture, RX stats) and file inventory."""
     try:
         with get_connection(port) as conn:
-            state = conn.status()
+            device_status = conn.status()
             files = conn.list_files()
 
             if json_output:
-                data = {
-                    "state": state,
-                    "files": [
-                        {"filename": f.filename, "records": f.records, "bytes": f.bytes}
-                        for f in files
-                    ]
-                }
-                print(json.dumps(data))
+                # Pass through raw status dict, add files
+                output: dict = dict(device_status)
+                output["files"] = [
+                    {"filename": f.filename, "records": f.records, "bytes": f.bytes}
+                    for f in files
+                ]
+                print(json.dumps(output))
             else:
-                console.print(f"State: [bold]{state}[/bold]")
+                # Motor status
+                motor_on = device_status.get("motor_enabled") == "1"
+                motor_state = "[green]ON[/green]" if motor_on else "[red]OFF[/red]"
+                position = device_status.get("speed_position", "?")
+                console.print(f"Motor: {motor_state} (position {position})")
+
+                # Capture status
+                capture = device_status.get("capture_state", "UNKNOWN")
+                console.print(f"Capture: [bold]{capture}[/bold]")
+
+                # RX stats
+                console.print(
+                    f"RX: {device_status.get('rx_hall_packets', '?')} hall, "
+                    f"{device_status.get('rx_accel_packets', '?')} accel pkts, "
+                    f"{device_status.get('rx_accel_samples', '?')} samples"
+                )
+
+                # Files
                 if files:
                     table = Table(title="Files")
                     table.add_column("Filename")

@@ -25,15 +25,6 @@ class FileInfo:
 
 
 @dataclass
-class RxStats:
-    """ESP-NOW receive statistics."""
-    hall_packets: int
-    accel_packets: int
-    accel_samples: int
-    last_accel_len: int
-
-
-@dataclass
 class DumpedFile:
     """A dumped telemetry file with CSV data."""
     filename: str
@@ -94,13 +85,22 @@ class DeviceConnection:
             if not line:
                 raise DeviceError("Timeout waiting for response")
 
-    def status(self) -> str:
-        """Get capture state: IDLE, RECORDING, or FULL."""
+    def status(self) -> dict[str, str]:
+        """Get unified device status as key: value dict.
+
+        Returns raw strings - caller converts types as needed.
+        Firmware can add new fields without Python changes.
+        """
         self._send_command("STATUS")
-        line = self._read_line()
-        if line in ("IDLE", "RECORDING", "FULL"):
-            return line
-        raise DeviceError(f"Unexpected status response: {line}")
+        data: dict[str, str] = {}
+        for _ in range(20):  # Max lines to read
+            line = self._read_line()
+            if not line:
+                break
+            if ": " in line:
+                key, value = line.split(": ", 1)
+                data[key] = value
+        return data
 
     def start(self) -> str:
         """Start recording. Returns OK or error message."""
@@ -134,24 +134,28 @@ class DeviceConnection:
                 ))
         return files
 
-    def rxstats(self) -> RxStats:
-        """Get ESP-NOW receive statistics."""
-        self._send_command("RXSTATS")
-        line = self._read_line()
-        # Parse: [ESPNOW] RX stats: hall=N, accel_pkts=N, accel_samples=N, last_len=N
-        import re
-        match = re.search(
-            r'hall=(\d+),\s*accel_pkts=(\d+),\s*accel_samples=(\d+),\s*last_len=(\d+)',
-            line
-        )
-        if not match:
-            raise DeviceError(f"Unexpected RXSTATS response: {line}")
-        return RxStats(
-            hall_packets=int(match.group(1)),
-            accel_packets=int(match.group(2)),
-            accel_samples=int(match.group(3)),
-            last_accel_len=int(match.group(4))
-        )
+    def motor_on(self) -> str:
+        """Power on motor (idempotent). Returns OK or ERR: Already running."""
+        self._send_command("MOTOR_ON")
+        return self._read_until_ok_or_err()
+
+    def motor_off(self) -> str:
+        """Power off motor (idempotent). Returns OK or ERR: Already stopped."""
+        self._send_command("MOTOR_OFF")
+        return self._read_until_ok_or_err()
+
+    def button(self, cmd_num: int) -> str:
+        """Trigger a Command enum value (emulates IR button press).
+
+        See motor_controller/src/commands.h for command numbers:
+          1-10: Effect1-Effect10 (10 = calibration)
+          11: BrightnessUp, 12: BrightnessDown
+          13: PowerToggle, 14: SpeedUp, 15: SpeedDown
+          16-19: Effect mode/param controls
+          20-23: Capture controls
+        """
+        self._send_command(f"BUTTON {cmd_num}")
+        return self._read_until_ok_or_err()
 
     def rxreset(self) -> str:
         """Reset ESP-NOW receive statistics."""

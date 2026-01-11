@@ -6,6 +6,8 @@
 void motorSpeedInit();
 
 void togglePower();
+bool motorPowerOn();   // Idempotent - returns true if state changed (was off)
+bool motorPowerOff();  // Idempotent - returns true if state changed (was on)
 void speedUp();
 void speedDown();
 

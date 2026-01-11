@@ -23,6 +23,23 @@ void togglePower() {
     }
 }
 
+bool motorPowerOn() {
+    if (motorEnabled) {
+        return false;  // Already on, no state change
+    }
+    motorEnabled = true;
+    speedPosition = 1;
+    return true;
+}
+
+bool motorPowerOff() {
+    if (!motorEnabled) {
+        return false;  // Already off, no state change
+    }
+    motorEnabled = false;
+    return true;
+}
+
 void speedUp() {
     if (speedPosition < SPEED_MAX_POS) {
         speedPosition++;
