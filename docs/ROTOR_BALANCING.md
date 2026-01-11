@@ -82,7 +82,7 @@ The phase of this Z-axis oscillation relative to a rotational reference point (H
 
 The accelerometer does not need to be precisely centered on the rotation axis.
 
-**Current mounting:** 25-35mm from center, double-stick foam tape, approximately flat but not precisely aligned. The imperfect alignment means useful signal may appear on any axis, not just Z.
+**Current mounting:** ~18mm from center, double-stick foam tape, arbitrary orientation. The sensor axes do not correspond to any physical reference frame - X, Y, Z point wherever the sensor landed during installation. Useful signal may appear on any axis.
 
 **At center (r=0):**
 - No centrifugal acceleration
@@ -94,14 +94,15 @@ The accelerometer does not need to be precisely centered on the rotation axis.
 - Gravity signal gets swamped by centrifugal at high RPM
 - Z-axis wobble still visible
 
-**Centrifugal force reality check** (at ~30mm radius, ±16g range):
+**Centrifugal force reality check** (at ~18mm radius, ±16g range):
 
 | RPM | Centrifugal (g) | Within ±16g? |
 |-----|-----------------|--------------|
-| 724 | 17.5g | Barely (may clip) |
-| 2800 | 263g | No - saturated |
+| 724 | ~10.5g | Yes |
+| 1000 | ~20g | No - saturated |
+| 2800 | ~158g | No - saturated |
 
-The X/Y axes (radial) will saturate at operating speed. The Z-axis (axial wobble) is perpendicular to centrifugal and should show the tilt signal needed for balancing.
+Due to arbitrary sensor orientation, any axis could be radial and thus saturate at high RPM. The analysis checks all three axes for saturation.
 
 The wobble signal comes from gravity's projection changing as the disc tilts—this is roughly constant across the disc surface. Mount the accelerometer wherever is mechanically convenient; perfect centering is unnecessary.
 

@@ -120,17 +120,20 @@ def data_quality_analysis(ctx: AnalysisContext) -> AnalysisResult:
 
     findings.append(f"Capture duration: {duration_s:.1f}s, efficiency: {capture_efficiency:.0f}%")
 
-    # === Y-AXIS SATURATION ===
-    y_saturated = (accel["y"] >= 4094).sum()
-    y_sat_pct = 100 * y_saturated / len(accel)
+    # === AXIS SATURATION (all axes, both directions) ===
+    # Check all axes since accelerometer orientation is arbitrary
+    saturation_data = {}
+    for axis in ["x", "y", "z"]:
+        saturated = (accel[axis].abs() >= 4094).sum()
+        sat_pct = 100 * saturated / len(accel)
+        saturation_data[axis] = {
+            "samples": int(saturated),
+            "pct": round(sat_pct, 1),
+        }
+        if sat_pct > 5:
+            findings.append(f"{axis.upper()}-axis saturation: {sat_pct:.1f}% of samples clipped at +/-16g")
 
-    metrics["saturation"] = {
-        "y_saturated_samples": int(y_saturated),
-        "y_saturation_pct": round(y_sat_pct, 1),
-    }
-
-    if y_sat_pct > 5:
-        findings.append(f"Y-axis saturation: {y_sat_pct:.1f}% of samples clipped at +/-16g")
+    metrics["saturation"] = saturation_data
 
     return AnalysisResult(
         name="data_quality",

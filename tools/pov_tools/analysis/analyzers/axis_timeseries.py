@@ -41,22 +41,29 @@ def axis_timeseries_analysis(ctx: AnalysisContext) -> AnalysisResult:
             "std": round(float(full_col.std()), 4),
         }
 
-    # Check saturation
-    y_saturated_pct = ctx.enriched["is_y_saturated"].mean() * 100
+    # Check saturation on all axes
+    saturation_pcts = {}
+    for axis in ["x", "y", "z"]:
+        saturation_pcts[axis] = ctx.enriched[f"is_{axis}_saturated"].mean() * 100
 
     findings = [
         f"X-axis range: {axis_stats['x']['min']:.2f}g to {axis_stats['x']['max']:.2f}g",
         f"Y-axis range: {axis_stats['y']['min']:.2f}g to {axis_stats['y']['max']:.2f}g",
         f"Z-axis range: {axis_stats['z']['min']:.2f}g to {axis_stats['z']['max']:.2f}g",
     ]
-    if y_saturated_pct > 1:
-        findings.append(f"Y-axis saturated: {y_saturated_pct:.1f}% of samples at +16g")
+    for axis in ["x", "y", "z"]:
+        if saturation_pcts[axis] > 1:
+            findings.append(
+                f"{axis.upper()}-axis saturated: {saturation_pcts[axis]:.1f}% of samples at ±16g"
+            )
 
     return AnalysisResult(
         name="axis_timeseries",
         metrics={
             "axis_stats": axis_stats,
-            "y_saturation_pct": round(y_saturated_pct, 1),
+            "x_saturation_pct": round(saturation_pcts["x"], 1),
+            "y_saturation_pct": round(saturation_pcts["y"], 1),
+            "z_saturation_pct": round(saturation_pcts["z"], 1),
             "samples_plotted": len(early),
         },
         plots=plots,

@@ -43,8 +43,10 @@ def load_and_enrich(data_dir: Path) -> AnalysisContext:
     enriched["phase"] = (enriched["micros_since_hall"] / enriched["period_us"]) % 1.0
     enriched["phase_deg"] = enriched["phase"] * 360
 
-    # Mark saturated Y samples (raw value at or near max)
-    enriched["is_y_saturated"] = enriched["y"] >= 4094
+    # Mark saturated samples on all axes (raw value at or near ±16g limits)
+    # Check both directions since accelerometer orientation is arbitrary
+    for axis in ["x", "y", "z"]:
+        enriched[f"is_{axis}_saturated"] = enriched[axis].abs() >= 4094
 
     # Create plots directory
     plots_dir = data_dir / "plots"

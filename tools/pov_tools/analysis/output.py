@@ -15,26 +15,31 @@ def results_to_json(results: list[AnalysisResult], ctx: AnalysisContext) -> dict
     # Merge metrics from each analyzer
     for result in results:
         if result.name == "data_quality":
-            # Flatten data quality metrics into top-level
+            # Preserve nested structure for readability
             output["data_quality"] = {
-                "accel_samples": len(ctx.accel),
-                "hall_events": len(ctx.hall),
-                "rotations_covered": int(ctx.hall["rotation_num"].nunique()),
-                **result.metrics.get("sample_timing", {}),
-                **result.metrics.get("sequence_gaps", {}),
-                **result.metrics.get("samples_per_rotation", {}),
-                **result.metrics.get("phase_coverage", {}),
-                **result.metrics.get("capture_stats", {}),
-                **result.metrics.get("saturation", {}),
+                "summary": {
+                    "accel_samples": len(ctx.accel),
+                    "hall_events": len(ctx.hall),
+                    "rotations_covered": int(ctx.hall["rotation_num"].nunique()),
+                },
+                "sample_timing": result.metrics.get("sample_timing", {}),
+                "sequence_gaps": result.metrics.get("sequence_gaps", {}),
+                "samples_per_rotation": result.metrics.get("samples_per_rotation", {}),
+                "phase_coverage": result.metrics.get("phase_coverage", {}),
+                "capture_stats": result.metrics.get("capture_stats", {}),
+                "saturation": result.metrics.get("saturation", {}),
             }
             if "hall_timing" in result.metrics:
-                output["data_quality"]["hall_period_cv_pct"] = result.metrics["hall_timing"].get("period_cv_pct")
+                output["data_quality"]["hall_timing"] = result.metrics["hall_timing"]
         elif result.name == "rpm_sweep":
             output["rpm_range"] = {
                 "min": result.metrics.get("rpm_min"),
                 "max": result.metrics.get("rpm_max"),
             }
-            output["data_quality"]["hall_glitches"] = result.metrics.get(
+            # Add hall glitches to hall_timing section
+            if "hall_timing" not in output.get("data_quality", {}):
+                output.setdefault("data_quality", {})["hall_timing"] = {}
+            output["data_quality"]["hall_timing"]["glitches"] = result.metrics.get(
                 "hall_glitches", 0
             )
         elif result.name == "phase_analysis":

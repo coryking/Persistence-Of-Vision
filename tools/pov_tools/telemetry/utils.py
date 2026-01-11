@@ -10,8 +10,20 @@ from ..serial_comm import DeviceConnection
 console = Console()
 err_console = Console(stderr=True)
 
+
+def find_project_root() -> Path:
+    """Find project root by walking up looking for .git directory."""
+    current = Path.cwd()
+    while current != current.parent:
+        if (current / ".git").exists():
+            return current
+        current = current.parent
+    # Fallback to CWD if no .git found
+    return Path.cwd()
+
+
 # Output directory for downloaded telemetry
-TELEMETRY_DIR = Path(__file__).parent.parent.parent / "telemetry"
+TELEMETRY_DIR = find_project_root() / "telemetry"
 
 
 def create_timestamped_dir(base_dir: Path) -> Path:
