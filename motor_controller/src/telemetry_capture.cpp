@@ -68,7 +68,7 @@ enum class CaptureMessageType : uint8_t {
 struct CaptureMessage {
     CaptureMessageType type;
     uint8_t msgType;    // For DATA: which file (MSG_ACCEL_SAMPLES, etc.)
-    uint8_t len;
+    uint16_t len;       // ESP-NOW v2.0 can be up to 1470 bytes
     uint8_t data[MAX_CAPTURE_PAYLOAD];
 } __attribute__((packed));
 
@@ -323,7 +323,8 @@ static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
             if (len < expected) return;
 
             // Expand delta timestamps to absolute and build records
-            AccelRecord records[ACCEL_SAMPLES_MAX_BATCH];
+            // Static to avoid stack overflow - called only from captureTask
+            static AccelRecord records[ACCEL_SAMPLES_MAX_BATCH];
             for (uint8_t i = 0; i < msg->sample_count; i++) {
                 const AccelSampleWire& s = msg->samples[i];
                 // Expand delta to absolute timestamp
@@ -380,7 +381,8 @@ static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
 // Task is a "writer service" - wakes up to write, sleeps when told to stop
 static void captureTask(void* pvParameters) {
     (void)pvParameters;
-    CaptureMessage msg;
+    // Static to avoid stack overflow - CaptureMessage is ~1475 bytes
+    static CaptureMessage msg;
 
     while (true) {
         // Wait for wake-up notification (from captureStart)
@@ -631,7 +633,7 @@ void captureWrite(uint8_t msgType, const uint8_t* data, size_t len) {
     CaptureMessage msg = {};
     msg.type = CaptureMessageType::DATA;
     msg.msgType = msgType;
-    msg.len = static_cast<uint8_t>(len);
+    msg.len = static_cast<uint16_t>(len);
     memcpy(msg.data, data, len);
 
     // Non-blocking send (drop message if queue full)

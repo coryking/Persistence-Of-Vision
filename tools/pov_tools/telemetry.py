@@ -2,6 +2,7 @@
 
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -24,6 +25,31 @@ err_console = Console(stderr=True)
 
 # Output directory for downloaded telemetry
 TELEMETRY_DIR = Path(__file__).parent.parent.parent / "telemetry"
+
+
+def create_timestamped_dir(base_dir: Path) -> Path:
+    """Create a timestamped subdirectory for telemetry output.
+
+    Format: 2025-01-11T14-33-22 (ISO-ish, filesystem-safe)
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    output_dir = base_dir / timestamp
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
+
+
+def list_capture_dirs(base_dir: Path) -> list[Path]:
+    """List available capture directories, sorted newest first."""
+    if not base_dir.exists():
+        return []
+
+    dirs = []
+    for item in base_dir.iterdir():
+        if item.is_dir() and (item / "MSG_ACCEL_SAMPLES.csv").exists():
+            dirs.append(item)
+
+    # Sort by name (timestamp format sorts chronologically)
+    return sorted(dirs, reverse=True)
 
 
 def get_connection(port: str) -> DeviceConnection:
@@ -159,11 +185,11 @@ def list_files(
 @app.command()
 def dump(
     port: str = typer.Option(DEFAULT_PORT, "--port", "-p", help="Serial port"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory (creates timestamped subdir)"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
-    """Download all telemetry files to local directory."""
-    output_dir = output or TELEMETRY_DIR
+    """Download all telemetry files to timestamped local directory."""
+    base_dir = output or TELEMETRY_DIR
 
     try:
         with get_connection(port) as conn:
@@ -171,10 +197,13 @@ def dump(
 
             if not files:
                 if json_output:
-                    print(json.dumps({"files": [], "output_dir": str(output_dir)}))
+                    print(json.dumps({"files": [], "output_dir": None}))
                 else:
                     console.print("[dim]No telemetry data to dump[/dim]")
                 return
+
+            # Create timestamped subdirectory
+            output_dir = create_timestamped_dir(base_dir)
 
             saved = save_csv_files(files, output_dir)
 
@@ -299,13 +328,125 @@ def rxstats(
                     console.print("[dim]LED display may not be sending accel data (queue/task issue or send rejection)[/dim]")
                 elif stats.accel_packets > 0:
                     console.print(f"\n[green]Accel packets ARE arriving[/green]")
-                    if stats.last_accel_len > 256:
-                        console.print(f"[yellow]Warning: last_len={stats.last_accel_len} > MAX_CAPTURE_PAYLOAD(256)[/yellow]")
-                        console.print("[dim]Packets may be dropped in captureWrite()[/dim]")
 
                 if reset:
                     console.print("\n[dim]Counters reset[/dim]")
 
     except DeviceError as e:
         err_console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(2)
+
+
+def _get_capture_preview(capture_dir: Path) -> str:
+    """Get a brief preview of a capture directory for the picker."""
+    accel_path = capture_dir / "MSG_ACCEL_SAMPLES.csv"
+    hall_path = capture_dir / "MSG_HALL_EVENT.csv"
+
+    try:
+        import pandas as pd
+
+        info_parts = []
+
+        if accel_path.exists():
+            accel = pd.read_csv(accel_path)
+            info_parts.append(f"{len(accel):,} samples")
+
+        if hall_path.exists():
+            hall = pd.read_csv(hall_path)
+            hall["rpm"] = 60_000_000 / hall["period_us"]
+            rpm_min = hall["rpm"].min()
+            rpm_max = hall["rpm"].max()
+            info_parts.append(f"{rpm_min:.0f}-{rpm_max:.0f} RPM")
+
+        return " | ".join(info_parts) if info_parts else "no data"
+    except Exception:
+        return "error reading"
+
+
+def _interactive_capture_picker(base_dir: Path) -> Path | None:
+    """Show interactive menu to pick a capture directory."""
+    from rich.prompt import Prompt
+
+    captures = list_capture_dirs(base_dir)
+
+    if not captures:
+        err_console.print(f"[red]No capture directories found in {base_dir}[/red]")
+        return None
+
+    console.print("\n[bold]Available captures:[/bold]\n")
+
+    for i, capture in enumerate(captures, 1):
+        preview = _get_capture_preview(capture)
+        console.print(f"  [cyan]{i}[/cyan]. {capture.name}  [dim]({preview})[/dim]")
+
+    console.print()
+
+    choice = Prompt.ask(
+        "Select capture",
+        choices=[str(i) for i in range(1, len(captures) + 1)],
+        default="1",
+    )
+
+    return captures[int(choice) - 1]
+
+
+@app.command()
+def analyze(
+    data_dir: Optional[Path] = typer.Argument(
+        None, help="Capture directory to analyze (interactive picker if not specified)"
+    ),
+):
+    """Analyze telemetry data and generate report.
+
+    Outputs JSON to stdout. HTML report and plots written to data_dir.
+    """
+    from .analysis import (
+        load_and_enrich,
+        run_all_analyses,
+        results_to_json,
+        generate_report,
+    )
+
+    # Determine which directory to analyze
+    if data_dir is None:
+        # Check for captures in default location
+        data_dir = _interactive_capture_picker(TELEMETRY_DIR)
+        if data_dir is None:
+            raise typer.Exit(1)
+    elif not data_dir.exists():
+        err_console.print(f"[red]Directory not found:[/red] {data_dir}")
+        raise typer.Exit(1)
+
+    # Check for required files
+    accel_path = data_dir / "MSG_ACCEL_SAMPLES.csv"
+    hall_path = data_dir / "MSG_HALL_EVENT.csv"
+
+    if not accel_path.exists() or not hall_path.exists():
+        # Maybe they passed the base telemetry dir with flat files?
+        # Check if files exist directly
+        if not accel_path.exists():
+            err_console.print(f"[red]Missing:[/red] {accel_path}")
+        if not hall_path.exists():
+            err_console.print(f"[red]Missing:[/red] {hall_path}")
+        raise typer.Exit(1)
+
+    try:
+        # Load and enrich data
+        ctx = load_and_enrich(data_dir)
+
+        # Run all analyzers
+        results = run_all_analyses(ctx)
+
+        # Generate HTML report
+        report_path = generate_report(results, ctx)
+
+        # Output JSON to stdout
+        output = results_to_json(results, ctx)
+        print(json.dumps(output, indent=2))
+
+    except FileNotFoundError as e:
+        err_console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        err_console.print(f"[red]Analysis failed:[/red] {e}")
         raise typer.Exit(2)

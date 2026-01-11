@@ -582,6 +582,8 @@ name = "pov-tools"
 version = "0.1.0"
 source = { editable = "tools" }
 dependencies = [
+    { name = "numpy" },
+    { name = "pandas" },
     { name = "pyserial" },
     { name = "rich" },
     { name = "typer" },
@@ -589,6 +591,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "numpy", specifier = ">=1.24.0" },
+    { name = "pandas", specifier = ">=2.0.0" },
     { name = "pyserial", specifier = ">=3.5" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "typer", specifier = ">=0.9.0" },

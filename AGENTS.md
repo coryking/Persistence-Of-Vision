@@ -61,6 +61,14 @@ The motor controller and LED display communicate bidirectionally via ESP-NOW:
 
 See **docs/PROJECT_STRUCTURE.md** for shared message definitions and **docs/ir-control-spec.md** for IR control implementation.
 
+## Accelerometer Telemetry
+
+The ADXL345 accelerometer is mounted on the spinning rotor with double-stick foam tape in an arbitrary orientation. **Analyze ALL THREE AXES** - X, Y, Z do not correspond to any physical reference frame (not tangent, not radial, not axial). The sensor axes point wherever the sensor happened to land during installation.
+
+At speed, some axes may saturate (±16g range) due to centrifugal force. Check for saturation before relying on any axis.
+
+See **docs/ROTOR_BALANCING.md** for balancing theory and physics.
+
 ## Philosophy
 
 This is a hobby art project. The goal is to create beautiful spinning LED displays.
