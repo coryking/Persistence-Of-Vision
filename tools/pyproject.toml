@@ -27,3 +27,5 @@ reportUnusedVariable = false
 reportUnusedCallResult = false
 reportAttributeAccessIssue = false
 reportOperatorIssue = false
+reportCallInDefaultInitializer = false  # typer.Option/Argument in defaults is standard
+reportDeprecated = false  # Optional[X] vs X | None is stylistic

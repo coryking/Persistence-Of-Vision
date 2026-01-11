@@ -54,5 +54,5 @@ src/CMakeLists.txt
 *_backup_*
 
 # Telemetry data output (from pov telemetry dump)
-telemetry/
-!telemetry/.gitkeep
+/telemetry/
+!/telemetry/.gitkeep
