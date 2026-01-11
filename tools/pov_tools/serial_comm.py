@@ -25,6 +25,15 @@ class FileInfo:
 
 
 @dataclass
+class RxStats:
+    """ESP-NOW receive statistics."""
+    hall_packets: int
+    accel_packets: int
+    accel_samples: int
+    last_accel_len: int
+
+
+@dataclass
 class DumpedFile:
     """A dumped telemetry file with CSV data."""
     filename: str
@@ -124,6 +133,30 @@ class DeviceConnection:
                     bytes=int(parts[2])
                 ))
         return files
+
+    def rxstats(self) -> RxStats:
+        """Get ESP-NOW receive statistics."""
+        self._send_command("RXSTATS")
+        line = self._read_line()
+        # Parse: [ESPNOW] RX stats: hall=N, accel_pkts=N, accel_samples=N, last_len=N
+        import re
+        match = re.search(
+            r'hall=(\d+),\s*accel_pkts=(\d+),\s*accel_samples=(\d+),\s*last_len=(\d+)',
+            line
+        )
+        if not match:
+            raise DeviceError(f"Unexpected RXSTATS response: {line}")
+        return RxStats(
+            hall_packets=int(match.group(1)),
+            accel_packets=int(match.group(2)),
+            accel_samples=int(match.group(3)),
+            last_accel_len=int(match.group(4))
+        )
+
+    def rxreset(self) -> str:
+        """Reset ESP-NOW receive statistics."""
+        self._send_command("RXRESET")
+        return self._read_until_ok_or_err()
 
     def dump(self) -> list[DumpedFile]:
         """Dump all telemetry files as CSV data."""

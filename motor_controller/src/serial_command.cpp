@@ -1,5 +1,6 @@
 #include "serial_command.h"
 #include "telemetry_capture.h"
+#include "espnow_comm.h"
 #include <Arduino.h>
 #include <cstring>
 #include <cctype>
@@ -17,6 +18,8 @@ static void dispatch(char* cmd) {
     else if (strcmp(cmd, "DELETE") == 0) captureDeleteSerial();
     else if (strcmp(cmd, "STATUS") == 0) captureStatus();
     else if (strcmp(cmd, "LIST") == 0)   captureList();
+    else if (strcmp(cmd, "RXSTATS") == 0) printEspNowStats();
+    else if (strcmp(cmd, "RXRESET") == 0) { resetEspNowStats(); Serial.println("OK"); }
     else Serial.println("ERR: Unknown command");
 }
 

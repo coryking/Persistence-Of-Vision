@@ -6,6 +6,12 @@
 #include "espnow_config.h"
 #include "telemetry_capture.h"
 
+// Receive counters for debugging (visible via serial STATUS command)
+static uint32_t s_rxAccelPackets = 0;
+static uint32_t s_rxAccelSamples = 0;
+static uint32_t s_rxHallPackets = 0;
+static size_t s_lastAccelLen = 0;
+
 // ESP-NOW receive callback - runs on WiFi task
 static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
     if (len < 1) return;
@@ -13,8 +19,21 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
     uint8_t msgType = data[0];
 
     // Route high-rate telemetry to capture (or discard if not recording)
-    // No serial output for these - prevents buffer overflow
-    if (msgType == MSG_ACCEL_SAMPLES || msgType == MSG_HALL_EVENT) {
+    // Track receive counts for debugging
+    if (msgType == MSG_ACCEL_SAMPLES) {
+        s_rxAccelPackets++;
+        s_lastAccelLen = len;
+        // Extract sample count from header (byte 1)
+        if (len >= 2) {
+            s_rxAccelSamples += data[1];
+        }
+        if (isCapturing()) {
+            captureWrite(msgType, data, len);
+        }
+        return;
+    }
+    if (msgType == MSG_HALL_EVENT) {
+        s_rxHallPackets++;
         if (isCapturing()) {
             captureWrite(msgType, data, len);
         }
@@ -156,4 +175,16 @@ void sendEffectParamDown() {
     if (result == ESP_OK) {
         Serial.println("[ESPNOW] Sent effect param DOWN");
     }
+}
+
+void printEspNowStats() {
+    Serial.printf("[ESPNOW] RX stats: hall=%u, accel_pkts=%u, accel_samples=%u, last_len=%u\n",
+                  s_rxHallPackets, s_rxAccelPackets, s_rxAccelSamples, (unsigned)s_lastAccelLen);
+}
+
+void resetEspNowStats() {
+    s_rxAccelPackets = 0;
+    s_rxAccelSamples = 0;
+    s_rxHallPackets = 0;
+    s_lastAccelLen = 0;
 }

@@ -2,6 +2,7 @@
 #include "messages.h"
 #include <LittleFS.h>
 #include <Arduino.h>
+#include <esp_now.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
@@ -9,8 +10,8 @@
 // Reserve space to avoid completely filling filesystem
 static const size_t FS_RESERVE_BYTES = 50 * 1024;
 
-// Maximum payload size for captured messages (generous to allow for future growth)
-static const size_t MAX_CAPTURE_PAYLOAD = 256;
+// Maximum payload size for captured messages - use ESP-NOW v2.0 max
+static const size_t MAX_CAPTURE_PAYLOAD = ESP_NOW_MAX_DATA_LEN_V2;
 
 // Timeouts (ms)
 static const uint32_t TASK_STOP_TIMEOUT_MS = 500;     // Max wait for task to stop

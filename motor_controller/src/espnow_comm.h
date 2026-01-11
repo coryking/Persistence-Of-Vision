@@ -28,4 +28,10 @@ void sendEffectParamUp();
 // Send effect parameter down command to display
 void sendEffectParamDown();
 
+// Print ESP-NOW receive statistics (for debugging)
+void printEspNowStats();
+
+// Reset ESP-NOW receive statistics
+void resetEspNowStats();
+
 #endif // ESPNOW_COMM_H
