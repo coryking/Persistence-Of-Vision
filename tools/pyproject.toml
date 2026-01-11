@@ -16,3 +16,14 @@ pov = "pov_tools.cli:app"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+reportUnknownArgumentType = false
+reportUnusedVariable = false
+reportUnusedCallResult = false
+reportAttributeAccessIssue = false
+reportOperatorIssue = false
