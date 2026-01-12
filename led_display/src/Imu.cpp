@@ -119,11 +119,9 @@ bool Imu::begin() {
 bool Imu::read(xyzFloat& accel, xyzFloat& gyro) {
     if (!m_ready || !m_imu) return false;
 
-    // Read raw accelerometer values (int16 as float, no unit conversion)
-    accel = m_imu->getAccRawValues();
-
-    // Read raw gyroscope values (int16 as float, no unit conversion)
-    gyro = m_imu->getGyrRawValues();
+    // Read corrected raw values (int16 as float, WITH calibration offsets applied)
+    accel = m_imu->getCorrectedAccRawValues();
+    gyro = m_imu->getCorrectedGyrRawValues();
 
     return true;
 }
