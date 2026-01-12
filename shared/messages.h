@@ -81,16 +81,17 @@ struct EffectParamDownMsg {
 static constexpr size_t ESPNOW_MAX_PAYLOAD_V2 = 1470;
 
 // Individual sample for wire transmission (delta timestamps for efficiency)
-// 8 bytes per sample (vs 28 bytes with absolute timestamps)
+// 14 bytes per sample: accel (6) + gyro (6) + delta (2)
 struct AccelSampleWire {
     uint16_t delta_us;           // 2 bytes - offset from batch base_timestamp (max 65ms)
-    accel_raw_t x, y, z;         // 6 bytes (3 × int16_t)
+    accel_raw_t x, y, z;         // 6 bytes (3 × int16_t) - accelerometer
+    gyro_raw_t gx, gy, gz;       // 6 bytes (3 × int16_t) - gyroscope
 } __attribute__((packed));
 
 // Maximum samples per batch
-// At 800Hz, 50 samples = 62.5ms of data = ~16 packets/sec (vs ~100 with old format)
-// Header: 12 bytes, Per sample: 8 bytes
-// Max with v2.0: (1470 - 12) / 8 = 182 samples, but 50 provides reasonable latency
+// At 1kHz, 50 samples = 50ms of data = ~20 packets/sec
+// Header: 12 bytes, Per sample: 14 bytes (accel + gyro)
+// Max with v2.0: (1470 - 12) / 14 = 104 samples, but 50 provides reasonable latency
 static constexpr size_t ACCEL_SAMPLES_MAX_BATCH = 50;
 
 // AccelSampleMsg header size (type + sample_count + base_timestamp + start_sequence)

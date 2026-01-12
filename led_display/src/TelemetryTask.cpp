@@ -1,5 +1,5 @@
 #include "TelemetryTask.h"
-#include "Accelerometer.h"
+#include "Imu.h"
 #include "ESPNowComm.h"
 #include "messages.h"
 #include "types.h"
@@ -28,9 +28,11 @@ static sequence_t s_sequenceNum = 0;
 static timestamp_t s_lastSendTime = 0;
 
 /**
- * Add a sample to the current batch
+ * Add a sample to the current batch (accel + gyro)
  */
-static void addSampleToBatch(timestamp_t timestamp, int16_t x, int16_t y, int16_t z) {
+static void addSampleToBatch(timestamp_t timestamp,
+                              int16_t x, int16_t y, int16_t z,
+                              int16_t gx, int16_t gy, int16_t gz) {
     uint8_t idx = s_msg.sample_count;
 
     if (idx == 0) {
@@ -41,13 +43,19 @@ static void addSampleToBatch(timestamp_t timestamp, int16_t x, int16_t y, int16_
     } else {
         // Subsequent samples - compute delta from base
         uint64_t delta = timestamp - s_msg.base_timestamp;
-        // Clamp to 16-bit (max 65535 us = ~65ms, batch spans ~62ms max at 800Hz)
+        // Clamp to 16-bit (max 65535 us = ~65ms, batch spans ~50ms max at 1kHz)
         s_msg.samples[idx].delta_us = (delta > 65535) ? 65535 : static_cast<uint16_t>(delta);
     }
 
+    // Accelerometer
     s_msg.samples[idx].x = x;
     s_msg.samples[idx].y = y;
     s_msg.samples[idx].z = z;
+
+    // Gyroscope
+    s_msg.samples[idx].gx = gx;
+    s_msg.samples[idx].gy = gy;
+    s_msg.samples[idx].gz = gz;
 
     s_msg.sample_count++;
     s_sequenceNum++;
@@ -85,16 +93,19 @@ static void telemetryTaskFunc(void* pvParameters) {
             timestamp_t sampleTimestamp;
 
             // Try to get a timestamp from the queue (10ms timeout)
-            if (xQueueReceive(g_accelTimestampQueue, &sampleTimestamp, pdMS_TO_TICKS(10)) == pdTRUE) {
-                // Read the actual accelerometer values
-                xyzFloat reading;
-                if (accel.read(reading)) {
-                    // Convert float to int16_t (ADXL345 returns whole numbers as float)
-                    int16_t x = static_cast<int16_t>(reading.x);
-                    int16_t y = static_cast<int16_t>(reading.y);
-                    int16_t z = static_cast<int16_t>(reading.z);
+            if (xQueueReceive(g_imuTimestampQueue, &sampleTimestamp, pdMS_TO_TICKS(10)) == pdTRUE) {
+                // Read both accelerometer and gyroscope values
+                xyzFloat accelReading, gyroReading;
+                if (imu.read(accelReading, gyroReading)) {
+                    // Convert float to int16_t (raw values as float)
+                    int16_t x = static_cast<int16_t>(accelReading.x);
+                    int16_t y = static_cast<int16_t>(accelReading.y);
+                    int16_t z = static_cast<int16_t>(accelReading.z);
+                    int16_t gx = static_cast<int16_t>(gyroReading.x);
+                    int16_t gy = static_cast<int16_t>(gyroReading.y);
+                    int16_t gz = static_cast<int16_t>(gyroReading.z);
 
-                    addSampleToBatch(sampleTimestamp, x, y, z);
+                    addSampleToBatch(sampleTimestamp, x, y, z, gx, gy, gz);
 
                     // Send batch when full
                     if (s_msg.sample_count >= ACCEL_SAMPLES_MAX_BATCH) {

@@ -82,29 +82,26 @@ The phase of this Z-axis oscillation relative to a rotational reference point (H
 
 The accelerometer does not need to be precisely centered on the rotation axis.
 
-**Current mounting:** ~18mm from center, double-stick foam tape, arbitrary orientation. The sensor axes do not correspond to any physical reference frame - X, Y, Z point wherever the sensor landed during installation. Useful signal may appear on any axis.
+**Current mounting:** ~27mm from center, double-stick foam tape, intentional orientation (see Mounting section above).
 
-**At center (r=0):**
-- No centrifugal acceleration
-- Gravity rotates through X/Y once per revolution (useful for low-speed RPM and direction detection)
-- Z-axis wobble from disc tilt
+**Axis expectations at speed:**
+- **Y axis (radial)**: Points outward from rotation axis. Sees full centrifugal force - will saturate at operating RPM.
+- **X axis (tangent)**: Perpendicular to centrifugal force - should stay within range.
+- **Z axis (axial)**: Along rotation axis - should stay within range, sees wobble signal.
 
-**Away from center (r>0):**
-- Constant centrifugal acceleration (ω²r) pointing outward in rotating frame
-- Gravity signal gets swamped by centrifugal at high RPM
-- Z-axis wobble still visible
+**Centrifugal force reality check** (at ~27mm radius, ±16g range):
 
-**Centrifugal force reality check** (at ~18mm radius, ±16g range):
+| RPM | Centrifugal (g) | Y axis |
+|-----|-----------------|--------|
+| 480 | ~7g | OK |
+| 680 | ~14g | OK |
+| 720 | ~16g | Saturates |
+| 1000 | ~30g | Saturated |
+| 2800 | ~237g | Saturated |
 
-| RPM | Centrifugal (g) | Within ±16g? |
-|-----|-----------------|--------------|
-| 724 | ~10.5g | Yes |
-| 1000 | ~20g | No - saturated |
-| 2800 | ~158g | No - saturated |
+The Y axis will saturate above ~720 RPM. The X and Z axes should remain usable for wobble detection throughout the operating range.
 
-Due to arbitrary sensor orientation, any axis could be radial and thus saturate at high RPM. The analysis checks all three axes for saturation.
-
-The wobble signal comes from gravity's projection changing as the disc tilts—this is roughly constant across the disc surface. Mount the accelerometer wherever is mechanically convenient; perfect centering is unnecessary.
+The wobble signal comes from gravity's projection changing as the disc tilts—this appears on the Z axis (and possibly X). Mount the accelerometer wherever is mechanically convenient; perfect centering is unnecessary.
 
 ### What Accelerometers Measure
 
@@ -118,70 +115,82 @@ For balancing, we're looking for:
 
 No integration or coordinate transforms required.
 
-## Hardware Selection: ADXL345
+## Hardware Selection: MPU-9250
 
 ### Capabilities
 
-- 3-axis MEMS accelerometer
-- 13-bit resolution, ±2g to ±16g selectable range
-- Output data rates from 0.1 Hz to 3200 Hz
-- I2C and SPI interfaces
-- Two programmable interrupt outputs
-- 32-level FIFO buffer
-- Operating voltage: 2.5-3.6V (modules typically have onboard regulator for 5V input)
+- 9-axis IMU (gyroscope + accelerometer + magnetometer)
+- **Gyroscope**: ±250/500/1000/2000 °/s, 16-bit ADCs, up to 8kHz sample rate
+- **Accelerometer**: ±2/4/8/16g, 16-bit ADCs, up to 4kHz sample rate
+- **Magnetometer**: ±4800µT (AK8963), 14-bit, up to 100Hz
+- I2C (400kHz) or SPI (1MHz registers, 20MHz sensor data) interfaces
+- Programmable interrupt outputs
+- 512-byte FIFO buffer
+- Operating voltage: 2.4-3.6V
+- Datasheet: `docs/datasheets/PS-MPU-9250A-01-v1.1.pdf`
 
 ### Communication Interface Decision: I2C
 
-**Why not SPI:** The ESP32-S3 SPI bus is already used for LED data (SK9822). While the ESP32-S3 has multiple SPI peripherals, adding the accelerometer to I2C keeps the buses separate and avoids any potential timing conflicts with the timing-critical LED updates.
+**Why not SPI:** The ESP32-S3 SPI bus is already used for LED data (SK9822). While the ESP32-S3 has multiple SPI peripherals, adding the IMU to I2C keeps the buses separate and avoids any potential timing conflicts with the timing-critical LED updates.
 
 **I2C considerations:**
 
 - Fast mode (400kHz) used
-- 800Hz sample rate via DATA_READY interrupt
-- Reading 6 bytes (X, Y, Z as 16-bit values) per sample
-- FIFO available for future burst reads
+- Up to 1kHz sample rate via DATA_READY interrupt
+- Reading 6 bytes (X, Y, Z as 16-bit values) per sensor per sample
+- 512-byte FIFO available for future burst reads
 
-**Current configuration:**
-- ODR: 800 Hz (ADXL345_DATA_RATE_800)
-- Range: ±16g (ADXL345_RANGE_16G)
-- Full resolution mode: 3.9 mg/LSB regardless of range
-- Sampling: Interrupt-driven via DATA_READY on INT1
+**Target configuration:**
+- Accel ODR: 1kHz
+- Accel Range: ±16g (2048 LSB/g)
+- Gyro Range: ±2000°/s (16.4 LSB/°/s)
+- Sampling: Interrupt-driven via DATA_READY on INT
 
-**Bandwidth adequacy:** At 2800 RPM (~47 Hz rotation), 800 samples/second provides ~17 samples per revolution.
+**Bandwidth adequacy:** At 2800 RPM (~47 Hz rotation), 1000 samples/second provides ~21 samples per revolution.
 
-**Resolution:** With ~17 samples per revolution, phase can be determined to within ~21° (360°/17). Since arms are 120° apart, this is adequate to identify which arm (or region between arms) contains the heavy spot.
+**Resolution:** With ~21 samples per revolution, phase can be determined to within ~17° (360°/21). Since arms are 120° apart, this is adequate to identify which arm (or region between arms) contains the heavy spot.
 
 ### Interrupt Usage
 
-DATA_READY interrupt is connected: INT1 → GPIO D0 (green wire).
+DATA_READY interrupt is connected: INT → GPIO D9 (brown wire).
 
 **Implementation (decoupled FreeRTOS task):**
-1. ADXL345 fires DATA_READY interrupt when new sample ready
+1. MPU-9250 fires DATA_READY interrupt when new sample ready
 2. ISR captures `esp_timer_get_time()` timestamp and queues it (64-slot buffer)
 3. TelemetryTask (dedicated FreeRTOS task on Core 0) drains queue, reads samples
 4. Samples batched with delta timestamps and sent via ESP-NOW to motor controller
 5. Motor controller expands deltas to absolute timestamps when storing
 
-This architecture decouples telemetry from the LED render loop, preventing sample drops when render() skips or busy-waits. The ~62ms batch window (50 samples at 800Hz) with 500ms timeout ensures data is sent even if sampling rate varies.
+This architecture decouples telemetry from the LED render loop, preventing sample drops when render() skips or busy-waits.
 
 This gives ~1° timestamp accuracy vs ~34° error from polling at 2800 RPM.
 
 The ESP32's dual-core architecture allows:
 - Core 1: Timing-critical LED rendering (existing)
-- Core 0: Accelerometer reads, ESP-NOW communication (non-critical timing)
+- Core 0: IMU reads, ESP-NOW communication (non-critical timing)
 
 ### Wiring Notes
 
-For I2C operation:
+Pin assignments are in `led_display/include/hardware_config.h`.
 
-- CS tied to VCC selects I2C mode
-- SDO tied to GND sets I2C address to 0x53
-- INT1 available for DATA_READY interrupt
-- INT2 can be left floating if unused
+For I2C operation:
+- NCS tied HIGH selects I2C mode
+- AD0 sets I2C address (0=0x68, 1=0x69)
+- INT available for DATA_READY interrupt
+- FSYNC not connected
 
 ### Mounting
 
-Foam double-stick tape is acceptable for initial experiments. The wobble signal is a low-frequency periodic signal (~47 Hz), not sharp transients. Foam may introduce slight damping but won't filter out the primary signal. Upgrade to rigid mounting if data looks noisy.
+**Position:** ~27mm from rotation center, mounted with foam double-stick tape.
+
+**Intended orientation:**
+- **Y+ axis**: Radial (outward from rotation center) - will saturate from centrifugal force
+- **Z+ axis**: Axial, points down toward motor shaft (along rotation axis) - sees wobble signal
+- **X+ axis**: Roughly tangent to rotation, pointing away from ESP toward the heavy wireless power board
+
+This orientation was intentional but alignment accuracy is unknown until verified with measurements. The Z-axis should capture disc tilt/wobble as a periodic signal (gravity projection changes as disc tilts), while X sees tangential forces.
+
+Foam tape is acceptable for initial experiments. The wobble signal is a low-frequency periodic signal (~47 Hz), not sharp transients. Foam may introduce slight damping but won't filter out the primary signal.
 
 ## Calibration Workflow
 
@@ -240,4 +249,4 @@ This is how industrial single-plane balancing works. Probably overkill for this 
 
 ## Summary
 
-The accelerometer approach enables finding the imbalance angle through a single calibration run, converting an iterative 2D search into a 1D search along a fixed radial line. The ADXL345 over I2C provides adequate sample rates for phase detection at operating RPM. The sensor mounts on the spinning rotor, detecting wobble via Z-axis oscillation correlated with Hall sensor timing. This integrates with the existing ESP32-S3 dual-core architecture without impacting timing-critical LED rendering.
+The accelerometer approach enables finding the imbalance angle through a single calibration run, converting an iterative 2D search into a 1D search along a fixed radial line. The MPU-9250 over I2C provides adequate sample rates for phase detection at operating RPM, plus gyroscope data that can directly measure rotation rate and wobble. The sensor mounts on the spinning rotor, detecting wobble via Z-axis oscillation correlated with Hall sensor timing. This integrates with the existing ESP32-S3 dual-core architecture without impacting timing-critical LED rendering.

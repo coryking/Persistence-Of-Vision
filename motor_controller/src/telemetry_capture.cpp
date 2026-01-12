@@ -28,10 +28,13 @@ static const char* TELEMETRY_DIR = "/telemetry";
 struct AccelRecord {
     timestamp_t timestamp;      // 64-bit absolute timestamp (expanded from delta)
     sequence_t sequence_num;    // Sample sequence for drop detection (expanded from start + index)
-    accel_raw_t x;              // X axis (int16_t - ADXL345 raw values)
+    accel_raw_t x;              // X axis (int16_t - MPU-9250 raw values)
     accel_raw_t y;              // Y axis
     accel_raw_t z;              // Z axis
-} __attribute__((packed));  // 16 bytes total
+    gyro_raw_t gx;              // Gyro X axis (int16_t)
+    gyro_raw_t gy;              // Gyro Y axis
+    gyro_raw_t gz;              // Gyro Z axis
+} __attribute__((packed));  // 22 bytes total
 
 struct HallRecord {
     timestamp_t timestamp;      // 64-bit: when hall sensor triggered
@@ -230,12 +233,13 @@ static void dumpFileCSV(uint8_t msgType, File& file, size_t dataSize) {
             Serial.printf("=== FILE: %s.bin (%zu records) ===\n",
                           getMsgTypeName(msgType), recordCount);
             // Note: rotation_num and micros_since_hall computed in Python post-processing
-            Serial.println("timestamp_us,sequence_num,x,y,z");
+            Serial.println("timestamp_us,sequence_num,x,y,z,gx,gy,gz");
 
             AccelRecord rec;
             while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%u,%d,%d,%d\n",
-                              rec.timestamp, rec.sequence_num, rec.x, rec.y, rec.z);
+                Serial.printf("%llu,%u,%d,%d,%d,%d,%d,%d\n",
+                              rec.timestamp, rec.sequence_num,
+                              rec.x, rec.y, rec.z, rec.gx, rec.gy, rec.gz);
             }
             break;
         }
@@ -331,9 +335,14 @@ static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
                 records[i].timestamp = msg->base_timestamp + s.delta_us;
                 // Expand sequence number
                 records[i].sequence_num = msg->start_sequence + i;
+                // Accelerometer
                 records[i].x = s.x;
                 records[i].y = s.y;
                 records[i].z = s.z;
+                // Gyroscope
+                records[i].gx = s.gx;
+                records[i].gy = s.gy;
+                records[i].gz = s.gz;
             }
 
             // Single batched write
@@ -702,11 +711,12 @@ static void dumpFileScript(uint8_t msgType, File& file, size_t dataSize) {
     switch (msgType) {
         case MSG_ACCEL_SAMPLES: {
             // Note: rotation_num and micros_since_hall computed in Python post-processing
-            Serial.println("timestamp_us,sequence_num,x,y,z");
+            Serial.println("timestamp_us,sequence_num,x,y,z,gx,gy,gz");
             AccelRecord rec;
             while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%u,%d,%d,%d\n",
-                              rec.timestamp, rec.sequence_num, rec.x, rec.y, rec.z);
+                Serial.printf("%llu,%u,%d,%d,%d,%d,%d,%d\n",
+                              rec.timestamp, rec.sequence_num,
+                              rec.x, rec.y, rec.z, rec.gx, rec.gy, rec.gz);
             }
             break;
         }

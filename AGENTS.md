@@ -61,11 +61,16 @@ The motor controller and LED display communicate bidirectionally via ESP-NOW:
 
 See **docs/PROJECT_STRUCTURE.md** for shared message definitions and **docs/ir-control-spec.md** for IR control implementation.
 
-## Accelerometer Telemetry
+## IMU Telemetry
 
-The ADXL345 accelerometer is mounted on the spinning rotor with double-stick foam tape in an arbitrary orientation. **Analyze ALL THREE AXES** - X, Y, Z do not correspond to any physical reference frame (not tangent, not radial, not axial). The sensor axes point wherever the sensor happened to land during installation.
+The MPU-9250 IMU is mounted ~27mm from rotation center with double-stick foam tape.
 
-At speed, some axes may saturate (±16g range) due to centrifugal force. Check for saturation before relying on any axis.
+**Intended orientation** (verify with measurements):
+- **Y+**: Radial (outward from rotation center) - will saturate from centrifugal force
+- **Z+**: Down toward motor shaft (axial, along rotation axis) - sees wobble
+- **X+**: Roughly tangent to rotation, toward heavy wireless power board
+
+The MPU-9250 provides both accelerometer (±16g) and gyroscope (±2000°/s) data. The Y axis (radial) will saturate from centrifugal force above ~720 RPM at 27mm radius. The X (tangent) and Z (axial) axes should remain usable throughout the operating range. The gyroscope provides rotation rate data that can complement the accelerometer for balance analysis.
 
 See **docs/ROTOR_BALANCING.md** for balancing theory and physics.
 

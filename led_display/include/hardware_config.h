@@ -21,13 +21,15 @@ namespace HardwareConfig {
     constexpr uint8_t SPI_DATA_PIN = D10;  // Blue wire - SK9822 Data (MOSI)
     constexpr uint8_t SPI_CLK_PIN = D8;    // Purple wire - SK9822 Clock (SCK)
 
-    // ADXL345 Accelerometer (I2C mode - CS and SDO set HIGH in software)
-    // Wire colors: SCL=Brown, SDA=Orange, SDO=Purple, INT1=Green, CS=Blue
-    constexpr uint8_t ACCEL_SCL_PIN = D9;   // Brown wire - I2C Clock
-    constexpr uint8_t ACCEL_SDA_PIN = D2;   // Orange wire - I2C Data
-    constexpr uint8_t ACCEL_SDO_PIN = D3;   // Purple wire - Set HIGH for addr 0x1D
-    constexpr uint8_t ACCEL_CS_PIN = D1;    // Blue wire - Set HIGH to enable I2C mode
-    constexpr uint8_t ACCEL_INT1_PIN = D0;  // Green wire - Interrupt 1 (unused)
+    // MPU-9250 IMU (9-axis: gyro + accel + magnetometer)
+    // Supports I2C (400kHz) or SPI (1MHz all registers, 20MHz sensor/interrupt only)
+    // Wire colors: SCL=Blue, SDA=Green, ADO=Purple, INT=Brown, NCS=Orange
+    // Datasheet: docs/datasheets/PS-MPU-9250A-01-v1.1.pdf
+    constexpr uint8_t IMU_SCL_PIN = D1;    // Blue wire - I2C/SPI Clock
+    constexpr uint8_t IMU_SDA_PIN = D0;    // Green wire - I2C/SPI Data In
+    constexpr uint8_t IMU_ADO_PIN = D3;    // Purple wire - I2C addr LSB (0=0x68, 1=0x69) / SPI Data Out
+    constexpr uint8_t IMU_NCS_PIN = D2;    // Orange wire - SPI chip select (HIGH for I2C mode)
+    constexpr uint8_t IMU_INT_PIN = D9;    // Brown wire - Interrupt output
 
     // Physical arm layout (indexed by logical position)
     // Logical arm[0] = Outer (furthest from center, +240° from hall sensor)

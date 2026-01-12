@@ -72,7 +72,7 @@ led_display/
 └── platformio.ini            # Build config (ESP32-S3, pioarduino platform)
 ```
 
-**Hardware:** Seeed XIAO ESP32-S3, SK9822 LEDs (3 arms × 11 LEDs), hall effect sensor, ADXL345 accelerometer
+**Hardware:** Seeed XIAO ESP32-S3, SK9822 LEDs (3 arms × 11 LEDs), hall effect sensor, MPU-9250 IMU
 
 ## Test Projects (`test_projects/`)
 

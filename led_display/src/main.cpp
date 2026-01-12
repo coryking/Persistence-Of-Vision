@@ -23,7 +23,7 @@
 #include "effects/PulseChaser.h"
 #include "effects/MomentumFlywheel.h"
 #include "effects/CalibrationEffect.h"
-#include "Accelerometer.h"
+#include "Imu.h"
 #include "TelemetryTask.h"
 #include "timing_utils.h"
 #include "hardware_config.h"
@@ -219,13 +219,13 @@ void startHallProcessingTask() {
     Serial.println("Hall processing task started");
 }
 
-void setupAccelerometer() {
-    if (accel.begin()) {
-        Serial.println("Accelerometer initialized");
+void setupImu() {
+    if (imu.begin()) {
+        Serial.println("IMU initialized");
         // Initialize telemetry task (waits for CalibrationEffect to start it)
         telemetryTaskInit();
     } else {
-        Serial.println("WARNING: Accelerometer init failed - calibration unavailable");
+        Serial.println("WARNING: IMU init failed - calibration unavailable");
     }
 }
 
@@ -260,7 +260,7 @@ void setup() {
     setupLedStrip();
     setupHallSensor();
     startHallProcessingTask();
-    setupAccelerometer();
+    setupImu();
     registerEffects();
 
     // Initialize ESP-NOW communication with motor controller

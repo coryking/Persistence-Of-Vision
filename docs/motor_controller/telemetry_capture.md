@@ -143,7 +143,7 @@ The first byte is the message type (from `messages.h`), followed by packed binar
 
 **Field descriptions:**
 - `sequence_num` - Monotonic sample counter for drop detection (gaps indicate missed samples)
-- `x/y/z` - Raw ADXL345 values as int16 (13-bit signed, ±16g range)
+- `x/y/z` - Raw IMU accelerometer values as int16 (16-bit signed, ±16g range)
 
 **Computed in post-processing** (added by `pov telemetry dump`):
 - `rotation_num` - Links accel samples to specific rotations (computed from timestamp correlation with hall events)

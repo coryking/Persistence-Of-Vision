@@ -60,9 +60,26 @@ Detects magnet on stationary frame once per revolution for timing reference.
   - Note: Discontinued, A1104 is recommended substitute
   - Datasheet: `docs/datasheets/A3144-hall-effect-sensor-datasheet.txt`
 
-### ADXL345 Accelerometer
+### MPU-9250 IMU
 
-3-axis accelerometer for motion sensing, connected via SPI.
+9-axis IMU (gyroscope + accelerometer + magnetometer) for motion sensing.
 
-- **Interface**: SPI mode (directly to ESP32, no shared bus with LEDs)
-- **INT2**: Not connected
+- **Model**: InvenSense MPU-9250
+- **Interface**: I2C at 400kHz (ADO=LOW for address 0x68, NCS=HIGH for I2C mode)
+- **Sensors**:
+  - Gyroscope: ±250/500/1000/2000 °/s, 16-bit ADC
+  - Accelerometer: ±2/4/8/16g, 16-bit ADC
+  - Magnetometer: ±4800µT (AK8963), 14-bit (not used)
+- **Pin assignments**: See `led_display/include/hardware_config.h`
+- **Datasheet**: `docs/datasheets/PS-MPU-9250A-01-v1.1.pdf`
+
+**Telemetry configuration:**
+- Accel range: ±16g (2048 LSB/g)
+- Gyro range: ±2000°/s (16.4 LSB/°/s)
+- DLPF mode 1: 184Hz bandwidth, 2.9ms delay
+- Sample rate: 1kHz (divider=0)
+- DATA_READY interrupt for timestamping
+
+**Raw data conversion (in Python analysis):**
+- Accel: `raw * (16.0 / 32768.0)` = g
+- Gyro: `raw * (2000.0 / 32768.0)` = °/s
