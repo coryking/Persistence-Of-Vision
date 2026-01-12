@@ -31,6 +31,8 @@ class SpeedEvent:
 
     timestamp: float  # time.time()
     position: int
+    accel_samples: int = 0  # Samples received during this interval
+    hall_packets: int = 0  # Hall packets received during this interval
 
 
 @dataclass
@@ -125,12 +127,14 @@ def run_test_sequence(
             return result
         console.print("[green]Recording started[/green]")
 
-        # Log initial position
+        # Log initial position and baseline sample counts
         status = conn.status()
         if "speed_position" not in status:
             result.error = "STATUS missing speed_position - firmware mismatch?"
             return result
         current_position = int(status["speed_position"])
+        last_accel_samples = int(status.get("rx_accel_samples", 0))
+        last_hall_packets = int(status.get("rx_hall_packets", 0))
         result.speed_log.append(
             SpeedEvent(timestamp=time.time(), position=current_position)
         )
@@ -148,6 +152,35 @@ def run_test_sequence(
                     f"[dim]Position {current_position}, waiting {step_interval}s...[/dim]"
                 )
                 time.sleep(step_interval)
+
+                # Check sample counts after dwell - sanity check
+                status = conn.status()
+                curr_accel = int(status.get("rx_accel_samples", 0))
+                curr_hall = int(status.get("rx_hall_packets", 0))
+                accel_delta = curr_accel - last_accel_samples
+                hall_delta = curr_hall - last_hall_packets
+
+                # Update the last speed event with sample counts
+                if result.speed_log:
+                    result.speed_log[-1].accel_samples = accel_delta
+                    result.speed_log[-1].hall_packets = hall_delta
+
+                # Warn if no data received
+                if accel_delta == 0:
+                    console.print(
+                        f"[yellow]Warning: No accel samples at position {current_position}![/yellow]"
+                    )
+                elif hall_delta == 0:
+                    console.print(
+                        f"[yellow]Warning: No hall packets at position {current_position}![/yellow]"
+                    )
+                else:
+                    console.print(
+                        f"[dim]  → {accel_delta} samples, {hall_delta} hall[/dim]"
+                    )
+
+                last_accel_samples = curr_accel
+                last_hall_packets = curr_hall
 
                 # Increase speed
                 response = conn.button(ButtonCommand.SPEED_UP)
@@ -174,6 +207,30 @@ def run_test_sequence(
                     f"[dim]At max speed, dwelling for {step_interval}s...[/dim]"
                 )
                 time.sleep(step_interval)
+
+                # Check final speed level
+                status = conn.status()
+                curr_accel = int(status.get("rx_accel_samples", 0))
+                curr_hall = int(status.get("rx_hall_packets", 0))
+                accel_delta = curr_accel - last_accel_samples
+                hall_delta = curr_hall - last_hall_packets
+
+                if result.speed_log:
+                    result.speed_log[-1].accel_samples = accel_delta
+                    result.speed_log[-1].hall_packets = hall_delta
+
+                if accel_delta == 0:
+                    console.print(
+                        f"[yellow]Warning: No accel samples at max speed![/yellow]"
+                    )
+                elif hall_delta == 0:
+                    console.print(
+                        f"[yellow]Warning: No hall packets at max speed![/yellow]"
+                    )
+                else:
+                    console.print(
+                        f"[dim]  → {accel_delta} samples, {hall_delta} hall[/dim]"
+                    )
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Interrupted - stopping gracefully...[/yellow]")
@@ -219,9 +276,12 @@ def write_speed_log(result: TestResult) -> None:
 
     log_path = result.output_dir / "speed_log.csv"
     with open(log_path, "w") as f:
-        f.write("timestamp,position\n")
+        f.write("timestamp,position,accel_samples,hall_packets\n")
         for event in result.speed_log:
-            f.write(f"{event.timestamp:.6f},{event.position}\n")
+            f.write(
+                f"{event.timestamp:.6f},{event.position},"
+                f"{event.accel_samples},{event.hall_packets}\n"
+            )
     console.print(f"[dim]Speed log written to {log_path.name}[/dim]")
 
 
@@ -312,7 +372,12 @@ def test(
             "output_dir": str(result.output_dir),
             "files": [str(p) for p in result.csv_files],
             "speed_log": [
-                {"timestamp": e.timestamp, "position": e.position}
+                {
+                    "timestamp": e.timestamp,
+                    "position": e.position,
+                    "accel_samples": e.accel_samples,
+                    "hall_packets": e.hall_packets,
+                }
                 for e in result.speed_log
             ],
             "aborted": result.aborted,

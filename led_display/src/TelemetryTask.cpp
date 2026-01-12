@@ -15,7 +15,7 @@ static constexpr UBaseType_t TELEMETRY_TASK_PRIORITY = 2;  // Below hallProcessi
 static constexpr BaseType_t TELEMETRY_TASK_CORE = 0;       // Same as WiFi stack
 
 // Flush timeout: send partial batch after this many microseconds
-// 500ms is conservative - at 800Hz normal operation fills 50-sample batch in 62ms
+// 500ms is conservative - at 8kHz fills 50-sample batch in ~6ms
 static constexpr uint64_t BATCH_FLUSH_TIMEOUT_US = 500000;
 
 // Task state
@@ -43,7 +43,7 @@ static void addSampleToBatch(timestamp_t timestamp,
     } else {
         // Subsequent samples - compute delta from base
         uint64_t delta = timestamp - s_msg.base_timestamp;
-        // Clamp to 16-bit (max 65535 us = ~65ms, batch spans ~50ms max at 1kHz)
+        // Clamp to 16-bit (max 65535 us = ~65ms, batch spans ~6ms at 8kHz)
         s_msg.samples[idx].delta_us = (delta > 65535) ? 65535 : static_cast<uint16_t>(delta);
     }
 
@@ -90,20 +90,13 @@ static void telemetryTaskFunc(void* pvParameters) {
 
         // Processing loop - runs while enabled
         while (s_enabled) {
-            timestamp_t sampleTimestamp;
-
-            // Try to get a timestamp from the queue (10ms timeout)
-            if (xQueueReceive(g_imuTimestampQueue, &sampleTimestamp, pdMS_TO_TICKS(10)) == pdTRUE) {
-                // Read both accelerometer and gyroscope values
-                xyzFloat accelReading, gyroReading;
-                if (imu.read(accelReading, gyroReading)) {
-                    // Convert float to int16_t (raw values as float)
-                    int16_t x = static_cast<int16_t>(accelReading.x);
-                    int16_t y = static_cast<int16_t>(accelReading.y);
-                    int16_t z = static_cast<int16_t>(accelReading.z);
-                    int16_t gx = static_cast<int16_t>(gyroReading.x);
-                    int16_t gy = static_cast<int16_t>(gyroReading.y);
-                    int16_t gz = static_cast<int16_t>(gyroReading.z);
+            // Wait for DATA_READY signal from ISR (10ms timeout)
+            if (imu.waitForSample(pdMS_TO_TICKS(10))) {
+                // Fast burst read via SPI (~37µs)
+                int16_t x, y, z, gx, gy, gz;
+                if (imu.readRaw(x, y, z, gx, gy, gz)) {
+                    // Timestamp at read completion - this is when we know the value
+                    timestamp_t sampleTimestamp = esp_timer_get_time();
 
                     addSampleToBatch(sampleTimestamp, x, y, z, gx, gy, gz);
 

@@ -260,7 +260,7 @@ def enrich_accel_csv(output_dir: Path) -> bool:
     accel.loc[before_first, 'micros_since_hall'] = 0
 
     # Reorder columns to match original format expected by analysis tools
-    cols = ['timestamp_us', 'sequence_num', 'rotation_num', 'micros_since_hall', 'x', 'y', 'z']
+    cols = ['timestamp_us', 'sequence_num', 'rotation_num', 'micros_since_hall', 'x', 'y', 'z', 'gx', 'gy', 'gz']
     accel = accel[cols]
 
     # Overwrite with enriched data

@@ -2,21 +2,24 @@
 #include "hardware_config.h"
 
 #include <Arduino.h>
-#include <Wire.h>
+#include <SPI.h>
 #include <esp_timer.h>
 #include <driver/gpio.h>
 
 // Global instance
 Imu imu;
 
-// Queue for DATA_READY timestamps from ISR
+// Queue for DATA_READY signals from ISR (no timestamp - we timestamp at read time)
 QueueHandle_t g_imuTimestampQueue = nullptr;
 
-// Queue size - 100ms buffer at 1kHz (allows telemetry task some slack)
-static constexpr size_t IMU_QUEUE_SIZE = 100;
+// Queue size - 100ms buffer at 8kHz
+static constexpr size_t IMU_QUEUE_SIZE = 800;
 
-// MPU-9250 I2C address (ADO pin LOW = 0x68, HIGH = 0x69)
-static constexpr uint8_t MPU9250_ADDR = 0x68;
+// SPI configuration
+static constexpr uint32_t IMU_SPI_CLOCK = 20000000;  // 20MHz for fast sensor reads
+
+// Separate SPI bus for IMU (HSPI/SPI3) - LEDs use FSPI/SPI2
+static SPIClass SPI_IMU(HSPI);
 
 // Forward declaration for ISR wrapper
 static void imuDataReadyISR();
@@ -27,13 +30,14 @@ static void IRAM_ATTR imuIsrWrapper(void* arg) {
     imuDataReadyISR();
 }
 
-// ISR for DATA_READY interrupt - captures timestamp and queues it
+// ISR for DATA_READY interrupt - signals sample ready (no timestamp)
+// Timestamp is captured at read time for accuracy
 static void IRAM_ATTR imuDataReadyISR() {
-    timestamp_t now = esp_timer_get_time();
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    // Send timestamp to queue (non-blocking, drop if full)
-    xQueueSendFromISR(g_imuTimestampQueue, &now, &xHigherPriorityTaskWoken);
+    // Send signal to queue (value doesn't matter, just presence)
+    uint8_t signal = 1;
+    xQueueSendFromISR(g_imuTimestampQueue, &signal, &xHigherPriorityTaskWoken);
 
     if (xHigherPriorityTaskWoken) {
         portYIELD_FROM_ISR();
@@ -41,33 +45,40 @@ static void IRAM_ATTR imuDataReadyISR() {
 }
 
 bool Imu::begin() {
-    Serial.println("[IMU] Initializing MPU-9250 with DATA_READY interrupt...");
+    Serial.println("[IMU] Initializing MPU-9250 via SPI at 20MHz...");
 
-    // Create timestamp queue
-    g_imuTimestampQueue = xQueueCreate(IMU_QUEUE_SIZE, sizeof(timestamp_t));
+    // Create signal queue (just signals sample ready, no timestamp)
+    g_imuTimestampQueue = xQueueCreate(IMU_QUEUE_SIZE, sizeof(uint8_t));
     if (!g_imuTimestampQueue) {
-        Serial.println("[IMU] Failed to create timestamp queue!");
+        Serial.println("[IMU] Failed to create signal queue!");
         return false;
     }
-    Serial.printf("[IMU] Timestamp queue created: %zu slots\n", IMU_QUEUE_SIZE);
+    Serial.printf("[IMU] Signal queue created: %zu slots (100ms at 8kHz)\n", IMU_QUEUE_SIZE);
 
-    // Configure NCS pin HIGH to enable I2C mode (vs SPI)
+    // Configure NCS pin as output for SPI chip select
     pinMode(HardwareConfig::IMU_NCS_PIN, OUTPUT);
-    digitalWrite(HardwareConfig::IMU_NCS_PIN, HIGH);
-
-    // Configure ADO pin LOW to select address 0x68
-    pinMode(HardwareConfig::IMU_ADO_PIN, OUTPUT);
-    digitalWrite(HardwareConfig::IMU_ADO_PIN, LOW);
+    digitalWrite(HardwareConfig::IMU_NCS_PIN, HIGH);  // Deselect initially
 
     // Small delay for pins to settle
     delay(10);
 
-    // Initialize I2C on IMU pins
-    Wire.begin(HardwareConfig::IMU_SDA_PIN, HardwareConfig::IMU_SCL_PIN);
-    Wire.setClock(400000);  // 400kHz Fast Mode
+    // Initialize SPI on HSPI bus (separate from LED's FSPI)
+    // SPI.begin(sck, miso, mosi, ss)
+    SPI_IMU.begin(HardwareConfig::IMU_SCL_PIN,   // SCK
+                  HardwareConfig::IMU_ADO_PIN,   // MISO
+                  HardwareConfig::IMU_SDA_PIN,   // MOSI
+                  HardwareConfig::IMU_NCS_PIN);  // SS
 
-    // Create library instance
-    m_imu = new MPU9250_WE(MPU9250_ADDR);
+    // Create library instance with SPI
+    // MPU9250_WE(SPIClass*, csPin, mosiPin, misoPin, sckPin, useSPI, useSPIHS)
+    m_imu = new MPU9250_WE(&SPI_IMU,
+                           HardwareConfig::IMU_NCS_PIN,
+                           HardwareConfig::IMU_SDA_PIN,
+                           HardwareConfig::IMU_ADO_PIN,
+                           HardwareConfig::IMU_SCL_PIN,
+                           true,   // useSPI
+                           true);  // useSPIHS (high-speed)
+    m_imu->setSPIClockSpeed(IMU_SPI_CLOCK);
 
     if (!m_imu->init()) {
         Serial.println("[IMU] Library init failed!");
@@ -79,17 +90,29 @@ bool Imu::begin() {
     delay(1000);
     m_imu->autoOffsets();
 
-    // Configure accelerometer: ±16g range, DLPF mode 1 (184Hz BW, 1kHz rate)
-    m_imu->setAccRange(MPU9250_ACC_RANGE_16G);
-    m_imu->enableAccDLPF(true);
-    m_imu->setAccDLPF(MPU9250_DLPF_1);
+    // Store calibration offsets for use in fast readRaw()
+    m_accOffset = m_imu->getAccOffsets();
+    m_gyrOffset = m_imu->getGyrOffsets();
+    Serial.printf("[IMU] Calibration offsets - Accel: (%.1f, %.1f, %.1f) Gyro: (%.1f, %.1f, %.1f)\n",
+                  m_accOffset.x, m_accOffset.y, m_accOffset.z,
+                  m_gyrOffset.x, m_gyrOffset.y, m_gyrOffset.z);
 
-    // Configure gyroscope: ±2000°/s range, DLPF mode 1 (184Hz BW, 1kHz rate)
-    m_imu->setGyrRange(MPU9250_GYRO_RANGE_2000);
-    m_imu->enableGyrDLPF();
-    m_imu->setGyrDLPF(MPU9250_DLPF_1);
+    // Configure accelerometer: ±16g range
+    // Range factor = 1 << enum_value (matching library's internal: accRangeFactor = 1<<accRange)
+    constexpr MPU9250_accRange ACC_RANGE = MPU9250_ACC_RANGE_16G;
+    m_imu->setAccRange(ACC_RANGE);
+    m_accRangeFactor = 1 << ACC_RANGE;
 
-    // Sample rate = 1kHz / (1 + divider) = 1kHz with divider = 0
+    // Configure gyroscope: ±2000°/s range
+    constexpr MPU9250_gyroRange GYR_RANGE = MPU9250_GYRO_RANGE_2000;
+    m_imu->setGyrRange(GYR_RANGE);
+    m_gyrRangeFactor = 1 << GYR_RANGE;
+
+    // DLPF=7 (disabled) for 8kHz base rate
+    m_imu->enableAccDLPF(false);
+    m_imu->setGyrDLPF(MPU9250_DLPF_7);
+
+    // Sample rate divider = 0 (no division, 8kHz output)
     m_imu->setSampleRateDivider(0);
 
     // Enable DATA_READY interrupt
@@ -112,7 +135,7 @@ bool Imu::begin() {
                   gyroDps.x, gyroDps.y, gyroDps.z);
 
     m_ready = true;
-    Serial.println("[IMU] Ready (1kHz, ±16g accel, ±2000°/s gyro, DATA_READY on INT)");
+    Serial.println("[IMU] Ready (8kHz, ±16g accel, ±2000°/s gyro, SPI 20MHz, DATA_READY on INT)");
     return true;
 }
 
@@ -126,12 +149,51 @@ bool Imu::read(xyzFloat& accel, xyzFloat& gyro) {
     return true;
 }
 
+bool Imu::readRaw(int16_t& ax, int16_t& ay, int16_t& az,
+                  int16_t& gx, int16_t& gy, int16_t& gz) {
+    if (!m_ready) return false;
+
+    // Fast burst read: 14 bytes from ACCEL_XOUT_H (0x3B)
+    // Format: accelX(2) + accelY(2) + accelZ(2) + temp(2) + gyroX(2) + gyroY(2) + gyroZ(2)
+    uint8_t buffer[14];
+
+    SPI_IMU.beginTransaction(SPISettings(IMU_SPI_CLOCK, MSBFIRST, SPI_MODE3));
+    digitalWrite(HardwareConfig::IMU_NCS_PIN, LOW);
+    SPI_IMU.transfer(0x3B | 0x80);  // ACCEL_XOUT_H with read flag
+    for (int i = 0; i < 14; i++) {
+        buffer[i] = SPI_IMU.transfer(0x00);
+    }
+    digitalWrite(HardwareConfig::IMU_NCS_PIN, HIGH);
+    SPI_IMU.endTransaction();
+
+    // Parse big-endian 16-bit values and apply calibration offsets
+    int16_t rawAx = static_cast<int16_t>((buffer[0] << 8) | buffer[1]);
+    int16_t rawAy = static_cast<int16_t>((buffer[2] << 8) | buffer[3]);
+    int16_t rawAz = static_cast<int16_t>((buffer[4] << 8) | buffer[5]);
+    // buffer[6,7] = temperature (ignored)
+    int16_t rawGx = static_cast<int16_t>((buffer[8] << 8) | buffer[9]);
+    int16_t rawGy = static_cast<int16_t>((buffer[10] << 8) | buffer[11]);
+    int16_t rawGz = static_cast<int16_t>((buffer[12] << 8) | buffer[13]);
+
+    // Apply calibration offsets exactly as library does in correctAccRawValues/correctGyrRawValues:
+    // rawValues.x -= (accOffsetVal.x / accRangeFactor);
+    ax = static_cast<int16_t>(rawAx - (m_accOffset.x / m_accRangeFactor));
+    ay = static_cast<int16_t>(rawAy - (m_accOffset.y / m_accRangeFactor));
+    az = static_cast<int16_t>(rawAz - (m_accOffset.z / m_accRangeFactor));
+    gx = static_cast<int16_t>(rawGx - (m_gyrOffset.x / m_gyrRangeFactor));
+    gy = static_cast<int16_t>(rawGy - (m_gyrOffset.y / m_gyrRangeFactor));
+    gz = static_cast<int16_t>(rawGz - (m_gyrOffset.z / m_gyrRangeFactor));
+
+    return true;
+}
+
 bool Imu::sampleReady() {
     if (!g_imuTimestampQueue) return false;
     return uxQueueMessagesWaiting(g_imuTimestampQueue) > 0;
 }
 
-bool Imu::getNextTimestamp(timestamp_t& timestamp) {
+bool Imu::waitForSample(TickType_t timeout) {
     if (!g_imuTimestampQueue) return false;
-    return xQueueReceive(g_imuTimestampQueue, &timestamp, 0) == pdTRUE;
+    uint8_t signal;
+    return xQueueReceive(g_imuTimestampQueue, &signal, timeout) == pdTRUE;
 }
