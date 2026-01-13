@@ -4,8 +4,10 @@ from ..types import Analyzer, AnalysisContext, AnalysisResult
 from .axis_timeseries import axis_timeseries_analysis
 from .data_quality import data_quality_analysis
 from .distribution import distribution_analysis
+from .gyro_wobble import gyro_wobble_analysis
 from .phase import phase_analysis
 from .rpm_sweep import rpm_sweep_analysis
+from .validation import validation_analysis
 
 ANALYZERS: list[Analyzer] = [
     data_quality_analysis,
@@ -13,6 +15,8 @@ ANALYZERS: list[Analyzer] = [
     axis_timeseries_analysis,
     distribution_analysis,
     phase_analysis,
+    gyro_wobble_analysis,
+    validation_analysis,
 ]
 
 
@@ -29,4 +33,6 @@ __all__ = [
     "axis_timeseries_analysis",
     "distribution_analysis",
     "phase_analysis",
+    "gyro_wobble_analysis",
+    "validation_analysis",
 ]

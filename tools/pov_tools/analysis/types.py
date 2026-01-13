@@ -18,6 +18,7 @@ class AnalysisContext:
     hall: pd.DataFrame  # Raw hall (timestamp_us, period_us, rotation_num)
     enriched: pd.DataFrame  # Accel merged with hall + computed columns
     output_dir: Path  # Where to write plots
+    speed_log: pd.DataFrame | None = None  # Speed log with position boundaries
 
     # Pre-computed in enriched DataFrame:
     # - rpm: from period_us
@@ -25,6 +26,7 @@ class AnalysisContext:
     # - phase_deg: 0-360
     # - x_g, y_g, z_g: converted to g units (3.9mg/LSB)
     # - is_y_saturated: boolean (raw y >= 4094)
+    # - speed_position: integer speed position (1-N) from speed_log
 
 
 @dataclass

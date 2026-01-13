@@ -45,6 +45,23 @@ def results_to_json(results: list[AnalysisResult], ctx: AnalysisContext) -> dict
         elif result.name == "phase_analysis":
             output["frequency_analysis"] = result.metrics.get("frequency_analysis", {})
             output["balancing"] = result.metrics.get("balancing", {})
+            if "phase_by_position" in result.metrics:
+                output["phase_by_position"] = result.metrics["phase_by_position"]
+            if "phase_summary" in result.metrics:
+                output["phase_summary"] = result.metrics["phase_summary"]
+        elif result.name == "gyro_wobble":
+            output["gyro_wobble"] = {
+                "wobble_vs_rpm": result.metrics.get("wobble_vs_rpm", {}),
+                "precession": result.metrics.get("precession", {}),
+                "gyro_phase": result.metrics.get("gyro_phase", {}),
+            }
+        elif result.name == "validation":
+            output["validation"] = {
+                "gyro_vs_hall": result.metrics.get("gyro_vs_hall", {}),
+                "spin_direction": result.metrics.get("spin_direction", {}),
+                "rpm_stability": result.metrics.get("rpm_stability", {}),
+                "centrifugal": result.metrics.get("centrifugal", {}),
+            }
 
     # Collect all plots
     all_plots = []
@@ -126,6 +143,23 @@ def generate_report(results: list[AnalysisResult], ctx: AnalysisContext) -> Path
             overflow-x: auto;
             font-size: 12px;
         }}
+        .definitions {{
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }}
+        .definitions h4 {{
+            color: #007acc;
+            margin-top: 15px;
+            margin-bottom: 5px;
+        }}
+        .definitions p {{
+            margin: 5px 0 15px 0;
+            color: #555;
+            font-size: 0.95em;
+        }}
     </style>
 </head>
 <body>
@@ -136,6 +170,42 @@ def generate_report(results: list[AnalysisResult], ctx: AnalysisContext) -> Path
         <strong>Balancing Recommendation:</strong><br>
         Peak imbalance at: <strong>{json_data.get('balancing', {}).get('peak_imbalance_deg', 'N/A')} deg</strong><br>
         Place counterweight at: <strong>{json_data.get('balancing', {}).get('counterweight_position_deg', 'N/A')} deg</strong>
+    </div>
+
+    <h2>Understanding the Results</h2>
+    <div class="definitions">
+        <h4>Wobble (gyro_wobble_dps)</h4>
+        <p>Magnitude of rotation on non-spin axes (GX, GY). Indicates how much the
+        disc tilts/wobbles as it spins. For classic imbalance, wobble scales with RPM squared.</p>
+
+        <h4>Precession Direction</h4>
+        <p>The axis around which the disc wobbles. Derived from mean GX/GY values.
+        Consistent direction across speeds indicates reliable imbalance measurement.</p>
+
+        <h4>Phase</h4>
+        <p>Angular position (0-360 deg) of the heavy spot relative to the hall sensor.
+        Determined by fitting sinusoids to sensor data vs rotation angle.</p>
+
+        <h4>R-squared (Fit Quality)</h4>
+        <p>How well the sinusoid fits the data. R-squared > 0.15 indicates detectable signal.
+        Higher R-squared = more confident phase estimate.</p>
+
+        <h4>1x Component</h4>
+        <p>Vibration at once-per-revolution frequency. This is the imbalance signal.
+        The 3x component (three times per revolution) is the arm geometry pattern.</p>
+
+        <h4>Gyro Z Saturation</h4>
+        <p>The gyroscope Z-axis (spin axis) maxes out at +/-2000 deg/s = ~333 RPM.
+        Above this speed, gz_dps is saturated and unreliable. GX/GY (wobble axes)
+        should remain usable at all speeds.</p>
+
+        <h4>Centrifugal Force</h4>
+        <p>Y-axis (radial) sees centrifugal acceleration = omega-squared * r. At 27mm radius,
+        the +/-16g accelerometer saturates around 720 RPM. This is expected.</p>
+
+        <h4>Spin Direction</h4>
+        <p>Detected from gz_dps sign at low speed (before saturation).
+        Negative = clockwise when viewed from above (motor shaft pointing up).</p>
     </div>
 
     <h2>Findings</h2>

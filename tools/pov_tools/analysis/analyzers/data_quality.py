@@ -121,17 +121,47 @@ def data_quality_analysis(ctx: AnalysisContext) -> AnalysisResult:
     findings.append(f"Capture duration: {duration_s:.1f}s, efficiency: {capture_efficiency:.0f}%")
 
     # === AXIS SATURATION (all axes, both directions) ===
-    # Check all axes since accelerometer orientation is arbitrary
+    # Check for saturation - adapt to available column format
     saturation_data = {}
-    for axis in ["x", "y", "z"]:
-        saturated = (accel[axis].abs() >= 4094).sum()
-        sat_pct = 100 * saturated / len(accel)
-        saturation_data[axis] = {
-            "samples": int(saturated),
-            "pct": round(sat_pct, 1),
-        }
-        if sat_pct > 5:
-            findings.append(f"{axis.upper()}-axis saturation: {sat_pct:.1f}% of samples clipped at +/-16g")
+
+    # Try raw columns first (x, y, z as raw ADC values)
+    if "x" in accel.columns:
+        for axis in ["x", "y", "z"]:
+            saturated = (accel[axis].abs() >= 4094).sum()
+            sat_pct = 100 * saturated / len(accel)
+            saturation_data[axis] = {
+                "samples": int(saturated),
+                "pct": round(sat_pct, 1),
+            }
+            if sat_pct > 5:
+                findings.append(f"{axis.upper()}-axis saturation: {sat_pct:.1f}% of samples clipped at +/-16g")
+    # Fall back to _g columns (physical units) - saturation at ~16g
+    elif "x_g" in accel.columns:
+        for axis in ["x", "y", "z"]:
+            col = f"{axis}_g"
+            if col in accel.columns:
+                saturated = (accel[col].abs() >= 15.9).sum()
+                sat_pct = 100 * saturated / len(accel)
+                saturation_data[axis] = {
+                    "samples": int(saturated),
+                    "pct": round(sat_pct, 1),
+                }
+                if sat_pct > 5:
+                    findings.append(f"{axis.upper()}-axis saturation: {sat_pct:.1f}% of samples clipped at +/-16g")
+    # Or use pre-computed saturation flags
+    elif "is_y_saturated" in ctx.enriched.columns:
+        y_sat = ctx.enriched["is_y_saturated"].sum()
+        y_sat_pct = 100 * y_sat / len(ctx.enriched)
+        saturation_data["y"] = {"samples": int(y_sat), "pct": round(y_sat_pct, 1)}
+        if y_sat_pct > 5:
+            findings.append(f"Y-axis saturation: {y_sat_pct:.1f}% (from is_y_saturated flag)")
+
+        if "is_gz_saturated" in ctx.enriched.columns:
+            gz_sat = ctx.enriched["is_gz_saturated"].sum()
+            gz_sat_pct = 100 * gz_sat / len(ctx.enriched)
+            saturation_data["gz"] = {"samples": int(gz_sat), "pct": round(gz_sat_pct, 1)}
+            if gz_sat_pct > 5:
+                findings.append(f"Gyro Z saturation: {gz_sat_pct:.1f}% (from is_gz_saturated flag)")
 
     metrics["saturation"] = saturation_data
 

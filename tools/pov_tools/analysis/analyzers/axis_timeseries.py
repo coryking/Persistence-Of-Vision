@@ -41,10 +41,22 @@ def axis_timeseries_analysis(ctx: AnalysisContext) -> AnalysisResult:
             "std": round(float(full_col.std()), 4),
         }
 
-    # Check saturation on all axes
-    saturation_pcts = {}
-    for axis in ["x", "y", "z"]:
-        saturation_pcts[axis] = ctx.enriched[f"is_{axis}_saturated"].mean() * 100
+    # Check saturation - use available columns or compute from values
+    saturation_pcts = {"x": 0.0, "y": 0.0, "z": 0.0}
+
+    # Check for pre-computed saturation flags
+    if "is_y_saturated" in ctx.enriched.columns:
+        saturation_pcts["y"] = ctx.enriched["is_y_saturated"].mean() * 100
+
+    # For X and Z, compute from values if flags don't exist
+    for axis in ["x", "z"]:
+        flag_col = f"is_{axis}_saturated"
+        val_col = f"{axis}_g"
+        if flag_col in ctx.enriched.columns:
+            saturation_pcts[axis] = ctx.enriched[flag_col].mean() * 100
+        elif val_col in ctx.enriched.columns:
+            # Saturation at ~16g
+            saturation_pcts[axis] = (ctx.enriched[val_col].abs() >= 15.9).mean() * 100
 
     findings = [
         f"X-axis range: {axis_stats['x']['min']:.2f}g to {axis_stats['x']['max']:.2f}g",
@@ -54,7 +66,7 @@ def axis_timeseries_analysis(ctx: AnalysisContext) -> AnalysisResult:
     for axis in ["x", "y", "z"]:
         if saturation_pcts[axis] > 1:
             findings.append(
-                f"{axis.upper()}-axis saturated: {saturation_pcts[axis]:.1f}% of samples at ±16g"
+                f"{axis.upper()}-axis saturated: {saturation_pcts[axis]:.1f}% of samples at +/-16g"
             )
 
     return AnalysisResult(

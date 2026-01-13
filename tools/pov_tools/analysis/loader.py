@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from .types import AnalysisContext
@@ -61,10 +62,77 @@ def load_and_enrich(data_dir: Path) -> AnalysisContext:
     if "angle_deg" in enriched.columns:
         enriched["phase"] = enriched["angle_deg"] / 360.0
 
+    # Load speed_log if present and assign speed positions
+    speed_log_path = data_dir / "speed_log.csv"
+    speed_log = None
+    if speed_log_path.exists():
+        speed_log = pd.read_csv(speed_log_path)
+        enriched = _assign_speed_positions(enriched, speed_log)
+
     # Create plots directory
     plots_dir = data_dir / "plots"
     plots_dir.mkdir(exist_ok=True)
 
     return AnalysisContext(
-        accel=accel, hall=hall, enriched=enriched, output_dir=data_dir
+        accel=accel,
+        hall=hall,
+        enriched=enriched,
+        output_dir=data_dir,
+        speed_log=speed_log,
     )
+
+
+def _assign_speed_positions(
+    enriched: pd.DataFrame, speed_log: pd.DataFrame
+) -> pd.DataFrame:
+    """Assign speed_position to each sample based on hall_packets boundaries.
+
+    The speed_log contains cumulative hall_packets counts per position.
+    We use these to partition rotation_num ranges:
+        Position 1: rotations [0, hall_packets[0])
+        Position 2: rotations [hall_packets[0], sum(hall_packets[0:2]))
+        etc.
+
+    Args:
+        enriched: DataFrame with rotation_num column
+        speed_log: DataFrame with position and hall_packets columns
+
+    Returns:
+        enriched DataFrame with speed_position column added
+    """
+    if "hall_packets" not in speed_log.columns:
+        # Old format without hall_packets - can't assign positions
+        enriched["speed_position"] = np.nan
+        return enriched
+
+    # Build cumulative rotation boundaries
+    hall_packets = speed_log["hall_packets"].values
+    positions = speed_log["position"].values
+
+    # Cumulative sum gives upper bounds for each position
+    cumsum = np.cumsum(hall_packets)
+    # Lower bounds are 0, then previous cumsum values
+    lower_bounds = np.concatenate([[0], cumsum[:-1]])
+
+    # Create position lookup using searchsorted
+    # For each rotation_num, find which position range it falls into
+    rotation_nums = enriched["rotation_num"].values
+
+    # searchsorted on upper bounds (cumsum) tells us which position
+    # rotation_num < cumsum[0] -> position 0 (index 0)
+    # cumsum[0] <= rotation_num < cumsum[1] -> position 1 (index 1)
+    # etc.
+    position_indices = np.searchsorted(cumsum, rotation_nums, side="right")
+
+    # Map indices to actual position values (1-indexed in speed_log)
+    # Handle out-of-range rotations (before first or after last position)
+    speed_position = np.where(
+        position_indices < len(positions),
+        positions[position_indices],
+        np.nan,  # Rotations beyond the last position
+    )
+
+    enriched = enriched.copy()
+    enriched["speed_position"] = speed_position
+
+    return enriched
