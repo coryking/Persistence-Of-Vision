@@ -8,6 +8,8 @@ Physical hardware documentation for the spinning POV display rotor.
 
 **Rotation direction:** Counter-clockwise when viewed from above (looking down at LEDs). This is software-configurable via motor controller.
 
+**Rotor mass:** ~153g (without balancing weight)
+
 The rotor is a hollow sandwich structure:
 
 ```
@@ -137,7 +139,7 @@ For RPM calculation, this offset is irrelevant (cancels out). For correlating te
 
 **Mounting orientation:**
 
-The IMU is mounted upside-down (chip facing floor), offset from rotation center:
+The IMU is mounted upside-down (chip facing floor), 28mm from rotation center:
 
 | IMU Axis | Physical Direction | Notes |
 |----------|-------------------|-------|
