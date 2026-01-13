@@ -63,14 +63,9 @@ See **docs/PROJECT_STRUCTURE.md** for shared message definitions and **docs/ir-c
 
 ## IMU Telemetry
 
-The MPU-9250 IMU is mounted ~27mm from rotation center with double-stick foam tape.
+See **docs/led_display/HARDWARE.md** for IMU mounting orientation and sensor configuration.
 
-**Intended orientation** (verify with measurements):
-- **Y+**: Radial (outward from rotation center) - will saturate from centrifugal force
-- **Z+**: Down toward motor shaft (axial, along rotation axis) - sees wobble
-- **X+**: Roughly tangent to rotation, toward heavy wireless power board
-
-The MPU-9250 provides both accelerometer (±16g) and gyroscope (±2000°/s) data. The Y axis (radial) will saturate from centrifugal force above ~720 RPM at 27mm radius. The X (tangent) and Z (axial) axes should remain usable throughout the operating range. The gyroscope provides rotation rate data that can complement the accelerometer for balance analysis.
+The Y axis (radial) saturates from centrifugal force at operating speeds. The X (tangent) and Z (axial) axes remain usable. The gyroscope X/Y axes measure wobble/precession.
 
 See **docs/ROTOR_BALANCING.md** for balancing theory and physics.
 
