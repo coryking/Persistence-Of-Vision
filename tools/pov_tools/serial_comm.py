@@ -95,7 +95,10 @@ class DeviceConnection:
         return line
 
     def _read_until_ok_or_err(self) -> str:
-        """Read lines until OK or ERR: response."""
+        """Read lines until OK or ERR: response, printing debug output."""
+        from rich.console import Console
+        console = Console(stderr=True)
+
         while True:
             line = self._read_line()
             if line == "OK":
@@ -104,6 +107,8 @@ class DeviceConnection:
                 return line
             if not line:
                 raise DeviceError("Timeout waiting for response")
+            # Print debug output from device
+            console.print(f"[dim]{line}[/dim]")
 
     def status(self) -> dict[str, str]:
         """Get unified device status as key: value dict.
@@ -126,6 +131,42 @@ class DeviceConnection:
         """Start recording. Returns OK or error message."""
         self._send_command("START")
         return self._read_until_ok_or_err()
+
+    def start_with_retry(
+        self,
+        max_retries: int = 5,
+        retry_delay: float = 0.5,
+        on_retry: callable = None,
+    ) -> str:
+        """Start recording with retry logic for 'Task busy' errors.
+
+        The capture task may still be processing queued data after STOP.
+        This method retries with exponential backoff.
+
+        Args:
+            max_retries: Maximum number of retry attempts
+            retry_delay: Initial delay between retries (doubles each attempt)
+            on_retry: Optional callback(attempt, delay, error) for logging
+
+        Returns:
+            "OK" on success, or final error message after all retries exhausted.
+        """
+        import time
+
+        delay = retry_delay
+        for attempt in range(max_retries + 1):
+            response = self.start()
+            if response.startswith("OK"):
+                return response
+            if "Task busy" not in response:
+                # Some other error - don't retry
+                return response
+            if attempt < max_retries:
+                if on_retry:
+                    on_retry(attempt + 1, delay, response)
+                time.sleep(delay)
+                delay *= 1.5  # Exponential backoff
+        return response
 
     def stop(self) -> str:
         """Stop recording. Returns OK or error message."""

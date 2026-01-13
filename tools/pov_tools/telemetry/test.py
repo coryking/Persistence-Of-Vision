@@ -1,8 +1,9 @@
-"""Automated RPM sweep test command."""
+"""Automated per-step telemetry capture command."""
 
 import json
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -22,29 +23,36 @@ from .utils import create_timestamped_dir, TELEMETRY_DIR
 console = Console()
 err_console = Console(stderr=True)
 
-SPEED_STEP_INTERVAL = 5.0  # Seconds between speed increases
+DEFAULT_SETTLE_TIME = 3.0  # Seconds to wait after speed change
+DEFAULT_RECORD_TIME = 5.0  # Seconds to record at each speed
 
 
 @dataclass
-class SpeedEvent:
-    """Record of a speed change event."""
+class StepResult:
+    """Result from capturing one speed step."""
 
-    timestamp: float  # time.time()
     position: int
-    accel_samples: int = 0  # Samples received during this interval
-    hall_packets: int = 0  # Hall packets received during this interval
+    output_dir: Path
+    csv_files: list[Path] = field(default_factory=list)
+    accel_samples: int = 0
+    hall_packets: int = 0
+    rpm: Optional[float] = None
+    success: bool = True
+    error: Optional[str] = None
 
 
 @dataclass
 class TestResult:
-    """Results from a test run."""
+    """Results from a full test run."""
 
     output_dir: Path
-    speed_log: list[SpeedEvent] = field(default_factory=list)
-    csv_files: list[Path] = field(default_factory=list)
-    analysis_json: Optional[dict] = None
+    steps: list[StepResult] = field(default_factory=list)
     aborted: bool = False
     error: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    settle_time: float = DEFAULT_SETTLE_TIME
+    record_time: float = DEFAULT_RECORD_TIME
 
 
 class MotorSafetyContext:
@@ -76,32 +84,34 @@ class MotorSafetyContext:
 def run_test_sequence(
     conn: DeviceConnection,
     output_dir: Path,
-    step_interval: float = SPEED_STEP_INTERVAL,
+    settle_time: float = DEFAULT_SETTLE_TIME,
+    record_time: float = DEFAULT_RECORD_TIME,
 ) -> TestResult:
-    """Execute the full test sequence.
+    """Execute per-step telemetry capture.
 
-    Sequence:
-    1. Reset RX stats (fresh counters for this test)
-    2. Power ON motor
-    3. Set calibration effect (effect 10)
-    4. Start telemetry recording
-    5. Every step_interval seconds, increase speed until max (position 10)
+    For each speed position (1 to MAX_SPEED_POSITION):
+    1. Delete telemetry files on device
+    2. Increase speed to target position
+    3. Wait settle_time seconds
+    4. Start recording
+    5. Wait record_time seconds
     6. Stop recording
-    7. Power OFF motor
-    8. Dump telemetry data
+    7. Dump to speed-specific subdirectory
 
     Returns TestResult with all collected data.
     """
-    result = TestResult(output_dir=output_dir)
+    result = TestResult(
+        output_dir=output_dir,
+        settle_time=settle_time,
+        record_time=record_time,
+        started_at=datetime.now(),
+    )
 
     with MotorSafetyContext(conn) as safety:
-        # Step 0: Reset RX stats for fresh counters
-        console.print("[bold]Step 0:[/bold] Resetting RX stats...")
+        # Startup: Reset RX stats, power on, set effect
+        console.print("[bold]Startup:[/bold] Initializing...")
         conn.rxreset()
-        console.print("[green]RX stats reset[/green]")
 
-        # Step 1: Power ON motor
-        console.print("[bold]Step 1:[/bold] Powering on motor...")
         response = conn.motor_on()
         if not response.startswith("OK") and "Already running" not in response:
             result.error = f"Failed to power on motor: {response}"
@@ -109,143 +119,143 @@ def run_test_sequence(
         safety.mark_motor_on()
         console.print("[green]Motor ON[/green]")
 
-        # Step 2: Set calibration effect
-        console.print(
-            f"[bold]Step 2:[/bold] Setting calibration effect ({CALIBRATION_EFFECT})..."
-        )
         response = conn.button(CALIBRATION_EFFECT)
         if not response.startswith("OK"):
             result.error = f"Failed to set effect: {response}"
             return result
         console.print(f"[green]Effect set to {CALIBRATION_EFFECT}[/green]")
 
-        # Step 3: Start recording
-        console.print("[bold]Step 3:[/bold] Starting telemetry recording...")
-        response = conn.start()
-        if not response.startswith("OK"):
-            result.error = f"Failed to start recording: {response}"
-            return result
-        console.print("[green]Recording started[/green]")
-
-        # Log initial position and baseline sample counts
+        # Get initial position
         status = conn.status()
         if "speed_position" not in status:
             result.error = "STATUS missing speed_position - firmware mismatch?"
             return result
         current_position = int(status["speed_position"])
-        last_accel_samples = int(status.get("rx_accel_samples", 0))
-        last_hall_packets = int(status.get("rx_hall_packets", 0))
-        result.speed_log.append(
-            SpeedEvent(timestamp=time.time(), position=current_position)
-        )
         console.print(f"[dim]Initial position: {current_position}[/dim]")
-
-        # Step 4: Ramp through speeds
-        console.print(
-            f"[bold]Step 4:[/bold] Ramping speed ({step_interval}s per step)..."
-        )
+        console.print()
 
         try:
-            while current_position < MAX_SPEED_POSITION:
-                # Wait for interval
+            for target_position in range(1, MAX_SPEED_POSITION + 1):
                 console.print(
-                    f"[dim]Position {current_position}, waiting {step_interval}s...[/dim]"
+                    f"[bold cyan]═══ Speed Position {target_position}/{MAX_SPEED_POSITION} ═══[/bold cyan]"
                 )
-                time.sleep(step_interval)
 
-                # Check sample counts after dwell - sanity check
+                step_result = StepResult(
+                    position=target_position,
+                    output_dir=output_dir / f"speed_{target_position:02d}",
+                )
+
+                # 1. Delete existing telemetry files
+                conn.delete()
+                console.print("[dim]Cleared device telemetry[/dim]")
+
+                # 2. Ramp to target position
+                while current_position < target_position:
+                    response = conn.button(ButtonCommand.SPEED_UP)
+                    if not response.startswith("OK"):
+                        step_result.error = f"Failed to increase speed: {response}"
+                        step_result.success = False
+                        result.steps.append(step_result)
+                        result.error = step_result.error
+                        break
+                    status = conn.status()
+                    current_position = int(status["speed_position"])
+
+                if not step_result.success:
+                    break
+
+                console.print(f"[dim]At position {current_position}[/dim]")
+
+                # 3. Settle
+                console.print(f"[dim]Settling for {settle_time}s...[/dim]")
+                time.sleep(settle_time)
+
+                # Get baseline sample counts before recording
                 status = conn.status()
-                curr_accel = int(status.get("rx_accel_samples", 0))
-                curr_hall = int(status.get("rx_hall_packets", 0))
-                accel_delta = curr_accel - last_accel_samples
-                hall_delta = curr_hall - last_hall_packets
+                accel_before = int(status.get("rx_accel_samples", 0))
+                hall_before = int(status.get("rx_hall_packets", 0))
 
-                # Update the last speed event with sample counts
-                if result.speed_log:
-                    result.speed_log[-1].accel_samples = accel_delta
-                    result.speed_log[-1].hall_packets = hall_delta
-
-                # Warn if no data received
-                if accel_delta == 0:
-                    console.print(
-                        f"[yellow]Warning: No accel samples at position {current_position}![/yellow]"
-                    )
-                elif hall_delta == 0:
-                    console.print(
-                        f"[yellow]Warning: No hall packets at position {current_position}![/yellow]"
-                    )
-                else:
-                    console.print(
-                        f"[dim]  → {accel_delta} samples, {hall_delta} hall[/dim]"
-                    )
-
-                last_accel_samples = curr_accel
-                last_hall_packets = curr_hall
-
-                # Increase speed
-                response = conn.button(ButtonCommand.SPEED_UP)
+                # 4. Start recording
+                response = conn.start()
                 if not response.startswith("OK"):
-                    result.error = f"Failed to increase speed: {response}"
+                    step_result.error = f"Failed to start recording: {response}"
+                    step_result.success = False
+                    result.steps.append(step_result)
+                    result.error = step_result.error
                     break
+                console.print(f"[green]Recording for {record_time}s...[/green]")
 
-                # Get new position - fail safely if missing
-                status = conn.status()
-                if "speed_position" not in status:
-                    result.error = "STATUS missing speed_position during ramp"
-                    break
-                current_position = int(status["speed_position"])
-                result.speed_log.append(
-                    SpeedEvent(timestamp=time.time(), position=current_position)
-                )
-                console.print(
-                    f"[cyan]Speed increased to position {current_position}[/cyan]"
-                )
+                # 5. Wait for record duration
+                time.sleep(record_time)
 
-            # Final dwell at max speed
-            if current_position == MAX_SPEED_POSITION:
-                console.print(
-                    f"[dim]At max speed, dwelling for {step_interval}s...[/dim]"
-                )
-                time.sleep(step_interval)
-
-                # Check final speed level
-                status = conn.status()
-                curr_accel = int(status.get("rx_accel_samples", 0))
-                curr_hall = int(status.get("rx_hall_packets", 0))
-                accel_delta = curr_accel - last_accel_samples
-                hall_delta = curr_hall - last_hall_packets
-
-                if result.speed_log:
-                    result.speed_log[-1].accel_samples = accel_delta
-                    result.speed_log[-1].hall_packets = hall_delta
-
-                if accel_delta == 0:
+                # 6. Stop recording
+                response = conn.stop()
+                if not response.startswith("OK"):
                     console.print(
-                        f"[yellow]Warning: No accel samples at max speed![/yellow]"
+                        f"[yellow]Warning: stop returned {response}[/yellow]"
                     )
-                elif hall_delta == 0:
+
+                # Get sample counts and RPM after recording
+                status = conn.status()
+                accel_after = int(status.get("rx_accel_samples", 0))
+                hall_after = int(status.get("rx_hall_packets", 0))
+                step_result.accel_samples = accel_after - accel_before
+                step_result.hall_packets = hall_after - hall_before
+
+                # Get RPM if available
+                if "rpm" in status:
+                    step_result.rpm = float(status["rpm"])
+                elif "hall_avg_us" in status:
+                    # Calculate from hall period
+                    hall_us = float(status["hall_avg_us"])
+                    if hall_us > 0:
+                        step_result.rpm = 60_000_000.0 / hall_us
+
+                # Display sample counts
+                if step_result.accel_samples == 0:
                     console.print(
-                        f"[yellow]Warning: No hall packets at max speed![/yellow]"
+                        f"[yellow]Warning: No accel samples collected![/yellow]"
+                    )
+                elif step_result.hall_packets == 0:
+                    console.print(
+                        f"[yellow]Warning: No hall packets collected![/yellow]"
                     )
                 else:
+                    rpm_str = f", {step_result.rpm:.0f} RPM" if step_result.rpm else ""
                     console.print(
-                        f"[dim]  → {accel_delta} samples, {hall_delta} hall[/dim]"
+                        f"[dim]Collected {step_result.accel_samples} samples, "
+                        f"{step_result.hall_packets} hall{rpm_str}[/dim]"
                     )
+
+                # 7. Dump to speed-specific directory
+                files = conn.dump()
+                if files:
+                    saved = save_csv_files(files, step_result.output_dir)
+                    enriched = enrich_accel_csv(step_result.output_dir)
+                    step_result.csv_files = saved
+                    console.print(
+                        f"[green]Saved {len(saved)} files to {step_result.output_dir.name}/[/green]"
+                    )
+                    if enriched:
+                        console.print("[dim]Enriched accel CSV[/dim]")
+                else:
+                    console.print("[yellow]No telemetry data captured[/yellow]")
+                    step_result.success = False
+
+                result.steps.append(step_result)
+                console.print()
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Interrupted - stopping gracefully...[/yellow]")
             result.aborted = True
+            # Try to stop recording if it was in progress
+            try:
+                conn.stop()
+            except Exception:
+                pass
 
-        # Step 5: Stop recording
-        console.print("[bold]Step 5:[/bold] Stopping telemetry recording...")
-        response = conn.stop()
-        if not response.startswith("OK"):
-            console.print(f"[yellow]Warning: stop returned {response}[/yellow]")
-        else:
-            console.print("[green]Recording stopped[/green]")
-
-        # Step 6: Power OFF motor
-        console.print("[bold]Step 6:[/bold] Powering off motor...")
+        # Shutdown: Power OFF motor
+        console.print("[bold]Shutdown:[/bold] Powering off motor...")
         response = conn.motor_off()
         if response.startswith("OK") or "Already stopped" in response:
             safety.mark_motor_off()
@@ -253,58 +263,36 @@ def run_test_sequence(
         else:
             console.print(f"[yellow]Warning: motor_off returned {response}[/yellow]")
 
-        # Step 7: Dump telemetry data
-        console.print("[bold]Step 7:[/bold] Downloading telemetry data...")
-        files = conn.dump()
-        if files:
-            saved = save_csv_files(files, output_dir)
-            enriched = enrich_accel_csv(output_dir)
-            result.csv_files = saved
-            console.print(f"[green]Saved {len(saved)} files to {output_dir}[/green]")
-            if enriched:
-                console.print("[dim]Enriched accel CSV with rotation data[/dim]")
-        else:
-            console.print("[yellow]No telemetry data captured[/yellow]")
-
+    result.completed_at = datetime.now()
     return result
 
 
-def write_speed_log(result: TestResult) -> None:
-    """Write speed log CSV to output directory."""
-    if not result.speed_log:
-        return
+def write_manifest(result: TestResult) -> None:
+    """Write manifest.json with run metadata."""
+    manifest = {
+        "settle_time": result.settle_time,
+        "record_time": result.record_time,
+        "speeds_captured": [s.position for s in result.steps if s.success],
+        "started_at": result.started_at.isoformat() if result.started_at else None,
+        "completed_at": result.completed_at.isoformat() if result.completed_at else None,
+        "aborted": result.aborted,
+        "error": result.error,
+        "steps": [
+            {
+                "position": s.position,
+                "accel_samples": s.accel_samples,
+                "hall_packets": s.hall_packets,
+                "rpm": s.rpm,
+                "success": s.success,
+            }
+            for s in result.steps
+        ],
+    }
 
-    log_path = result.output_dir / "speed_log.csv"
-    with open(log_path, "w") as f:
-        f.write("timestamp,position,accel_samples,hall_packets\n")
-        for event in result.speed_log:
-            f.write(
-                f"{event.timestamp:.6f},{event.position},"
-                f"{event.accel_samples},{event.hall_packets}\n"
-            )
-    console.print(f"[dim]Speed log written to {log_path.name}[/dim]")
-
-
-def run_analysis(result: TestResult) -> Optional[dict]:
-    """Run analysis on captured data and return JSON output."""
-    from ..analysis import load_and_enrich, run_all_analyses, generate_report
-    from ..analysis.output import results_to_json
-
-    accel_path = result.output_dir / "MSG_ACCEL_SAMPLES.csv"
-    hall_path = result.output_dir / "MSG_HALL_EVENT.csv"
-
-    if not accel_path.exists() or not hall_path.exists():
-        console.print("[yellow]Skipping analysis - missing data files[/yellow]")
-        return None
-
-    try:
-        ctx = load_and_enrich(result.output_dir)
-        results = run_all_analyses(ctx)
-        generate_report(results, ctx)
-        return results_to_json(results, ctx)
-    except Exception as e:
-        console.print(f"[yellow]Analysis failed: {e}[/yellow]")
-        return None
+    manifest_path = result.output_dir / "manifest.json"
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2)
+    console.print(f"[dim]Manifest written to {manifest_path.name}[/dim]")
 
 
 def test(
@@ -312,26 +300,28 @@ def test(
     output: Optional[Path] = typer.Option(
         None, "--output", "-o", help="Output directory base"
     ),
-    step_interval: float = typer.Option(
-        SPEED_STEP_INTERVAL, "--interval", "-i", help="Seconds between speed steps"
+    settle_time: float = typer.Option(
+        DEFAULT_SETTLE_TIME, "--settle", "-s", help="Seconds to settle after speed change"
+    ),
+    record_time: float = typer.Option(
+        DEFAULT_RECORD_TIME, "--record", "-r", help="Seconds to record at each speed"
     ),
     json_output: bool = typer.Option(False, "--json", help="Output results as JSON"),
-    skip_analysis: bool = typer.Option(
-        False, "--skip-analysis", help="Skip running analysis after capture"
-    ),
 ) -> None:
-    """Run automated RPM sweep test.
+    """Run per-step telemetry capture.
 
-    Sequence:
-    1. Create timestamped output directory
-    2. Reset RX stats
-    3. Power ON motor
-    4. Set calibration effect (effect 10)
-    5. Start telemetry recording
-    6. Ramp through all speed positions (1-10)
-    7. Stop recording and power OFF motor
-    8. Dump telemetry to output directory
-    9. Run analysis (unless --skip-analysis)
+    For each speed position (1-10):
+    1. Delete telemetry files on device
+    2. Increase speed to target position
+    3. Wait SETTLE seconds (default 3)
+    4. Record for RECORD seconds (default 5)
+    5. Dump to speed-specific subdirectory
+
+    Output structure:
+      telemetry/<timestamp>/
+        speed_01/MSG_ACCEL_SAMPLES.csv, ...
+        speed_02/...
+        manifest.json
 
     Use Ctrl+C to abort - motor will be safely powered off.
     """
@@ -339,14 +329,14 @@ def test(
     output_dir = create_timestamped_dir(base_dir)
 
     if not json_output:
-        console.print("[bold]POV Telemetry Test[/bold]")
+        console.print("[bold]POV Per-Step Telemetry Capture[/bold]")
         console.print(f"Output: {output_dir}")
-        console.print(f"Step interval: {step_interval}s")
+        console.print(f"Settle time: {settle_time}s, Record time: {record_time}s")
         console.print()
 
     try:
         with DeviceConnection(port=port) as conn:
-            result = run_test_sequence(conn, output_dir, step_interval)
+            result = run_test_sequence(conn, output_dir, settle_time, record_time)
 
     except DeviceError as e:
         if json_output:
@@ -355,34 +345,31 @@ def test(
             err_console.print(f"[red]Device error: {e}[/red]")
         raise typer.Exit(2)
 
-    # Write speed log
-    write_speed_log(result)
-
-    # Run analysis if requested
-    if not skip_analysis and not result.error:
-        if not json_output:
-            console.print()
-            console.print("[bold]Running analysis...[/bold]")
-        result.analysis_json = run_analysis(result)
+    # Write manifest
+    write_manifest(result)
 
     # Output results
     if json_output:
         output_data = {
             "success": result.error is None and not result.aborted,
             "output_dir": str(result.output_dir),
-            "files": [str(p) for p in result.csv_files],
-            "speed_log": [
+            "steps": [
                 {
-                    "timestamp": e.timestamp,
-                    "position": e.position,
-                    "accel_samples": e.accel_samples,
-                    "hall_packets": e.hall_packets,
+                    "position": s.position,
+                    "output_dir": str(s.output_dir),
+                    "files": [str(p) for p in s.csv_files],
+                    "accel_samples": s.accel_samples,
+                    "hall_packets": s.hall_packets,
+                    "rpm": s.rpm,
+                    "success": s.success,
+                    "error": s.error,
                 }
-                for e in result.speed_log
+                for s in result.steps
             ],
             "aborted": result.aborted,
             "error": result.error,
-            "analysis": result.analysis_json,
+            "settle_time": result.settle_time,
+            "record_time": result.record_time,
         }
         print(json.dumps(output_data, indent=2))
     else:
@@ -394,5 +381,8 @@ def test(
             console.print("[yellow]Test aborted by user[/yellow]")
             raise typer.Exit(130)  # Standard Ctrl+C exit code
         else:
-            console.print("[green]Test completed successfully[/green]")
+            successful = sum(1 for s in result.steps if s.success)
+            console.print(
+                f"[green]Captured {successful}/{len(result.steps)} speed positions[/green]"
+            )
             console.print(f"[dim]Results in: {result.output_dir}[/dim]")

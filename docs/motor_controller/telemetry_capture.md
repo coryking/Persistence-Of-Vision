@@ -12,6 +12,11 @@ The `pov` CLI tool provides the easiest interface for capturing and downloading 
 # From project root
 uv sync                           # Install CLI (first time only)
 
+# Automated per-step capture (recommended for analysis)
+pov telemetry test                # Full test: ramp through all speeds, capture each
+pov telemetry test -s 3 -r 5      # Settle 3s, record 5s per speed (defaults)
+
+# Manual capture (for custom workflows)
 pov telemetry status              # Check device state
 pov telemetry start               # Start recording
 # ... spin motor, collect data ...
@@ -20,6 +25,13 @@ pov telemetry dump                # Download CSVs to telemetry/
 ```
 
 **All commands support `--json` for LLM-friendly structured output.**
+
+The `test` command automates the full capture workflow:
+1. Powers on motor, sets calibration effect
+2. For each speed (1-10): settle → record → dump to `speed_XX/` subdirectory
+3. Powers off motor, writes `manifest.json` with metadata
+
+See `POV_TELEMETRY_ANALYSIS_GUIDE.md` for analysis methodology.
 
 ### IR Remote
 

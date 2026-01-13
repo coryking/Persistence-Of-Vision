@@ -11,6 +11,19 @@ This document describes the methodology for analyzing telemetry data from the PO
 
 ## Data Acquisition Workflow
 
+### Capture Command
+
+```bash
+pov telemetry test [OPTIONS]
+
+Options:
+  --settle / -s    Seconds to wait after speed change (default: 3.0)
+  --record / -r    Seconds to record at each speed (default: 5.0)
+  --port / -p      Serial port
+  --output / -o    Output directory base
+  --json           Output results as JSON
+```
+
 ### Input: Telemetry Directory
 
 You'll be given a path like:
@@ -18,13 +31,31 @@ You'll be given a path like:
 /Users/coryking/projects/POV_Project/telemetry/2026-01-12T16-17-47
 ```
 
+### Directory Structure (Per-Step Capture)
+
+Each speed position gets its own subdirectory with separate recordings:
+
+```
+telemetry/2026-01-12T16-17-47/
+├── speed_01/
+│   ├── MSG_ACCEL_SAMPLES.csv
+│   ├── MSG_HALL_EVENT.csv
+│   └── MSG_TELEMETRY.csv
+├── speed_02/
+│   └── ...
+├── ...
+├── speed_10/
+│   └── ...
+└── manifest.json
+```
+
 ### Expected Files
 
 | File | Description |
 |------|-------------|
-| `MSG_ACCEL_SAMPLES.csv` | IMU data (accel + gyro) with pre-computed engineering units |
-| `MSG_HALL_EVENT.csv` | Hall effect sensor triggers with period/RPM |
-| `speed_log.csv` | Test step timing and metadata |
+| `speed_XX/MSG_ACCEL_SAMPLES.csv` | IMU data (accel + gyro) with pre-computed engineering units for speed position XX |
+| `speed_XX/MSG_HALL_EVENT.csv` | Hall effect sensor triggers with period/RPM for speed position XX |
+| `manifest.json` | Run metadata (timing, sample counts, RPM per step) |
 
 ### Step 1: Copy Files to Claude's Environment
 
@@ -65,36 +96,57 @@ Check file sizes, column headers, and sample values before full analysis.
 | `period_us` | Time since previous trigger |
 | `rotation_num` | Rotation count |
 
-### speed_log.csv Columns
+### manifest.json Structure
 
-| Column | Description |
-|--------|-------------|
-| `timestamp` | Unix timestamp of step change |
-| `position` | Step number (1-10 typically) |
-| `accel_samples` | Samples collected |
-| `hall_packets` | Hall events in step |
+```json
+{
+  "settle_time": 3.0,
+  "record_time": 5.0,
+  "speeds_captured": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  "started_at": "2026-01-12T16:17:47",
+  "completed_at": "2026-01-12T16:30:22",
+  "aborted": false,
+  "error": null,
+  "steps": [
+    {
+      "position": 1,
+      "accel_samples": 4500,
+      "hall_packets": 150,
+      "rpm": 450.0,
+      "success": true
+    },
+    ...
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `settle_time` | Seconds waited after speed change before recording |
+| `record_time` | Seconds of recording at each speed |
+| `speeds_captured` | List of successfully captured speed positions |
+| `steps[].accel_samples` | IMU samples collected during recording |
+| `steps[].hall_packets` | Hall events during recording |
+| `steps[].rpm` | RPM at end of recording |
 
 ---
 
 ## Test Structure
 
-### Speed Step Protocol
+### Per-Step Capture Protocol
 
-this is based on current code and may change and fall out of sync.  The point is there is code that speeds up the motor in discrete steps and lets it dwell at each step.  It is not a continious ramp.
+For each speed position (1-10):
+1. **Delete** telemetry files on device (fresh start)
+2. **Speed up** to target position
+3. **Settle** for configurable time (default 3s) - motor reaches steady-state
+4. **Record** for configurable time (default 5s) - capture pure steady-state data
+5. **Stop** recording and **dump** to speed-specific subdirectory
 
-- **10 discrete PWM duty cycle steps**
-- **~5 seconds per step** (but verify by examination)
-- **Physical spin-up time** within each step (motor inertia)
+**Key advantage**: Each speed's data is captured after the motor has fully stabilized at that speed, eliminating the spin-up transient that contaminates continuous-capture data.
 
-### Steady-State Windowing
+### Steady-State Data
 
-To get clean data, use **last 3 seconds of each 5-second step**:
-```python
-steady_start_s = step_start_s + 2.0  # Skip first 2s spin-up
-steady_end_s = step_start_s + 5.0
-```
-
-This excludes transitional acceleration and captures steady-state behavior.
+With per-step capture, the entire recording is steady-state data (the settle time handles spin-up). No windowing is needed - use all samples in each file.
 
 ---
 
@@ -248,19 +300,38 @@ Since `moment = mass × radius`:
 
 ## Analysis Sequence
 
-### For a Single Dataset
+### For a Single Dataset (Per-Step Capture)
 
 ```python
-# 1. Load data
-df = pd.read_csv('/mnt/user-data/uploads/MSG_ACCEL_SAMPLES.csv')
-hall_df = pd.read_csv('/mnt/user-data/uploads/MSG_HALL_EVENT.csv')
-speed_df = pd.read_csv('/mnt/user-data/uploads/speed_log.csv')
+import json
+from pathlib import Path
 
-# 2. Identify step windows (last 3s of each 5s step)
-# Use speed_log timestamps to find boundaries
+# 1. Load manifest
+base_dir = Path('/mnt/user-data/uploads/telemetry_run')
+with open(base_dir / 'manifest.json') as f:
+    manifest = json.load(f)
 
-# 3. Per-step analysis:
-#    - Mean RPM
+# 2. Load data from each speed directory
+results = []
+for step in manifest['steps']:
+    if not step['success']:
+        continue
+    pos = step['position']
+    step_dir = base_dir / f'speed_{pos:02d}'
+
+    df = pd.read_csv(step_dir / 'MSG_ACCEL_SAMPLES.csv')
+    hall_df = pd.read_csv(step_dir / 'MSG_HALL_EVENT.csv')
+
+    # All samples are steady-state (no windowing needed)
+    results.append({
+        'position': pos,
+        'rpm': step['rpm'],
+        'accel_df': df,
+        'hall_df': hall_df,
+    })
+
+# 3. Per-step analysis (on full dataset, no windowing):
+#    - Mean RPM (from manifest or df['rpm'].mean())
 #    - Mean wobble (gyro_wobble_dps)
 #    - Mean GX, GY
 #    - Precession direction = atan2(gy_mean, gx_mean)

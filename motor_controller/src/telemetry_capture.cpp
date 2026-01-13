@@ -14,10 +14,11 @@ static const size_t FS_RESERVE_BYTES = 50 * 1024;
 static const size_t MAX_CAPTURE_PAYLOAD = ESP_NOW_MAX_DATA_LEN_V2;
 
 // Timeouts (ms)
-static const uint32_t TASK_STOP_TIMEOUT_MS = 500;     // Max wait for task to stop
+static const uint32_t TASK_STOP_TIMEOUT_MS = 5000;    // Max wait for task to stop
 static const uint32_t TASK_STOP_POLL_MS = 10;         // Poll interval when waiting
 static const uint32_t QUEUE_RECEIVE_TIMEOUT_MS = 100; // Task queue poll interval
 static const uint32_t QUEUE_SEND_TIMEOUT_MS = 100;    // Blocking queue send timeout
+static const int STOP_SEND_MAX_RETRIES = 10;          // Retries for sending STOP to queue
 
 // Telemetry directory
 static const char* TELEMETRY_DIR = "/telemetry";
@@ -211,6 +212,44 @@ static void deleteAllFiles() {
     if (count > 0) {
         Serial.printf("[CAPTURE] Deleted %d files\n", count);
     }
+}
+
+// Send STOP command to capture queue with retry logic.
+// Returns true if STOP was successfully queued, false otherwise.
+static bool sendStopToQueue() {
+    if (!s_captureQueue) return false;
+
+    CaptureMessage msg = {};
+    msg.type = CaptureMessageType::STOP;
+
+    // Check queue space first for diagnostics
+    UBaseType_t spaces = uxQueueSpacesAvailable(s_captureQueue);
+    if (spaces == 0) {
+        Serial.printf("[CAPTURE] Queue full (%d items), waiting for space\n",
+                      (int)uxQueueMessagesWaiting(s_captureQueue));
+    }
+
+    // Try to send STOP - retry if queue full
+    for (int attempt = 0; attempt < STOP_SEND_MAX_RETRIES; attempt++) {
+        if (xQueueSend(s_captureQueue, &msg, pdMS_TO_TICKS(QUEUE_SEND_TIMEOUT_MS)) == pdPASS) {
+            return true;
+        }
+        // Queue still full, give task time to drain
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+
+    Serial.println("[CAPTURE] Failed to send STOP after retries");
+    return false;
+}
+
+// Wait for capture task to acknowledge stop.
+// Returns true if task acknowledged within timeout, false otherwise.
+static bool waitForTaskStop() {
+    uint32_t startMs = millis();
+    while (!s_taskStopped && (millis() - startMs) < TASK_STOP_TIMEOUT_MS) {
+        vTaskDelay(pdMS_TO_TICKS(TASK_STOP_POLL_MS));
+    }
+    return s_taskStopped;
 }
 
 // Get human-readable name for message type
@@ -525,19 +564,14 @@ void captureStop() {
         return;
     }
 
-    // Send STOP command through queue
-    CaptureMessage msg = {};
-    msg.type = CaptureMessageType::STOP;
-    xQueueSend(s_captureQueue, &msg, pdMS_TO_TICKS(QUEUE_SEND_TIMEOUT_MS));
-
-    // Wait for task to close files and acknowledge
-    uint32_t startMs = millis();
-    while (!s_taskStopped && (millis() - startMs) < TASK_STOP_TIMEOUT_MS) {
-        vTaskDelay(pdMS_TO_TICKS(TASK_STOP_POLL_MS));
+    if (!sendStopToQueue()) {
+        Serial.println("[CAPTURE] ERROR: Failed to send stop command");
+        return;
     }
 
-    if (!s_taskStopped) {
-        Serial.println("[CAPTURE] Warning: task did not acknowledge stop");
+    if (!waitForTaskStop()) {
+        Serial.println("[CAPTURE] ERROR: Task did not acknowledge stop");
+        return;
     }
 
     // Task has closed files - print summary
@@ -835,13 +869,14 @@ void captureStopSerial() {
         return;
     }
 
-    CaptureMessage msg = {};
-    msg.type = CaptureMessageType::STOP;
-    xQueueSend(s_captureQueue, &msg, pdMS_TO_TICKS(QUEUE_SEND_TIMEOUT_MS));
+    if (!sendStopToQueue()) {
+        Serial.println("ERR: Failed to send stop");
+        return;
+    }
 
-    uint32_t startMs = millis();
-    while (!s_taskStopped && (millis() - startMs) < TASK_STOP_TIMEOUT_MS) {
-        vTaskDelay(pdMS_TO_TICKS(TASK_STOP_POLL_MS));
+    if (!waitForTaskStop()) {
+        Serial.println("ERR: Stop timeout");
+        return;
     }
 
     s_state = CaptureState::IDLE;
@@ -851,14 +886,16 @@ void captureStopSerial() {
 void captureDeleteSerial() {
     // Stop if recording
     if (s_state == CaptureState::RECORDING || s_state == CaptureState::FULL) {
-        CaptureMessage msg = {};
-        msg.type = CaptureMessageType::STOP;
-        xQueueSend(s_captureQueue, &msg, pdMS_TO_TICKS(QUEUE_SEND_TIMEOUT_MS));
-
-        uint32_t startMs = millis();
-        while (!s_taskStopped && (millis() - startMs) < TASK_STOP_TIMEOUT_MS) {
-            vTaskDelay(pdMS_TO_TICKS(TASK_STOP_POLL_MS));
+        if (!sendStopToQueue()) {
+            Serial.println("ERR: Failed to stop for delete");
+            return;
         }
+
+        if (!waitForTaskStop()) {
+            Serial.println("ERR: Stop timeout");
+            return;
+        }
+
         s_state = CaptureState::IDLE;
     }
 
