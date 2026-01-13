@@ -99,6 +99,8 @@ bool Imu::begin() {
 
     // Configure accelerometer: ±16g range
     // Range factor = 1 << enum_value (matching library's internal: accRangeFactor = 1<<accRange)
+    // IMPORTANT: Python telemetry enrichment must match these values.
+    // See: tools/pov_tools/serial_comm.py (ACCEL_RANGE_G, GYRO_RANGE_DPS)
     constexpr MPU9250_accRange ACC_RANGE = MPU9250_ACC_RANGE_16G;
     m_imu->setAccRange(ACC_RANGE);
     m_accRangeFactor = 1 << ACC_RANGE;

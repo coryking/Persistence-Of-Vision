@@ -6,6 +6,26 @@ from typing import Optional
 from pathlib import Path
 
 
+# =============================================================================
+# MPU-9250 Conversion Constants
+#
+# IMPORTANT: These values must match the firmware configuration.
+# Source: led_display/src/Imu.cpp lines 100-109
+#   - ACC_RANGE = MPU9250_ACC_RANGE_16G (±16g)
+#   - GYR_RANGE = MPU9250_GYRO_RANGE_2000 (±2000°/s)
+#
+# Formula: physical_value = raw_value * (full_scale_range / 32768)
+# =============================================================================
+ACCEL_RANGE_G = 16.0      # Must match MPU9250_ACC_RANGE_16G in Imu.cpp
+GYRO_RANGE_DPS = 2000.0   # Must match MPU9250_GYRO_RANGE_2000 in Imu.cpp
+
+ACCEL_G_PER_LSB = ACCEL_RANGE_G / 32768.0      # 0.00048828125
+GYRO_DPS_PER_LSB = GYRO_RANGE_DPS / 32768.0    # 0.06103515625
+
+# Saturation threshold: values at ±32700 or beyond are clipped
+SATURATION_THRESHOLD = 32700
+
+
 DEFAULT_PORT = "/dev/cu.usbmodem2101"
 DEFAULT_BAUD = 921600
 DEFAULT_TIMEOUT = 2.0
@@ -214,10 +234,15 @@ def save_csv_files(files: list[DumpedFile], output_dir: Path) -> list[Path]:
 
 
 def enrich_accel_csv(output_dir: Path) -> bool:
-    """Add rotation_num and micros_since_hall computed from hall event timestamps.
+    """Enrich accelerometer CSV with physical units and derived values.
 
-    These columns were previously computed in firmware but are now computed in
-    post-processing to decouple telemetry from the LED render loop.
+    Computes:
+    - rotation_num, micros_since_hall (from hall event timestamps)
+    - angle_deg (0-360° position relative to hall sensor)
+    - rpm (from hall period)
+    - Physical units: x_g, y_g, z_g (g), gx_dps, gy_dps, gz_dps (°/s)
+    - gyro_wobble_dps (wobble magnitude from non-saturating axes)
+    - is_y_saturated, is_gz_saturated (saturation flags)
 
     Returns True if enrichment was performed, False if files not found.
     """
@@ -239,9 +264,9 @@ def enrich_accel_csv(output_dir: Path) -> bool:
     # Sort hall events by timestamp
     hall = hall.sort_values('timestamp_us').reset_index(drop=True)
 
-    # Get timestamp arrays
-    hall_timestamps = hall['timestamp_us'].values
-    accel_timestamps = accel['timestamp_us'].values
+    # Get timestamp arrays as numpy arrays for searchsorted
+    hall_timestamps = hall['timestamp_us'].to_numpy()
+    accel_timestamps = accel['timestamp_us'].to_numpy()
 
     # For each accel sample, find which hall interval it belongs to
     # searchsorted returns insertion point; -1 gives the hall event before each sample
@@ -259,8 +284,46 @@ def enrich_accel_csv(output_dir: Path) -> bool:
     accel.loc[before_first, 'rotation_num'] = 0
     accel.loc[before_first, 'micros_since_hall'] = 0
 
-    # Reorder columns to match original format expected by analysis tools
-    cols = ['timestamp_us', 'sequence_num', 'rotation_num', 'micros_since_hall', 'x', 'y', 'z', 'gx', 'gy', 'gz']
+    # --- Merge period_us from hall data for angle calculation ---
+    accel['period_us'] = hall['period_us'].values[indices_clipped]
+
+    # --- Angular position (0-360°) relative to hall sensor ---
+    # Assumes constant angular velocity within each rotation
+    # Use modulo to handle samples that span multiple rotations (hall events are sparse)
+    accel['angle_deg'] = ((accel['micros_since_hall'] / accel['period_us']) * 360.0) % 360.0
+    accel.loc[before_first, 'angle_deg'] = 0.0
+
+    # --- RPM from hall period ---
+    accel['rpm'] = 60_000_000.0 / accel['period_us']
+
+    # --- Saturation flags (only axes that can saturate) ---
+    accel['is_y_saturated'] = accel['y'].abs() >= SATURATION_THRESHOLD
+    accel['is_gz_saturated'] = accel['gz'].abs() >= SATURATION_THRESHOLD
+
+    # --- Convert raw to physical units ---
+    accel['x_g'] = accel['x'] * ACCEL_G_PER_LSB
+    accel['y_g'] = accel['y'] * ACCEL_G_PER_LSB
+    accel['z_g'] = accel['z'] * ACCEL_G_PER_LSB
+    accel['gx_dps'] = accel['gx'] * GYRO_DPS_PER_LSB
+    accel['gy_dps'] = accel['gy'] * GYRO_DPS_PER_LSB
+    accel['gz_dps'] = accel['gz'] * GYRO_DPS_PER_LSB
+
+    # --- Derived values from non-saturating axes ---
+    # Gyro wobble: rotation rate around non-spin axes (gx, gy)
+    # This measures precession/wobble - key metric for balance analysis
+    accel['gyro_wobble_dps'] = np.sqrt(accel['gx_dps']**2 + accel['gy_dps']**2)
+
+    # --- Drop raw columns and intermediate values ---
+    accel = accel.drop(columns=['x', 'y', 'z', 'gx', 'gy', 'gz', 'period_us'])
+
+    # --- Final column order ---
+    cols = [
+        'timestamp_us', 'sequence_num', 'rotation_num', 'micros_since_hall',
+        'angle_deg', 'rpm',
+        'x_g', 'y_g', 'z_g', 'gx_dps', 'gy_dps', 'gz_dps',
+        'gyro_wobble_dps',
+        'is_y_saturated', 'is_gz_saturated'
+    ]
     accel = accel[cols]
 
     # Overwrite with enriched data
