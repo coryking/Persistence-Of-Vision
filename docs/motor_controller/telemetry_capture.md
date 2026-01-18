@@ -28,8 +28,10 @@ pov telemetry dump                # Download CSVs to telemetry/
 
 The `test` command automates the full capture workflow:
 1. Powers on motor, sets calibration effect
-2. For each speed (1-10): settle → record → dump to `speed_XX/` subdirectory
+2. For each speed (1-10): settle → record → dump files with `_step_XX_NNNrpm` suffix
 3. Powers off motor, writes `manifest.json` with metadata
+
+Output files are named like `MSG_ACCEL_SAMPLES_step_01_245rpm.csv` for easy identification.
 
 See `POV_TELEMETRY_ANALYSIS_GUIDE.md` for analysis methodology.
 

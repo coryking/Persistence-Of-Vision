@@ -254,14 +254,46 @@ class DeviceConnection:
         return files
 
 
-def save_csv_files(files: list[DumpedFile], output_dir: Path) -> list[Path]:
-    """Save dumped files as CSV to output directory."""
+def extract_rpm_from_dump(files: list[DumpedFile]) -> float | None:
+    """Extract average RPM from hall event data in dump.
+
+    Parses MSG_HALL_EVENT rows to get period_us values and computes RPM.
+    """
+    for f in files:
+        if "HALL_EVENT" in f.filename:
+            periods = []
+            for row in f.rows:
+                parts = row.split(",")
+                if len(parts) >= 2:
+                    try:
+                        period_us = float(parts[1])
+                        if period_us > 0:
+                            periods.append(period_us)
+                    except ValueError:
+                        continue
+            if periods:
+                avg_period = sum(periods) / len(periods)
+                return 60_000_000.0 / avg_period
+    return None
+
+
+def save_csv_files(
+    files: list[DumpedFile], output_dir: Path, filename_suffix: str = ""
+) -> list[Path]:
+    """Save dumped files as CSV to output directory.
+
+    Args:
+        files: List of dumped file objects to save
+        output_dir: Directory to save files to
+        filename_suffix: Optional suffix before .csv (e.g., "_step_01")
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     saved = []
 
     for f in files:
-        # Convert .bin to .csv
-        csv_name = f.filename.replace(".bin", ".csv")
+        # Convert .bin to .csv, with optional suffix before extension
+        base_name = f.filename.replace(".bin", "")
+        csv_name = f"{base_name}{filename_suffix}.csv"
         path = output_dir / csv_name
 
         with open(path, "w") as out:
@@ -274,7 +306,7 @@ def save_csv_files(files: list[DumpedFile], output_dir: Path) -> list[Path]:
     return saved
 
 
-def enrich_accel_csv(output_dir: Path) -> bool:
+def enrich_accel_csv(output_dir: Path, filename_suffix: str = "") -> bool:
     """Enrich accelerometer CSV with physical units and derived values.
 
     Computes:
@@ -285,13 +317,17 @@ def enrich_accel_csv(output_dir: Path) -> bool:
     - gyro_wobble_dps (wobble magnitude from non-saturating axes)
     - is_y_saturated, is_gz_saturated (saturation flags)
 
+    Args:
+        output_dir: Directory containing CSV files
+        filename_suffix: Optional suffix before .csv (e.g., "_step_01")
+
     Returns True if enrichment was performed, False if files not found.
     """
     import numpy as np
     import pandas as pd
 
-    accel_path = output_dir / "MSG_ACCEL_SAMPLES.csv"
-    hall_path = output_dir / "MSG_HALL_EVENT.csv"
+    accel_path = output_dir / f"MSG_ACCEL_SAMPLES{filename_suffix}.csv"
+    hall_path = output_dir / f"MSG_HALL_EVENT{filename_suffix}.csv"
 
     if not accel_path.exists() or not hall_path.exists():
         return False  # Nothing to enrich

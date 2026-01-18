@@ -1,6 +1,7 @@
 """Automated per-step telemetry capture command."""
 
 import json
+import tarfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -15,6 +16,7 @@ from ..serial_comm import (
     DeviceError,
     save_csv_files,
     enrich_accel_csv,
+    extract_rpm_from_dump,
     DEFAULT_PORT,
 )
 from ..constants import ButtonCommand, CALIBRATION_EFFECT, MAX_SPEED_POSITION
@@ -32,7 +34,7 @@ class StepResult:
     """Result from capturing one speed step."""
 
     position: int
-    output_dir: Path
+    file_suffix: str
     csv_files: list[Path] = field(default_factory=list)
     accel_samples: int = 0
     hall_packets: int = 0
@@ -142,7 +144,7 @@ def run_test_sequence(
 
                 step_result = StepResult(
                     position=target_position,
-                    output_dir=output_dir / f"speed_{target_position:02d}",
+                    file_suffix="",  # Will be set after RPM is known
                 )
 
                 # 1. Delete existing telemetry files
@@ -202,40 +204,39 @@ def run_test_sequence(
                 step_result.accel_samples = accel_after - accel_before
                 step_result.hall_packets = hall_after - hall_before
 
-                # Get RPM if available
-                if "rpm" in status:
-                    step_result.rpm = float(status["rpm"])
-                elif "hall_avg_us" in status:
-                    # Calculate from hall period
-                    hall_us = float(status["hall_avg_us"])
-                    if hall_us > 0:
-                        step_result.rpm = 60_000_000.0 / hall_us
-
-                # Display sample counts
+                # Warn if no samples collected
                 if step_result.accel_samples == 0:
                     console.print(
                         f"[yellow]Warning: No accel samples collected![/yellow]"
                     )
-                elif step_result.hall_packets == 0:
+                if step_result.hall_packets == 0:
                     console.print(
                         f"[yellow]Warning: No hall packets collected![/yellow]"
                     )
-                else:
+
+                # 7. Dump files, extract RPM, save with suffix
+                files = conn.dump()
+                if files:
+                    # Extract RPM from hall event data
+                    step_result.rpm = extract_rpm_from_dump(files)
+
+                    # Build file suffix with step and RPM
+                    rpm_part = f"_{int(step_result.rpm)}rpm" if step_result.rpm else ""
+                    step_result.file_suffix = f"_step_{target_position:02d}{rpm_part}"
+
+                    # Display sample counts
                     rpm_str = f", {step_result.rpm:.0f} RPM" if step_result.rpm else ""
                     console.print(
                         f"[dim]Collected {step_result.accel_samples} samples, "
                         f"{step_result.hall_packets} hall{rpm_str}[/dim]"
                     )
 
-                # 7. Dump to speed-specific directory
-                files = conn.dump()
-                if files:
-                    saved = save_csv_files(files, step_result.output_dir)
-                    enriched = enrich_accel_csv(step_result.output_dir)
+                    # Save files
+                    saved = save_csv_files(files, output_dir, step_result.file_suffix)
+                    enriched = enrich_accel_csv(output_dir, step_result.file_suffix)
                     step_result.csv_files = saved
-                    console.print(
-                        f"[green]Saved {len(saved)} files to {step_result.output_dir.name}/[/green]"
-                    )
+                    for path in saved:
+                        console.print(f"[green]Saved: {path.name}[/green]")
                     if enriched:
                         console.print("[dim]Enriched accel CSV[/dim]")
                 else:
@@ -295,6 +296,24 @@ def write_manifest(result: TestResult) -> None:
     console.print(f"[dim]Manifest written to {manifest_path.name}[/dim]")
 
 
+def create_archive(result: TestResult) -> Path:
+    """Create a .tgz archive of all telemetry files."""
+    archive_name = f"{result.output_dir.name}.tgz"
+    archive_path = result.output_dir / archive_name
+
+    with tarfile.open(archive_path, "w:gz") as tar:
+        # Add all CSV files
+        for csv_file in result.output_dir.glob("*.csv"):
+            tar.add(csv_file, arcname=csv_file.name)
+        # Add manifest
+        manifest_path = result.output_dir / "manifest.json"
+        if manifest_path.exists():
+            tar.add(manifest_path, arcname="manifest.json")
+
+    console.print(f"[green]Archive created: {archive_name}[/green]")
+    return archive_path
+
+
 def test(
     port: str = typer.Option(DEFAULT_PORT, "--port", "-p", help="Serial port"),
     output: Optional[Path] = typer.Option(
@@ -315,12 +334,14 @@ def test(
     2. Increase speed to target position
     3. Wait SETTLE seconds (default 3)
     4. Record for RECORD seconds (default 5)
-    5. Dump to speed-specific subdirectory
+    5. Dump to flat files with step and RPM suffix
 
     Output structure:
       telemetry/<timestamp>/
-        speed_01/MSG_ACCEL_SAMPLES.csv, ...
-        speed_02/...
+        MSG_ACCEL_SAMPLES_step_01_245rpm.csv
+        MSG_HALL_EVENT_step_01_245rpm.csv
+        MSG_ACCEL_SAMPLES_step_02_312rpm.csv
+        ...
         manifest.json
 
     Use Ctrl+C to abort - motor will be safely powered off.
@@ -345,18 +366,20 @@ def test(
             err_console.print(f"[red]Device error: {e}[/red]")
         raise typer.Exit(2)
 
-    # Write manifest
+    # Write manifest and create archive
     write_manifest(result)
+    archive_path = create_archive(result)
 
     # Output results
     if json_output:
         output_data = {
             "success": result.error is None and not result.aborted,
             "output_dir": str(result.output_dir),
+            "archive": str(archive_path),
             "steps": [
                 {
                     "position": s.position,
-                    "output_dir": str(s.output_dir),
+                    "file_suffix": s.file_suffix,
                     "files": [str(p) for p in s.csv_files],
                     "accel_samples": s.accel_samples,
                     "hall_packets": s.hall_packets,
@@ -386,3 +409,4 @@ def test(
                 f"[green]Captured {successful}/{len(result.steps)} speed positions[/green]"
             )
             console.print(f"[dim]Results in: {result.output_dir}[/dim]")
+            console.print(f"[dim]Archive: {archive_path}[/dim]")

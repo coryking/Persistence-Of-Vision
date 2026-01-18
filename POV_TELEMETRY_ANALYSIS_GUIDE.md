@@ -33,19 +33,17 @@ You'll be given a path like:
 
 ### Directory Structure (Per-Step Capture)
 
-Each speed position gets its own subdirectory with separate recordings:
+All files are in a flat structure with step number and RPM suffixes:
 
 ```
 telemetry/2026-01-12T16-17-47/
-├── speed_01/
-│   ├── MSG_ACCEL_SAMPLES.csv
-│   ├── MSG_HALL_EVENT.csv
-│   └── MSG_TELEMETRY.csv
-├── speed_02/
-│   └── ...
+├── MSG_ACCEL_SAMPLES_step_01_245rpm.csv
+├── MSG_HALL_EVENT_step_01_245rpm.csv
+├── MSG_ACCEL_SAMPLES_step_02_312rpm.csv
+├── MSG_HALL_EVENT_step_02_312rpm.csv
 ├── ...
-├── speed_10/
-│   └── ...
+├── MSG_ACCEL_SAMPLES_step_10_892rpm.csv
+├── MSG_HALL_EVENT_step_10_892rpm.csv
 └── manifest.json
 ```
 
@@ -53,8 +51,8 @@ telemetry/2026-01-12T16-17-47/
 
 | File | Description |
 |------|-------------|
-| `speed_XX/MSG_ACCEL_SAMPLES.csv` | IMU data (accel + gyro) with pre-computed engineering units for speed position XX |
-| `speed_XX/MSG_HALL_EVENT.csv` | Hall effect sensor triggers with period/RPM for speed position XX |
+| `MSG_ACCEL_SAMPLES_step_XX_NNNrpm.csv` | IMU data (accel + gyro) with pre-computed engineering units for speed position XX at NNN RPM |
+| `MSG_HALL_EVENT_step_XX_NNNrpm.csv` | Hall effect sensor triggers with period/RPM for speed position XX |
 | `manifest.json` | Run metadata (timing, sample counts, RPM per step) |
 
 ### Step 1: Copy Files to Claude's Environment
