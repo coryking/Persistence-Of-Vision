@@ -47,17 +47,17 @@ const char* getInterfaceName(ImuInterface iface) {
 // Pin Configuration
 // ============================================================================
 
-constexpr uint8_t IMU_SCL_PIN = D1;    // Blue wire - I2C Clock / SPI SCLK
-constexpr uint8_t IMU_SDA_PIN = D0;    // Green wire - I2C Data / SPI MOSI
-constexpr uint8_t IMU_ADO_PIN = D3;    // Purple wire - I2C addr LSB / SPI MISO
-constexpr uint8_t IMU_NCS_PIN = D2;    // Orange wire - SPI chip select (HIGH = I2C mode)
-constexpr uint8_t IMU_INT_PIN = D9;    // Yellow wire - DATA_READY interrupt
+constexpr uint8_t IMU_SCL_PIN = D0;    // Orange wire - I2C Clock / SPI SCLK
+constexpr uint8_t IMU_SDA_PIN = D1;    // Yellow wire - I2C Data / SPI MOSI
+constexpr uint8_t IMU_ADO_PIN = D2;    // Green wire - I2C addr LSB / SPI MISO
+constexpr uint8_t IMU_INT_PIN = D3;    // Blue wire - DATA_READY interrupt
+constexpr uint8_t IMU_NCS_PIN = D4;    // Black wire - SPI chip select (HIGH = I2C mode)
 
 constexpr uint8_t MPU9250_ADDR = 0x68;
 
 // --- LED Configuration ---
-constexpr uint8_t LED_DATA_PIN = D10;
-constexpr uint8_t LED_CLK_PIN = D8;
+constexpr uint8_t LED_DATA_PIN = D10;  // SK9822 Data (MOSI)
+constexpr uint8_t LED_CLK_PIN = D8;    // SK9822 Clock (SCK)
 constexpr uint16_t NUM_LEDS = 33;
 
 // ============================================================================

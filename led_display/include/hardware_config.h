@@ -17,19 +17,19 @@ namespace HardwareConfig {
 
     // Hardware pin assignments (Seeed XIAO ESP32S3)
     // See docs/led_display/HARDWARE.md for physical hardware details
-    constexpr uint8_t HALL_PIN = D5;       // Brown wire - Hall effect sensor
-    constexpr uint8_t SPI_DATA_PIN = D10;  // Blue wire - SK9822 Data (MOSI)
-    constexpr uint8_t SPI_CLK_PIN = D8;    // Purple wire - SK9822 Clock (SCK)
+    constexpr uint8_t HALL_PIN = D5;       // Hall effect sensor
+    constexpr uint8_t SPI_DATA_PIN = D10;  // SK9822 Data (MOSI)
+    constexpr uint8_t SPI_CLK_PIN = D8;    // SK9822 Clock (SCK)
 
     // MPU-9250 IMU (9-axis: gyro + accel + magnetometer)
     // Supports I2C (400kHz) or SPI (1MHz all registers, 20MHz sensor/interrupt only)
-    // Wire colors: SCL=Blue, SDA=Green, ADO=Purple, INT=Brown, NCS=Orange
+    // Wire colors: SCL=Orange, SDA=Yellow, ADO=Green, INT=Blue, NCS=Black
     // Datasheet: docs/datasheets/PS-MPU-9250A-01-v1.1.pdf
-    constexpr uint8_t IMU_SCL_PIN = D1;    // Blue wire - I2C/SPI Clock
-    constexpr uint8_t IMU_SDA_PIN = D0;    // Green wire - I2C/SPI Data In
-    constexpr uint8_t IMU_ADO_PIN = D3;    // Purple wire - I2C addr LSB (0=0x68, 1=0x69) / SPI Data Out
-    constexpr uint8_t IMU_NCS_PIN = D2;    // Orange wire - SPI chip select (HIGH for I2C mode)
-    constexpr uint8_t IMU_INT_PIN = D9;    // Brown wire - Interrupt output
+    constexpr uint8_t IMU_SCL_PIN = D0;    // Orange wire - I2C/SPI Clock
+    constexpr uint8_t IMU_SDA_PIN = D1;    // Yellow wire - I2C/SPI Data In
+    constexpr uint8_t IMU_ADO_PIN = D2;    // Green wire - I2C addr LSB (0=0x68, 1=0x69) / SPI Data Out
+    constexpr uint8_t IMU_INT_PIN = D3;    // Blue wire - Interrupt output
+    constexpr uint8_t IMU_NCS_PIN = D4;    // Black wire - SPI chip select (HIGH for I2C mode)
 
     // Physical arm layout (indexed by logical position)
     // Logical arm[0] = Outer (furthest from center, +240° from hall sensor)
