@@ -86,22 +86,27 @@ inline void waitForTargetTime(timestamp_t targetTime) {
  * Copy rendered pixels from RenderContext to the LED strip
  *
  * Applies runtime brightness from DisplayState (0-10 scale, gamma-corrected to 0-255)
+ * Handles per-arm LED counts (arm[0] has 14, others have 13) and level shifter at index 0.
  *
  * @param ctx RenderContext containing rendered arm pixel data
  * @param ledStrip NeoPixelBus strip to copy pixels to
  */
 template<typename T_STRIP>
 void copyPixelsToStrip(const RenderContext& ctx, T_STRIP& ledStrip) {
+    // Level shifter at physical index 0 - always black
+    ledStrip.SetPixelColor(0, RgbColor(0, 0, 0));
+
     // Get runtime brightness from EffectManager
     uint8_t brightness = effectManager.getBrightness();
     uint8_t scale = brightnessToScale(brightness);  // Gamma-corrected 0-255
 
     for (int a = 0; a < 3; a++) {
         uint16_t start = HardwareConfig::ARM_START[a];
+        uint16_t count = HardwareConfig::ARM_LED_COUNT[a];  // Use per-arm count
         bool reversed = HardwareConfig::ARM_LED_REVERSED[a];
 
-        for (int p = 0; p < HardwareConfig::LEDS_PER_ARM; p++) {
-            int physicalPos = reversed ? (HardwareConfig::LEDS_PER_ARM - 1 - p) : p;
+        for (int p = 0; p < count; p++) {  // Only copy valid LEDs
+            int physicalPos = reversed ? (count - 1 - p) : p;
 
             CRGB color = ctx.arms[a].pixels[p];
             if (scale < 255) {

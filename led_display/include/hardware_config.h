@@ -6,9 +6,18 @@
 
 namespace HardwareConfig {
     // LED configuration
-    constexpr uint16_t LEDS_PER_ARM = 11;
+    // - LEDS_PER_ARM: Maximum LEDs per arm (for buffer sizing)
+    // - ARM_LED_COUNT: Actual LED count per arm (arm[0]=14, others=13)
+    // - TOTAL_LOGICAL_LEDS: LEDs effects see (40)
+    // - TOTAL_PHYSICAL_LEDS: Including level shifter at index 0 (41)
+    constexpr uint16_t LEDS_PER_ARM = 14;        // Max (for buffer sizing)
     constexpr uint16_t NUM_ARMS = 3;
-    constexpr uint16_t TOTAL_LEDS = 33;
+    constexpr uint16_t TOTAL_LOGICAL_LEDS = 40;  // What effects see
+    constexpr uint16_t TOTAL_PHYSICAL_LEDS = 41; // Including level shifter
+
+    // Per-arm LED counts (arm[0]=ARM3/outer, arm[1]=ARM2/middle, arm[2]=ARM1/inner)
+    constexpr uint16_t ARM_LED_COUNT[3] = {14, 13, 13};
+
     constexpr uint8_t GLOBAL_BRIGHTNESS = 255;
 
     // IMPORTANT: NEVER hardcode loop limits in effects!
@@ -32,38 +41,33 @@ namespace HardwareConfig {
     constexpr uint8_t IMU_NCS_PIN = D4;    // Black wire - SPI chip select (HIGH for I2C mode)
 
     // Physical arm layout (indexed by logical position)
-    // Logical arm[0] = Outer (furthest from center, +240° from hall sensor)
-    // Logical arm[1] = Middle (between outer and inside, 0° hall sensor reference)
-    // Logical arm[2] = Inside (closest to center, +120° from hall sensor)
+    // Logical arm[0] = Outer/ARM3 (furthest from center, +240° from hall sensor) - 14 LEDs
+    // Logical arm[1] = Middle/ARM2 (between outer and inside, 0° hall sensor reference) - 13 LEDs
+    // Logical arm[2] = Inside/ARM1 (closest to center, +120° from hall sensor) - 13 LEDs
     //
-    // LED wiring:
-    // - arm[0] (outer): REVERSED (LED0 at tip, LED10 at hub)
-    // - arm[1] (middle): Normal (LED0 at hub, LED10 at tip)
-    // - arm[2] (inside): Normal (LED0 at hub, LED10 at tip)
+    // Physical strip layout (41 LEDs total):
+    // - Physical LED 0     = Level shifter (always dark, 3.3V→5V conversion)
+    // - Physical LEDs 1-13 = ARM1/Inside (arm[2]) - Normal ordering, 13 LEDs
+    // - Physical LEDs 14-26 = ARM2/Middle (arm[1]) - Normal ordering, 13 LEDs
+    // - Physical LEDs 27-40 = ARM3/Outer (arm[0]) - REVERSED ordering, 14 LEDs
     //
-    // Physical LED addressing (verified with led_display_test):
-    // - Physical LEDs 0-10   = Middle arm (arm[1]) - Normal ordering
-    // - Physical LEDs 11-21  = Inside arm (arm[2]) - Normal ordering
-    // - Physical LEDs 22-32  = Outer arm (arm[0])  - REVERSED ordering
+    // ARM3's extra LED is at the hub end (closest to center, 1/3 pitch further
+    // inward than ARM1/ARM2), creating an asymmetric virtual display.
 
-    constexpr uint16_t MIDDLE_ARM_START = 0;                              // arm[1]: First segment (hall sensor reference)
-    constexpr uint16_t INSIDE_ARM_START = MIDDLE_ARM_START + LEDS_PER_ARM; // arm[2]: Second segment
-    constexpr uint16_t OUTER_ARM_START = INSIDE_ARM_START + LEDS_PER_ARM;  // arm[0]: Third segment (REVERSED)
-
-    // Physical LED start positions indexed by arm (lookup table)
+    // Physical LED start positions indexed by arm (after level shifter at index 0)
     constexpr uint16_t ARM_START[3] = {
-        OUTER_ARM_START,   // arm[0]
-        MIDDLE_ARM_START,  // arm[1]
-        INSIDE_ARM_START   // arm[2]
+        27,  // arm[0] = ARM3/Outer (14 LEDs, reversed)
+        14,  // arm[1] = ARM2/Middle (13 LEDs, normal)
+        1    // arm[2] = ARM1/Inside (13 LEDs, normal)
     };
 
     // LED ordering (normal vs reversed wiring)
-    // false = LED0 at hub, LED10 at tip (normal)
-    // true = LED0 at tip, LED10 at hub (reversed)
+    // false = LED0 at hub, LEDs toward tip (normal)
+    // true = LED0 at tip, LEDs toward hub (reversed)
     constexpr bool ARM_LED_REVERSED[3] = {
-        true,   // arm[0] = Outer (REVERSED wiring)
-        false,  // arm[1] = Middle (normal wiring)
-        false   // arm[2] = Inside (normal wiring)
+        true,   // arm[0] = ARM3/Outer (REVERSED wiring, 14 LEDs)
+        false,  // arm[1] = ARM2/Middle (normal wiring, 13 LEDs)
+        false   // arm[2] = ARM1/Inside (normal wiring, 13 LEDs)
     };
 }
 

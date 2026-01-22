@@ -41,8 +41,9 @@
 #define ROLLING_AVERAGE_SIZE 20
 #define ROTATION_TIMEOUT_US 10000000  // 10 seconds for hand-spin support (6 RPM min)
 
-// ESP32-S3 hardware SPI for SK9822/APA102 (DotStar)
-NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(HardwareConfig::TOTAL_LEDS);
+// ESP32-S3 hardware SPI for HD107s/SK9822/APA102 (DotStar)
+// 41 physical LEDs: 1 level shifter + 40 display LEDs
+NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(HardwareConfig::TOTAL_PHYSICAL_LEDS);
 
 // Revolution timing
 RevolutionTimer revTimer(WARMUP_REVOLUTIONS, ROLLING_AVERAGE_SIZE, ROTATION_TIMEOUT_US);

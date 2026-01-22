@@ -10,6 +10,7 @@ from typing import Optional
 
 import typer
 from rich.console import Console
+from rich.prompt import Confirm
 
 from ..serial_comm import (
     DeviceConnection,
@@ -171,6 +172,12 @@ def run_test_sequence(
                 # 3. Settle
                 console.print(f"[dim]Settling for {settle_time}s...[/dim]")
                 time.sleep(settle_time)
+
+                # Safety check: confirm before continuing
+                if not Confirm.ask("Continue?", default=False):
+                    console.print("[yellow]Aborted by user[/yellow]")
+                    result.aborted = True
+                    break
 
                 # Get baseline sample counts before recording
                 status = conn.status()
