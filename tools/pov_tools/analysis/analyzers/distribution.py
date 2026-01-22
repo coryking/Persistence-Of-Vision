@@ -9,27 +9,27 @@ def distribution_analysis(ctx: AnalysisContext) -> AnalysisResult:
     """Generate axis value distributions."""
     fig, ax = plt.subplots(figsize=(10, 5))
 
-    # X distribution (full)
-    ax.hist(
-        ctx.enriched["x_g"],
-        bins=80,
-        alpha=0.5,
-        label=f"X (n={len(ctx.enriched)})",
-        color="red",
-        density=True,
-    )
-
-    # Y distribution - EXCLUDE saturated samples
-    y_not_saturated = ctx.enriched[~ctx.enriched["is_y_saturated"]]["y_g"]
-    if len(y_not_saturated) > 0:
+    # X distribution (radial) - EXCLUDE saturated samples
+    x_not_saturated = ctx.enriched[~ctx.enriched["is_x_saturated"]]["x_g"]
+    if len(x_not_saturated) > 0:
         ax.hist(
-            y_not_saturated,
+            x_not_saturated,
             bins=80,
             alpha=0.5,
-            label=f"Y non-sat (n={len(y_not_saturated)})",
-            color="green",
+            label=f"X non-sat (n={len(x_not_saturated)})",
+            color="red",
             density=True,
         )
+
+    # Y distribution (tangent) - full
+    ax.hist(
+        ctx.enriched["y_g"],
+        bins=80,
+        alpha=0.5,
+        label=f"Y (n={len(ctx.enriched)})",
+        color="green",
+        density=True,
+    )
 
     # Z distribution (full)
     ax.hist(
@@ -43,7 +43,7 @@ def distribution_analysis(ctx: AnalysisContext) -> AnalysisResult:
 
     ax.set_xlabel("Acceleration (g)")
     ax.set_ylabel("Density")
-    ax.set_title("Axis Value Distributions (Y excludes saturated samples)")
+    ax.set_title("Axis Value Distributions (X excludes saturated samples)")
     ax.legend()
     ax.grid(True, alpha=0.3)
 
@@ -56,11 +56,11 @@ def distribution_analysis(ctx: AnalysisContext) -> AnalysisResult:
         name="distributions",
         metrics={
             "total_samples": len(ctx.enriched),
-            "y_not_saturated_samples": len(y_not_saturated),
+            "x_not_saturated_samples": len(x_not_saturated),
         },
         plots=[plot_path],
         findings=[
             f"Total samples: {len(ctx.enriched):,}",
-            f"Y non-saturated samples: {len(y_not_saturated):,}",
+            f"X non-saturated samples: {len(x_not_saturated):,}",
         ],
     )

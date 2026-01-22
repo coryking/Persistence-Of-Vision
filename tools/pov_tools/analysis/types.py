@@ -25,7 +25,7 @@ class AnalysisContext:
     # - phase: 0-1 within rotation
     # - phase_deg: 0-360
     # - x_g, y_g, z_g: converted to g units (3.9mg/LSB)
-    # - is_y_saturated: boolean (raw y >= 4094)
+    # - is_x_saturated: boolean (raw x >= 4094, X is radial axis)
     # - speed_position: integer speed position (1-N) from speed_log
 
 

@@ -44,12 +44,12 @@ def axis_timeseries_analysis(ctx: AnalysisContext) -> AnalysisResult:
     # Check saturation - use available columns or compute from values
     saturation_pcts = {"x": 0.0, "y": 0.0, "z": 0.0}
 
-    # Check for pre-computed saturation flags
-    if "is_y_saturated" in ctx.enriched.columns:
-        saturation_pcts["y"] = ctx.enriched["is_y_saturated"].mean() * 100
+    # Check for pre-computed saturation flags (X is radial, saturates from centrifugal)
+    if "is_x_saturated" in ctx.enriched.columns:
+        saturation_pcts["x"] = ctx.enriched["is_x_saturated"].mean() * 100
 
-    # For X and Z, compute from values if flags don't exist
-    for axis in ["x", "z"]:
+    # For Y and Z, compute from values if flags don't exist
+    for axis in ["y", "z"]:
         flag_col = f"is_{axis}_saturated"
         val_col = f"{axis}_g"
         if flag_col in ctx.enriched.columns:

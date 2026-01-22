@@ -145,7 +145,7 @@ def load_and_enrich(data_dir: Path) -> AnalysisContext:
     Expected columns in MSG_ACCEL_SAMPLES.csv:
         timestamp_us, sequence_num, rotation_num, micros_since_hall,
         angle_deg, rpm, x_g, y_g, z_g, gx_dps, gy_dps, gz_dps,
-        gyro_wobble_dps, is_y_saturated, is_gz_saturated
+        gyro_wobble_dps, is_x_saturated, is_gz_saturated
 
     Args:
         data_dir: Directory containing MSG_ACCEL_SAMPLES.csv and MSG_HALL_EVENT.csv

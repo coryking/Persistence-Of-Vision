@@ -31,6 +31,22 @@ DEFAULT_RECORD_TIME = 5.0  # Seconds to record at each speed
 
 
 @dataclass
+class StepMetrics:
+    """Computed metrics for one speed step."""
+
+    rpm_mean: float
+    rpm_min: float
+    rpm_max: float
+    rpm_cv_pct: float  # coefficient of variation
+    wobble_mean: float
+    wobble_peak: float
+    dropped_samples: int
+    samples_per_rot_mean: float
+    x_saturation_pct: float
+    gz_saturation_pct: float
+
+
+@dataclass
 class StepResult:
     """Result from capturing one speed step."""
 
@@ -42,6 +58,7 @@ class StepResult:
     rpm: Optional[float] = None
     success: bool = True
     error: Optional[str] = None
+    metrics: Optional[StepMetrics] = None
 
 
 @dataclass
@@ -82,6 +99,124 @@ class MotorSafetyContext:
 
     def mark_motor_off(self) -> None:
         self._motor_started = False
+
+
+def compute_step_metrics(output_dir: Path, file_suffix: str) -> Optional[StepMetrics]:
+    """Compute metrics from the enriched accel CSV for a step.
+
+    Returns StepMetrics if the enriched CSV exists, None otherwise.
+    """
+    import pandas as pd
+
+    # Find the enriched accel CSV
+    pattern = f"MSG_ACCEL_SAMPLES{file_suffix}.csv"
+    accel_files = list(output_dir.glob(pattern))
+    if not accel_files:
+        return None
+
+    accel_path = accel_files[0]
+    try:
+        df = pd.read_csv(accel_path)
+    except Exception:
+        return None
+
+    # Check for required columns (enriched CSV)
+    required_cols = ["rpm", "gyro_wobble_dps", "sequence_num"]
+    if not all(col in df.columns for col in required_cols):
+        return None
+
+    # RPM stats
+    rpm_series = df["rpm"].dropna()
+    if len(rpm_series) == 0:
+        return None
+
+    rpm_mean = rpm_series.mean()
+    rpm_min = rpm_series.min()
+    rpm_max = rpm_series.max()
+    rpm_std = rpm_series.std()
+    rpm_cv_pct = (rpm_std / rpm_mean * 100) if rpm_mean > 0 else 0.0
+
+    # Wobble stats
+    wobble_series = df["gyro_wobble_dps"].dropna()
+    wobble_mean = wobble_series.mean() if len(wobble_series) > 0 else 0.0
+    wobble_peak = wobble_series.max() if len(wobble_series) > 0 else 0.0
+
+    # Dropped samples (gaps in sequence_num)
+    seq = df["sequence_num"].values
+    if len(seq) > 1:
+        diffs = seq[1:] - seq[:-1]
+        # Account for wraparound at 256 (uint8)
+        gaps = sum(1 for d in diffs if d != 1 and d != -255)
+    else:
+        gaps = 0
+
+    # Samples per rotation
+    if "rotation_num" in df.columns:
+        rot_counts = df.groupby("rotation_num").size()
+        samples_per_rot_mean = rot_counts.mean() if len(rot_counts) > 0 else 0.0
+    else:
+        samples_per_rot_mean = 0.0
+
+    # Saturation percentages
+    total_rows = len(df)
+    if total_rows > 0:
+        if "is_x_saturated" in df.columns:
+            x_sat_count = df["is_x_saturated"].sum()
+            x_saturation_pct = (x_sat_count / total_rows) * 100
+        else:
+            x_saturation_pct = 0.0
+
+        if "is_gz_saturated" in df.columns:
+            gz_sat_count = df["is_gz_saturated"].sum()
+            gz_saturation_pct = (gz_sat_count / total_rows) * 100
+        else:
+            gz_saturation_pct = 0.0
+    else:
+        x_saturation_pct = 0.0
+        gz_saturation_pct = 0.0
+
+    return StepMetrics(
+        rpm_mean=float(rpm_mean),
+        rpm_min=float(rpm_min),
+        rpm_max=float(rpm_max),
+        rpm_cv_pct=float(rpm_cv_pct),
+        wobble_mean=float(wobble_mean),
+        wobble_peak=float(wobble_peak),
+        dropped_samples=int(gaps),
+        samples_per_rot_mean=float(samples_per_rot_mean),
+        x_saturation_pct=float(x_saturation_pct),
+        gz_saturation_pct=float(gz_saturation_pct),
+    )
+
+
+def print_step_summary(
+    current: StepMetrics, previous: Optional[StepMetrics] = None
+) -> None:
+    """Print a two-line summary of step metrics with optional delta from previous."""
+    # Line 1: RPM and wobble
+    console.print(
+        f"[dim]RPM: {current.rpm_mean:.0f} ({current.rpm_min:.0f}-{current.rpm_max:.0f}, "
+        f"CV={current.rpm_cv_pct:.1f}%) | "
+        f"Wobble: {current.wobble_mean:.1f}°/s mean, {current.wobble_peak:.1f}°/s peak[/dim]"
+    )
+
+    # Line 2: Quality metrics
+    console.print(
+        f"[dim]Quality: {current.dropped_samples} gaps, "
+        f"{current.samples_per_rot_mean:.0f} samples/rot, "
+        f"X-sat={current.x_saturation_pct:.0f}%, GZ-sat={current.gz_saturation_pct:.0f}%[/dim]"
+    )
+
+    # Line 3: Delta from previous (if available)
+    if previous is not None:
+        rpm_delta = current.rpm_mean - previous.rpm_mean
+        wobble_delta = current.wobble_mean - previous.wobble_mean
+        rpm_sign = "+" if rpm_delta >= 0 else ""
+        wobble_sign = "+" if wobble_delta >= 0 else ""
+        console.print(
+            f"[cyan]Δ from previous: {rpm_sign}{rpm_delta:.0f} RPM, "
+            f"{wobble_sign}{wobble_delta:.1f}°/s wobble[/cyan]"
+        )
 
 
 def run_test_sequence(
@@ -136,6 +271,9 @@ def run_test_sequence(
         current_position = int(status["speed_position"])
         console.print(f"[dim]Initial position: {current_position}[/dim]")
         console.print()
+
+        # Track previous step metrics for delta calculation
+        previous_metrics: Optional[StepMetrics] = None
 
         try:
             for target_position in range(1, MAX_SPEED_POSITION + 1):
@@ -246,6 +384,15 @@ def run_test_sequence(
                         console.print(f"[green]Saved: {path.name}[/green]")
                     if enriched:
                         console.print("[dim]Enriched accel CSV[/dim]")
+
+                        # Compute and display step metrics
+                        metrics = compute_step_metrics(
+                            output_dir, step_result.file_suffix
+                        )
+                        if metrics:
+                            step_result.metrics = metrics
+                            print_step_summary(metrics, previous_metrics)
+                            previous_metrics = metrics
                 else:
                     console.print("[yellow]No telemetry data captured[/yellow]")
                     step_result.success = False
@@ -275,6 +422,24 @@ def run_test_sequence(
     return result
 
 
+def _metrics_to_dict(m: Optional[StepMetrics]) -> Optional[dict[str, float | int]]:
+    """Convert StepMetrics to a dict for JSON serialization."""
+    if m is None:
+        return None
+    return {
+        "rpm_mean": m.rpm_mean,
+        "rpm_min": m.rpm_min,
+        "rpm_max": m.rpm_max,
+        "rpm_cv_pct": m.rpm_cv_pct,
+        "wobble_mean": m.wobble_mean,
+        "wobble_peak": m.wobble_peak,
+        "dropped_samples": m.dropped_samples,
+        "samples_per_rot_mean": m.samples_per_rot_mean,
+        "x_saturation_pct": m.x_saturation_pct,
+        "gz_saturation_pct": m.gz_saturation_pct,
+    }
+
+
 def write_manifest(result: TestResult) -> None:
     """Write manifest.json with run metadata."""
     manifest = {
@@ -292,6 +457,7 @@ def write_manifest(result: TestResult) -> None:
                 "hall_packets": s.hall_packets,
                 "rpm": s.rpm,
                 "success": s.success,
+                "metrics": _metrics_to_dict(s.metrics),
             }
             for s in result.steps
         ],
@@ -393,6 +559,7 @@ def test(
                     "rpm": s.rpm,
                     "success": s.success,
                     "error": s.error,
+                    "metrics": _metrics_to_dict(s.metrics),
                 }
                 for s in result.steps
             ],

@@ -10,7 +10,7 @@ from ..types import AnalysisContext, AnalysisResult
 # Constants
 GYRO_SATURATION_DPS = 2000.0  # ±2000°/s gyro range
 GYRO_SATURATION_RPM = GYRO_SATURATION_DPS / 6.0  # ~333 RPM
-IMU_RADIUS_M = 0.027  # 27mm from rotation center
+IMU_RADIUS_M = 0.0254  # 25.4mm from rotation center
 ACCEL_SATURATION_G = 16.0  # ±16g accelerometer range
 
 
@@ -263,36 +263,36 @@ def _rpm_stability_analysis(ctx, enriched, metrics, findings):
 
 
 def _centrifugal_validation(enriched, metrics, findings):
-    """Validate Y-axis acceleration against expected centrifugal force."""
-    if "y_g" not in enriched.columns:
+    """Validate X-axis acceleration against expected centrifugal force."""
+    if "x_g" not in enriched.columns:
         return
 
-    # Use low speed samples where Y isn't saturated
+    # Use low speed samples where X isn't saturated
     low_speed = enriched[
-        (enriched["rpm"] < 600)  # Well below Y saturation (~720 RPM at 27mm)
-        & (~enriched["is_y_saturated"])
+        (enriched["rpm"] < 600)  # Well below X saturation (~720 RPM at 27mm)
+        & (~enriched["is_x_saturated"])
     ].copy()
 
     if len(low_speed) < 100:
-        findings.append("Insufficient unsaturated Y samples for centrifugal validation")
+        findings.append("Insufficient unsaturated X samples for centrifugal validation")
         return
 
     # Expected centrifugal: a = ω²r where ω = rpm * 2π/60
     # In g units: a_g = (ω² * r) / 9.81
     rpm_values = low_speed["rpm"].values
     omega = rpm_values * 2 * np.pi / 60
-    expected_y_g = (omega**2 * IMU_RADIUS_M) / 9.81
+    expected_x_g = (omega**2 * IMU_RADIUS_M) / 9.81
 
-    measured_y_g = low_speed["y_g"].values
+    measured_x_g = low_speed["x_g"].values
 
     # Correlation and error
-    correlation = np.corrcoef(expected_y_g, measured_y_g)[0, 1]
-    mean_error = np.mean(measured_y_g - expected_y_g)
+    correlation = np.corrcoef(expected_x_g, measured_x_g)[0, 1]
+    mean_error = np.mean(measured_x_g - expected_x_g)
 
     # Estimate effective radius from data
     # If measured = expected * scale, scale gives radius ratio
-    if np.var(expected_y_g) > 0:
-        slope, intercept, _, _, _ = stats.linregress(expected_y_g, measured_y_g)
+    if np.var(expected_x_g) > 0:
+        slope, intercept, _, _, _ = stats.linregress(expected_x_g, measured_x_g)
         effective_radius_mm = IMU_RADIUS_M * 1000 * slope
     else:
         slope = 1.0

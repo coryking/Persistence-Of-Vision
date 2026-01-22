@@ -315,7 +315,7 @@ def enrich_accel_csv(output_dir: Path, filename_suffix: str = "") -> bool:
     - rpm (from hall period)
     - Physical units: x_g, y_g, z_g (g), gx_dps, gy_dps, gz_dps (°/s)
     - gyro_wobble_dps (wobble magnitude from non-saturating axes)
-    - is_y_saturated, is_gz_saturated (saturation flags)
+    - is_x_saturated, is_gz_saturated (saturation flags)
 
     Args:
         output_dir: Directory containing CSV files
@@ -374,7 +374,8 @@ def enrich_accel_csv(output_dir: Path, filename_suffix: str = "") -> bool:
     accel['rpm'] = 60_000_000.0 / accel['period_us']
 
     # --- Saturation flags (only axes that can saturate) ---
-    accel['is_y_saturated'] = accel['y'].abs() >= SATURATION_THRESHOLD
+    # X is radial axis (saturates from centrifugal force at ~720 RPM)
+    accel['is_x_saturated'] = accel['x'].abs() >= SATURATION_THRESHOLD
     accel['is_gz_saturated'] = accel['gz'].abs() >= SATURATION_THRESHOLD
 
     # --- Convert raw to physical units ---
@@ -399,7 +400,7 @@ def enrich_accel_csv(output_dir: Path, filename_suffix: str = "") -> bool:
         'angle_deg', 'rpm',
         'x_g', 'y_g', 'z_g', 'gx_dps', 'gy_dps', 'gz_dps',
         'gyro_wobble_dps',
-        'is_y_saturated', 'is_gz_saturated'
+        'is_x_saturated', 'is_gz_saturated'
     ]
     accel = accel[cols]
 

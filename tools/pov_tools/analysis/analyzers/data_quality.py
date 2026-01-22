@@ -148,13 +148,13 @@ def data_quality_analysis(ctx: AnalysisContext) -> AnalysisResult:
                 }
                 if sat_pct > 5:
                     findings.append(f"{axis.upper()}-axis saturation: {sat_pct:.1f}% of samples clipped at +/-16g")
-    # Or use pre-computed saturation flags
-    elif "is_y_saturated" in ctx.enriched.columns:
-        y_sat = ctx.enriched["is_y_saturated"].sum()
-        y_sat_pct = 100 * y_sat / len(ctx.enriched)
-        saturation_data["y"] = {"samples": int(y_sat), "pct": round(y_sat_pct, 1)}
-        if y_sat_pct > 5:
-            findings.append(f"Y-axis saturation: {y_sat_pct:.1f}% (from is_y_saturated flag)")
+    # Or use pre-computed saturation flags (X is radial, saturates from centrifugal)
+    elif "is_x_saturated" in ctx.enriched.columns:
+        x_sat = ctx.enriched["is_x_saturated"].sum()
+        x_sat_pct = 100 * x_sat / len(ctx.enriched)
+        saturation_data["x"] = {"samples": int(x_sat), "pct": round(x_sat_pct, 1)}
+        if x_sat_pct > 5:
+            findings.append(f"X-axis saturation: {x_sat_pct:.1f}% (from is_x_saturated flag)")
 
         if "is_gz_saturated" in ctx.enriched.columns:
             gz_sat = ctx.enriched["is_gz_saturated"].sum()

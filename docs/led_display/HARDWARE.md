@@ -163,13 +163,13 @@ For RPM calculation, this offset is irrelevant (cancels out). For correlating te
 
 **Mounting orientation:**
 
-The IMU is mounted upside-down (chip facing floor), 25.4mm from rotation center:
+The IMU is mounted upside-down (chip facing floor), 25.4mm from rotation center. Pin header faces toward center of rotation.
 
 | IMU Axis | Physical Direction | Notes |
 |----------|-------------------|-------|
 | **Z+** | DOWN (toward ground) | Aligned with gravity when stationary |
-| **Y+** | Radial (outward) | Will saturate from centrifugal force |
-| **X+** | Tangent to rotation | Toward heavy wireless power board |
+| **X+** | Radial (outward) | Saturates from centrifugal force at operating speed |
+| **Y+** | Tangent, in direction of CCW rotation | Toward 90° at the 0° position |
 
 Counter-clockwise rotation (viewed from above) means **GZ is negative** during normal operation.
 

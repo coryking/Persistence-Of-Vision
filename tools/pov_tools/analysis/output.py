@@ -200,8 +200,8 @@ def generate_report(results: list[AnalysisResult], ctx: AnalysisContext) -> Path
         should remain usable at all speeds.</p>
 
         <h4>Centrifugal Force</h4>
-        <p>Y-axis (radial) sees centrifugal acceleration = omega-squared * r. At 27mm radius,
-        the +/-16g accelerometer saturates around 720 RPM. This is expected.</p>
+        <p>X-axis (radial) sees centrifugal acceleration = omega-squared * r. At 25.4mm radius,
+        the +/-16g accelerometer saturates around 760 RPM. This is expected.</p>
 
         <h4>Spin Direction</h4>
         <p>Detected from gz_dps sign at low speed (before saturation).
