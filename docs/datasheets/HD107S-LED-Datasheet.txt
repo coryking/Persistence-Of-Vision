@@ -1,0 +1,881 @@
+HD107S
+
+Full Color Digital Control LED
+
+HD107S
+SPECIFICATION
+The upgrade LED of APA107 RGB
+
+Model: HD107S 5050-RGB
+
+40MHz Clock Drive Frequency
+V1.0.1
+
+© 2019 Rose Lighting Technology Limited
+Tel: +86-186-7564-9004 (wechat, whatsapp, QQ, skype)
+
+www.rose-lighting.com
+Email: info@rose-lighting.com
+
+HD107S
+
+Full Color Digital Control LED
+
+Version Modification
+Rev. No Date
+
+Reason of changes
+
+Writer
+
+Reviewer
+
+V1.0
+
+January 3, 2019
+
+Create the document;
+
+William Li
+
+Zarine Wu
+
+March 18, 2019
+
+Insert the block diagram;
+Add the part of “The difference Tony He
+of all kinds of digital LED”;
+
+Emily Smith
+
+V1.0.1
+
+Contact
+Rose Lighting Technology
+Website: www.rose-lighting.com
+Tel: +86-186-7564-9004 (wechat, whatsapp, QQ, skype)
+Email: info@rose-lighting.com
+
+© 2019 Rose Lighting Technology Limited
+Tel: +86-186-7564-9004 (wechat, whatsapp, QQ, skype)
+
+www.rose-lighting.com
+Email: info@rose-lighting.com
+
+HD107S
+
+Full Color Digital Control LED
+
+HD107S
+
+Fastest Digital Addressable RGB Pixel LED
+Description
+
+Features
+
+HD107S is a digital control LED light
+source which integrate control circuit and
+RGB LED chip in one package, and it
+provides the best full color lighting
+performance for RGB digital dimming
+control.
+It featured a two-wire SPI interface instead
+of the proprietary one-wire protocol like
+WS2812, and many micro-controllers can
+drive it with their hardware SPI functions
+easily.
+Also, HD107S is a more advanced version
+of digital RGB LED of APA102, so it is fully
+compatible with APA102.
+It can operates at a oscillator frequency of
+40MHz thus allowing a super fast data
+transmission rate and fastest PWM refresh
+rate over 26kHz, and it adjust the emitting
+color with 256 (controlled by 8 bits) grades
+of gray scale and 32 grades (controlled by
+5 bits) of brightness adjustment.
+Requiring a minimum number of external
+components, HD107S is not needed a
+decoupling cAPAcitors at it`s power input
+pin. And it is available in a standard 6-lead
+5050 package.
+HD107S internally include intelligent digital
+port data latch, signal reshaping
+amplification drive circuit and a
+programmable constant current driver for
+RGB leds, effectively ensuring the pixel
+point light color consistent.
+
+ CMOS process, low voltage, low power
+consumption
+ Higher brightness efficiency,large
+lighting beam
+ Pure cooper bracket and Pure Gold lead
+inside
+ Synchronization of two-line
+ With higher energy saving mode, ideal
+for battery-powered application
+ PWM refresh rate at around 26kHz
+ Oscillator frequency / clock drive
+frequency / CKI: 40MHz
+(APA102 with PWM frequency 20kHz,
+APA107 with 9kHz, sk9822 with 4.7kHz,
+sk6812/ws2812B with 800HZ)
+Also date transmission speed: 40Mbps
+ Built-in sleep function, no work no
+electric consumption
+ Configurable positive output or negative
+RGB three-color LED output
+ 256 Gray scale (8bits),
+(16bits optional ,which will be on marker in
+September 2019),
+5bit (32 level) brightness adjustment,
+ Build-20ma constant current output With
+self-detection signal build in support for
+continuous oscillation PWM output, can be
+maintained static screen
+
+Applications
+LED lamp, LED Strip, LED pixel module，
+LED billboard, LED screen
+
+DI 1
+
+6 DO
+
+CI 2
+
+5 CO
+
+GND 3
+
+4 VCC
+
+© 2019 Rose Lighting Technology Limited
+Tel: +86-186-7564-9004 (wechat, whatsapp, QQ, skype)
+
+www.rose-lighting.com
+Email: info@rose-lighting.com
+
+HD107S
+
+Full Color Digital Control LED
+
+PIN Description
+Item
+
+Symbol
+
+Pin Name
+
+Function Description
+
+1
+
+SDI / DI
+
+Data Input
+
+Control Signal Input Data
+
+2
+
+CKI / CI
+
+CLK Input
+
+Control Signal Input Clock Data
+
+3
+
+GND
+
+Ground
+
+Ground of Signal And Power Supply
+
+4
+
+VCC
+
+Power
+
+Power Supply Pin
+
+5
+
+CKO / CO
+
+CLK Output
+
+Control Signal Output Clock Data
+
+6
+
+SDO / DO
+
+Data Input
+
+Control Signal Output Data
+
+Typical Application
+DI 1
+
+6 DO
+
+DI 1
+
+6 DO
+
+DI 1
+
+6 DO
+
+CI 2
+
+5 CO
+
+CI 2
+
+5 CO
+
+CI 2
+
+5 CO
+
+GND 3
+
+4 VCC
+
+GND 3
+
+4 VCC
+
+GND 3
+
+4 VCC
+
+LED Specifications
+Color
+
+MCD
+
+Refresh
+Rate
+
+Voltage
+
+R:500-650mcd
+R/G/B G:370-530mcd 400 fps
+B:120-165mcd
+
+DC 5V
+
+Power
+Consumption
+
+Weight (g)
+
+0.2W
+(MAX:1W)
+
+© 2019 Rose Lighting Technology Limited
+Tel: +86-186-7564-9004 (wechat, whatsapp, QQ, skype)
+
+1
+
+Beam
+Angle
+
+145
+
+Dimensions
+(mm)
+L*W*H
+
+5x5x1.4
+
+Operating
+Temperature
+
+-40-70℃
+
+www.rose-lighting.com
+Email: info@rose-lighting.com
+
+HD107S
+
+Full Color Digital Control LED
+
+Absolute Maximum Ratings (Ta=25℃,VSS=0V)
+Parameter
+
+Symbol
+
+Range
+
+Unit
+
+Power Supply Voltage
+
+VDD
+
+-0.5~+5.5
+
+V
+
+Logic Input Voltage
+
+VIN
+
+-0.3~VDD+0.3
+
+V
+
+Working Temperature
+
+Topt
+
+-20~+80
+
+℃
+
+Storage Temperature
+
+Tstg
+
+-50~+120
+
+℃
+
+ESD Pressure
+
+VESD
+
+4K
+
+V
+
+Electrical Parameters (TA=-20 ~ +70 ℃, VDD=4.5 ~ 5.5V,VSS=0V)
+Parameter
+
+Symbol
+
+Min
+
+Typical
+
+Max
+
+Unit
+
+Test
+conditions
+
+Supply voltage
+
+VDD
+
+---
+
+5.0
+
+5.3
+
+V
+
+---
+
+The maximum current of LED
+
+Imax
+
+---
+
+---
+
+20
+
+mA
+
+---
+
+The clock high level width
+
+TCLKH
+
+---
+
+---
+
+>30
+
+ns
+
+---
+
+The clock low level width
+
+TCLKL
+
+---
+
+---
+
+>30
+
+ns
+
+---
+
+Data set up time
+
+Tsetup
+
+---
+
+---
+
+>10
+
+ns
+
+---
+
+The frequency of PWM
+
+Fpwm
+
+---
+
++ 26
+
+---
+
+KHz
+
+---
+
+Static power consumption
+
+IDD
+
+---
+
+0
+
+---
+
+mA
+
+---
+
+MAX Transfer Speed
+
+Fts_max
+
+---
+
+40
+
+---
+
+MHz
+
+---
+
+Block Diagram
+
+© 2019 Rose Lighting Technology Limited
+Tel: +86-186-7564-9004 (wechat, whatsapp, QQ, skype)
+
+www.rose-lighting.com
+Email: info@rose-lighting.com
+
+HD107S
+
+Full Color Digital Control LED
+
+Operating Characteristic
+HD107S is a full color digital control LED, and it uses a standard two wire SPI protocol, one
+clock line and one data line. Each LED has two inputs and two outputs which can be daisy
+chained, so it has a great advantage of being supported by standard micro-controller
+periphery and it is insensitive to timing variations, and the data can be transferred reliably at
+an arbitrary clock rate under 40MHz. HD107S uses PWM frequency of +26KHz to drive the
+R/G/B LED inside with constant current.
+NOTE: The maximum clock rate is mainly limited by the parasitics of the wiring, so take
+care of the layout of components and wiring.
+The data format is shown below.
+
+Each update of data format consists of a start frame of 32 zeroes, 32 bits for every LED
+frame and an end frame of 32 ones.A minimum of 32 zeroes are required for it to initiate a
+new data update, and increasing the number of zeroes does not affect.
+The LED frame consists of global bit and RGB bit, and it is identified by the first one bit
+following the start frame.The LED output color is updated immediately after the first valid
+LED frame, and the most significant bit of the LED frame has to be “1”, as it is used to
+identify the start of the frame. And the next two bits serve no function but recommend to set
+them to “1”.
+Global bit: 5 bit (32 level) brightness setting, while controlling R,G,B three-color constant
+current output value, if set the global bit for the 10000( 16/31 ) is the output current is half
+again the original PWM settings. See diagram below:
+DATA
+MSB←→LSB
+
+Percentage of Driving Current
+
+00000
+
+0/31
+
+00001
+
+1/31
+
+000
+
+2/31
+
+·····
+
+·····
+
+11110
+
+30/31
+
+11111
+
+31/31(max)
+
+© 2019 Rose Lighting Technology Limited
+Tel: +86-186-7564-9004 (wechat, whatsapp, QQ, skype)
+
+www.rose-lighting.com
+Email: info@rose-lighting.com
+
+HD107S
+
+Full Color Digital Control LED
+RGB bit: 8 bit (256 level) gray scale setting, while controlling R,G,B color depth, and it
+generates 16777216 colors, if set the RGB bit for the “00000000 00000000 11111111” is
+the output of full RED. See diagram below:
+DATA
+MSB←→LSB
+
+Duty Cycle
+
+0000 0000
+
+0/256
+
+0000 0001
+
+1/256
+
+0000 0010
+·····
+1111 1110
+
+2/256
+·····
+254/256
+
+1111 1111
+
+255/256(max)
+
+The HD107S receives a valid SPI signal and outputs a valid SPI signal to the next devices.
+Once a device detects a start frame (more than 31 zero bits), it will interpret the next “1”
+bit as start of its LED frame. 32 bits are clocked into the shift registers, while zeroes are
+pushed to the output. After the entire LED frame has been read, any subsequent data is
+simply forwarded until another start frame is detected. The data line is valid only during the
+rise edge of the clock signal.
+The one-byte of data format is shown below:
+
+Calculation of Refresh Rate & Number of LED points
+Refresh Rate :
+Frame rate = 1 / [ ( 64 + (32 x points) ) x T-CKI ] ;
+unit: frames per second,
+T-CKI: cycle of clock drive frequency;
+
+Such as: 1024 points of LED, CKI frequency is 1MHz, T-CKI is 1/1MHz = 1us, so the frame
+rate = 1/ [(64+ (32 x 1024)) x 0.000001s] = 30.458 fps. It means refreshing about 30 frames
+in a second.
+Number of LED points = (F-CKI / Frame rate - 64 ) / 32;
+To increase the number of cascaded LEDs, needs to increase the CKI frequency or
+decrease the frame rate.
+
+The difference of all kinds of digital LED
+HD107S RGB pixel led chip with PWM refresh Rate >26kHz and PWM frequency is 40MHZ.
+APA107 RGB pixel led chip with PWM refresh rate 9kHz and PWM frequency is 30MHZ.
+APA102 original RGB pixel led chip with PWM refresh rate 20kHz and PWM frequency is
+20MHZ.
+APA102C (packaged in china ) (fake APA102).
+SK9822 RGB pixel led chip with PWM refresh rate 4.7kHz and PWM frequency 15MHZ.
+© 2019 Rose Lighting Technology Limited
+Tel: +86-186-7564-9004 (wechat, whatsapp, QQ, skype)
+
+www.rose-lighting.com
+Email: info@rose-lighting.com
+
+HD107S
+
+Full Color Digital Control LED
+The comparison chart is as follows:
+Chip-Set
+
+Led Type
+
+DATA
+(R6)
+
+CLK
+(R7)
+
+Color Bits
+
+Data Rate
+
+PWM
+Frequency
+
+APA102C
+(fake APA102)
+
+APA012C
+
+√
+
+√
+
+8
+
+20Mbps
+
+20kHz
+
+WS2801
+WS2812/
+WS2811
+SK9822
+APA107
+HD107S
+
+√
+
+8
+
+1Mbps
+
+2.5kHz
+
+√
+
+8
+
+800kbps
+
+400Hz
+
+√
+√
+√
+
+√
+√
+√
+
+8
+8
+8,16
+
+2Mbps
+30Mbps
+40Mbps
+
+4.7kHz
+9kHz
+>26kHz
+
+APA102
+
+√
+
+√
+
+8
+
+20Mbps
+
+20kHz
+
+GS8208
+TM1804
+UCS1903
+P9813
+SK6812
+WS2815
+
+√
+√
+√
+√
+√
+√
+
+12
+8
+8
+8
+8
+18
+
+800kbps
+800kbps
+800kbps
+1-15Mbps
+800k bps
+800kbps
+
+800Hz
+400Hz
+
+WS2801
+WS2812/WS2811
+SK9822
+APA107
+HD107S
+APA102
+(original type)
+GS8208
+TM1804
+UCS1903
+P9813
+SK6812
+WS2815
+
+√
+√
+
+Unknown
+
+4.5kHz
+400 HZ
+800Hz
+
+Remark:
+HD107S 2020-RGB /HD107S 3535-RGB /HD107S 5050-RGB on the market already.
+The HD107S 5050-RGBW and HD107S led with 16 bits will on market In October2019
+
+© 2019 Rose Lighting Technology Limited
+Tel: +86-186-7564-9004 (wechat, whatsapp, QQ, skype)
+
+www.rose-lighting.com
+Email: info@rose-lighting.com
+
+HD107S
+
+Full Color Digital Control LED
+
+Package information
+5.4
+3.0
+
+1
+
+6
+
+2
+
+5
+
+3
+
+4
+
+2.9
+
+1.5
+
+0.9
+
+5.0
+
+5.0
+
+1.2
+0.8
+
+6
+
+2
+
+5
+
+3
+
+4
+
+1.0
+
+1
+
+Temperature (℃)
+
+Recommended Reflow Characteristic ( Lead-Free Solder )
+
+260
+
+245℃
+
+220
+
+215℃
+200℃
+
+10S Max
+3℃/S Max
+
+10~50S
+
+180
+
+6℃/S Max
+
+150℃
+
+140
+
+60~120S Preheating
+
+100
+3℃/S Max
+
+50
+0
+
+50
+
+100
+
+150
+
+200
+
+Time (sec)
+
+250
+
+300
+
+350
+
+Note: All temperatures refer to topside of the package, measured on the package body surface.
+
+© 2019 Rose Lighting Technology Limited
+Tel: +86-186-7564-9004 (wechat, whatsapp, QQ, skype)
+
+www.rose-lighting.com
+Email: info@rose-lighting.com
+
+

@@ -83,7 +83,7 @@ Check file sizes, column headers, and sample values before full analysis.
 | `x_g`, `y_g`, `z_g` | Accelerometer in g's | g |
 | `gx_dps`, `gy_dps`, `gz_dps` | Gyroscope in degrees/second | °/s |
 | `gyro_wobble_dps` | **Pre-computed** wobble magnitude | °/s |
-| `is_y_saturated` | Y-axis accel saturation flag | bool |
+| `is_x_saturated` | X-axis accel saturation flag | bool |
 | `is_gz_saturated` | Z-axis gyro saturation flag | bool |
 
 ### MSG_HALL_EVENT.csv Columns
@@ -159,23 +159,23 @@ With per-step capture, the entire recording is steady-state data (the settle tim
 - **Mounting method**: Double-sided foam tape, upside-down (chip facing floor)
 - **Alignment**: Approximately aligned, not precision-mounted
 - **Z+**: Points DOWN (toward ground)
-- **Y+**: Points radially outward (saturates from centrifugal force)
-- **X+**: Tangent to rotation
+- **X+**: Points radially outward (saturates from centrifugal force)
+- **Y+**: Tangent to rotation, in direction of CCW rotation
 
 ### Expected Saturation (NORMAL!)
 
 | Axis | Saturation Expected? | Why |
 |------|---------------------|-----|
 | **GZ (gyro)** | ✅ YES | Main rotation axis, ±2000°/s limit exceeded above ~333 RPM. **Negative** during CCW rotation. |
-| **Y accel** | ✅ YES | Points radially outward, normal to the axis of rotation, centripetal acceleration exceeds ±16g |
+| **X accel** | ✅ YES | Points radially outward, centrifugal acceleration exceeds ±16g |
 | GX, GY (gyro) | ❌ No | Wobble/precession axes |
-| X, Z accel | ❌ No | Tangential and axial, lower forces |
+| Y, Z accel | ❌ No | Tangential and axial, lower forces |
 
 ### What This Means
 
 - **Ignore GZ for RPM calculation** at speeds above ~333 RPM (use Hall sensor or pre-computed `rpm` column)
 - **GX and GY are the money** - they show wobble/precession
-- **Y accel saturation is fine** - we use X and Z for phase analysis
+- **X accel saturation is fine** - we use Y and Z for phase analysis
 
 ---
 

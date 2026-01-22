@@ -17,8 +17,18 @@ Physical hardware documentation for the spinning POV display rotor.
 The rotor enclosure consists of two 3D-printed parts (Onshape naming):
 
 - **Rotor Base** (top part): LEDs mounted on top surface; internal cavity houses electronics (ESP32, IMU, buck converter, wireless power board) mounted upside-down. Has an 84mm diameter, ~3mm deep cutout that seats the RX coil.
-- **Rotor Lid** (bottom part): Flat mating surface meets the Rotor Base, capturing the coil. Shaft cylinder below accepts the motor shaft.
+- **Rotor Lid** (bottom part): Flat mating surface meets the Rotor Base, capturing the coil. Shaft cylinder below accepts the motor shaft. Rectangular notch with recessed area provides clearance for the hall effect sensor mounted in the Rotor Base's protrusion.
 - **Fasteners**: 3 flat-head hex screws through arm undersides; grub screw locks motor shaft in place.
+
+**Enclosure dimensions:**
+- Body radius: 46.8mm (93.6mm diameter) — the circular enclosure portion
+- Arm tips: 104.5mm from center — extend beyond the body
+- Coil cutout: 84mm diameter, ~3mm deep — inside the body
+- **Hall sensor protrusion**: Rectangular housing extends outward from the body to position the sensor at 52mm radius (beyond the 46.8mm body edge)
+
+![Rotor Base - bottom view](rotor-base-bottom-view.png)
+![Rotor Base - top view](rotor-base-top-view.png)
+![Rotor Lid - isometric](rotor-lid-isometric.png)
 
 ```
 ROTOR (spinning)
@@ -66,6 +76,16 @@ All angles measured counter-clockwise from hall sensor (0°), viewed from above 
 | Arm 2 | 300° | 104.5 (tip) | |
 | Wireless power board | ~0° | ~0 | Inductor coil centered on rotation axis |
 
+### Previous Hardware Revision
+
+For comparing telemetry data between hardware versions:
+
+| Dimension | Previous | Current |
+|-----------|----------|---------|
+| Arm tip radius | 100mm | 104.5mm |
+| IMU radius | 28mm | 25.4mm |
+| IMU orientation | Y+ radial out, X+ tangent | X+ radial out, Y+ tangent |
+
 ## Microcontroller
 
 - **Board**: Seeed XIAO ESP32S3
@@ -98,16 +118,20 @@ Power is delivered wirelessly to the spinning rotor via inductive coupling.
 
 ## LEDs
 
-- **Type**: SK9822 (APA102-compatible)
-- **Quantity**: 33 total (3 arms × 11 LEDs each)
+- **Type**: HD107S (APA102-compatible, faster PWM than SK9822)
+- **Quantity**: 40 logical LEDs (41 physical including level shifter at index 0)
+  - Arm 1 (inside): 13 LEDs
+  - Arm 2 (middle): 13 LEDs
+  - Arm 3 (outer): 14 LEDs
 - **Color order**: BGR
-- **Datasheet**: `docs/datasheets/SK9822 LED Datasheet.pdf`
+- **Configuration**: See `led_display/include/hardware_config.h` for exact layout
+- **Datasheet**: `docs/datasheets/HD107S-LED-Datasheet.pdf`
 
-**Why SK9822/APA102?**
+**Why HD107S?**
 - 4-wire clocked SPI protocol (unlike WS2812B's timing-sensitive 3-wire)
-- Can drive up to 20-30MHz on hardware SPI
-- Much more forgiving timing for high-speed updates
-- Each arm's 11 LEDs can update in ~5.5μs at maximum SPI speed
+- 40MHz clock drive frequency (vs SK9822's 15MHz)
+- PWM refresh rate >26kHz (vs SK9822's 4.7kHz) — reduces flicker at high rotation speeds
+- APA102-compatible protocol
 
 ## Sensors
 
@@ -173,11 +197,9 @@ The IMU is mounted upside-down (chip facing floor), 25.4mm from rotation center.
 
 Counter-clockwise rotation (viewed from above) means **GZ is negative** during normal operation.
 
-**Telemetry configuration:**
+**Telemetry configuration:** (see `led_display/include/Imu.h` for current settings)
 - Accel range: ±16g (2048 LSB/g)
 - Gyro range: ±2000°/s (16.4 LSB/°/s)
-- DLPF mode 1: 184Hz bandwidth, 2.9ms delay
-- Sample rate: 1kHz (divider=0)
 - DATA_READY interrupt for timestamping
 
 **Raw data conversion (in Python analysis):**
