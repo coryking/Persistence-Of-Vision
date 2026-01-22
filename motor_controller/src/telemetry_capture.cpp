@@ -43,14 +43,32 @@ struct HallRecord {
     rotation_t rotation_num;    // Revolution counter (links to AccelRecord)
 } __attribute__((packed));
 
-struct TelemetryRecord {
-    timestamp_t timestamp;      // 64-bit message timestamp
-    period_t hall_avg_us;       // 32-bit rolling average hall period
-    uint16_t revolutions;       // Revs since last message
-    uint16_t notRotatingCount;  // Debug counter
-    uint16_t skipCount;         // Debug counter
-    uint16_t renderCount;       // Debug counter
-} __attribute__((packed));
+// RotorStatsRecord - diagnostic stats from LED display
+// Stored directly in same format as received (RotorStatsMsg minus type byte)
+struct RotorStatsRecord {
+    uint32_t reportSequence;          // Report sequence number
+    timestamp_t created_us;           // When stats were reset
+    timestamp_t lastUpdated_us;       // Most recent update
+
+    // Hall sensor stats
+    uint32_t hallEventsTotal;         // Total hall events since reset
+    uint32_t hallOutliersFiltered;    // Rejected events
+    uint32_t lastOutlierInterval_us;  // Most recent bad interval
+    period_t hallAvg_us;              // Smoothed period
+
+    // ESP-NOW stats
+    uint32_t espnowSendAttempts;
+    uint32_t espnowSendFailures;
+
+    // Render pipeline stats
+    uint16_t renderCount;
+    uint16_t skipCount;
+    uint16_t notRotatingCount;
+
+    // Current state
+    uint8_t effectNumber;
+    uint8_t brightness;
+} __attribute__((packed));  // 52 bytes (53 - 1 byte type)
 
 // State
 static CaptureState s_state = CaptureState::IDLE;
@@ -255,9 +273,9 @@ static bool waitForTaskStop() {
 // Get human-readable name for message type
 static const char* getMsgTypeName(uint8_t msgType) {
     switch (msgType) {
-        case MSG_TELEMETRY: return "MSG_TELEMETRY";
         case MSG_ACCEL_SAMPLES: return "MSG_ACCEL_SAMPLES";
         case MSG_HALL_EVENT: return "MSG_HALL_EVENT";
+        case MSG_ROTOR_STATS: return "MSG_ROTOR_STATS";
         default: return "UNKNOWN";
     }
 }
@@ -296,17 +314,21 @@ static void dumpFileCSV(uint8_t msgType, File& file, size_t dataSize) {
             break;
         }
 
-        case MSG_TELEMETRY: {
-            size_t recordCount = dataSize / sizeof(TelemetryRecord);
+        case MSG_ROTOR_STATS: {
+            size_t recordCount = dataSize / sizeof(RotorStatsRecord);
             Serial.printf("=== FILE: %s.bin (%zu records) ===\n",
                           getMsgTypeName(msgType), recordCount);
-            Serial.println("timestamp_us,hall_avg_us,revolutions,not_rotating,skip,render");
+            Serial.println("seq,created_us,updated_us,hall_total,outliers,last_outlier_us,"
+                           "hall_avg_us,espnow_ok,espnow_fail,render,skip,not_rot,effect,brightness");
 
-            TelemetryRecord rec;
+            RotorStatsRecord rec;
             while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%u,%u,%u,%u,%u\n",
-                              rec.timestamp, rec.hall_avg_us, rec.revolutions,
-                              rec.notRotatingCount, rec.skipCount, rec.renderCount);
+                Serial.printf("%u,%llu,%llu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+                              rec.reportSequence, rec.created_us, rec.lastUpdated_us,
+                              rec.hallEventsTotal, rec.hallOutliersFiltered, rec.lastOutlierInterval_us,
+                              rec.hallAvg_us, rec.espnowSendAttempts - rec.espnowSendFailures, rec.espnowSendFailures,
+                              rec.renderCount, rec.skipCount, rec.notRotatingCount,
+                              rec.effectNumber, rec.brightness);
             }
             break;
         }
@@ -402,18 +424,26 @@ static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
             break;
         }
 
-        case MSG_TELEMETRY: {
-            if (len < sizeof(TelemetryMsg)) return;
-            const TelemetryMsg* msg = reinterpret_cast<const TelemetryMsg*>(data);
+        case MSG_ROTOR_STATS: {
+            if (len < sizeof(RotorStatsMsg)) return;
+            const RotorStatsMsg* msg = reinterpret_cast<const RotorStatsMsg*>(data);
 
-            TelemetryRecord rec;
-            rec.timestamp = msg->timestamp_us;
-            rec.hall_avg_us = msg->hall_avg_us;
-            rec.revolutions = msg->revolutions;
-            rec.notRotatingCount = msg->notRotatingCount;
-            rec.skipCount = msg->skipCount;
+            RotorStatsRecord rec;
+            rec.reportSequence = msg->reportSequence;
+            rec.created_us = msg->created_us;
+            rec.lastUpdated_us = msg->lastUpdated_us;
+            rec.hallEventsTotal = msg->hallEventsTotal;
+            rec.hallOutliersFiltered = msg->hallOutliersFiltered;
+            rec.lastOutlierInterval_us = msg->lastOutlierInterval_us;
+            rec.hallAvg_us = msg->hallAvg_us;
+            rec.espnowSendAttempts = msg->espnowSendAttempts;
+            rec.espnowSendFailures = msg->espnowSendFailures;
             rec.renderCount = msg->renderCount;
-            writeRecord(MSG_TELEMETRY, &rec, sizeof(rec));
+            rec.skipCount = msg->skipCount;
+            rec.notRotatingCount = msg->notRotatingCount;
+            rec.effectNumber = msg->effectNumber;
+            rec.brightness = msg->brightness;
+            writeRecord(MSG_ROTOR_STATS, &rec, sizeof(rec));
             break;
         }
 
@@ -722,7 +752,7 @@ void captureList() {
             switch (msgType) {
                 case MSG_ACCEL_SAMPLES: recordCount = dataSize / sizeof(AccelRecord); break;
                 case MSG_HALL_EVENT:    recordCount = dataSize / sizeof(HallRecord); break;
-                case MSG_TELEMETRY:     recordCount = dataSize / sizeof(TelemetryRecord); break;
+                case MSG_ROTOR_STATS:   recordCount = dataSize / sizeof(RotorStatsRecord); break;
                 default:                recordCount = dataSize; break;  // Unknown - show bytes
             }
 
@@ -764,13 +794,17 @@ static void dumpFileScript(uint8_t msgType, File& file, size_t dataSize) {
             break;
         }
 
-        case MSG_TELEMETRY: {
-            Serial.println("timestamp_us,hall_avg_us,revolutions,not_rotating,skip,render");
-            TelemetryRecord rec;
+        case MSG_ROTOR_STATS: {
+            Serial.println("seq,created_us,updated_us,hall_total,outliers,last_outlier_us,"
+                           "hall_avg_us,espnow_ok,espnow_fail,render,skip,not_rot,effect,brightness");
+            RotorStatsRecord rec;
             while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%u,%u,%u,%u,%u\n",
-                              rec.timestamp, rec.hall_avg_us, rec.revolutions,
-                              rec.notRotatingCount, rec.skipCount, rec.renderCount);
+                Serial.printf("%u,%llu,%llu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+                              rec.reportSequence, rec.created_us, rec.lastUpdated_us,
+                              rec.hallEventsTotal, rec.hallOutliersFiltered, rec.lastOutlierInterval_us,
+                              rec.hallAvg_us, rec.espnowSendAttempts - rec.espnowSendFailures, rec.espnowSendFailures,
+                              rec.renderCount, rec.skipCount, rec.notRotatingCount,
+                              rec.effectNumber, rec.brightness);
             }
             break;
         }

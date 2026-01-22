@@ -38,5 +38,9 @@ void resetEspNowStats();
 uint32_t getRxHallPackets();
 uint32_t getRxAccelPackets();
 uint32_t getRxAccelSamples();
+uint32_t getRxRotorStatsPackets();
+
+// Send reset command to LED display (resets RotorDiagnosticStats counters)
+void sendResetRotorStats();
 
 #endif // ESPNOW_COMM_H

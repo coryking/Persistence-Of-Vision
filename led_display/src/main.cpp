@@ -30,6 +30,7 @@
 #include "SlotTiming.h"
 #include "HallSimulator.h"
 #include "FrameProfiler.h"
+#include "RotorDiagnosticStats.h"
 
 // Phase offsets defined in types.h:
 // OUTER_ARM_PHASE = 2400 units = 240° (arm[0])
@@ -72,12 +73,6 @@ RenderContext renderCtx;
 // Global frame counter (shared via RenderContext)
 uint32_t globalFrameCount = 0;
 
-// Debug counters for strobe diagnosis (reset each telemetry send)
-// Written by loop(), read by hallProcessingTask - slight race is OK for diagnostics
-static volatile uint16_t g_notRotatingCount = 0;
-static volatile uint16_t g_skipCount = 0;
-static volatile uint16_t g_renderCount = 0;
-
 // Hall sensor event queue (set during setup - either simulator or real hardware)
 static QueueHandle_t g_hallEventQueue = nullptr;
 
@@ -89,12 +84,20 @@ void hallProcessingTask(void* pvParameters) {
     HallEffectEvent event;
     bool wasRotating = false;  // Track motor state
     static uint16_t revolutionCount = 1;
-    static uint16_t revsSinceTelemetry = 0;  // Track revolutions for telemetry
     static timestamp_t lastHallTimestamp = 0;  // For period calculation
 
     while (1) {
         if (xQueueReceive(g_hallEventQueue, &event, portMAX_DELAY) == pdPASS) {
             revTimer.addTimestamp(event.triggerTimestamp);
+
+            // Record hall event for diagnostics (always, regardless of calibration state)
+            RotorDiagnosticStats::instance().recordHallEvent();
+
+            // Update smoothed hall period in diagnostics
+            period_t avgUs = revTimer.getMicrosecondsPerRevolution();
+            if (avgUs > 0) {
+                RotorDiagnosticStats::instance().setHallAvgUs(avgUs);
+            }
 
             // Calculate period since last hall trigger
             uint32_t period_us = (lastHallTimestamp > 0)
@@ -106,7 +109,6 @@ void hallProcessingTask(void* pvParameters) {
             bool isRotating = revTimer.isCurrentlyRotating();
             if (!wasRotating && isRotating) {
                 revolutionCount = 1;
-                revsSinceTelemetry = 0;  // Reset telemetry counter on motor start
             }
             wasRotating = isRotating;
 
@@ -124,26 +126,6 @@ void hallProcessingTask(void* pvParameters) {
 
             if (revTimer.isWarmupComplete() && revTimer.getRevolutionCount() == WARMUP_REVOLUTIONS) {
                 Serial.println("Warm-up complete! Display active.");
-            }
-
-            // Send telemetry every ROLLING_AVERAGE_SIZE revolutions (skip during calibration)
-            revsSinceTelemetry++;
-            if (revsSinceTelemetry >= ROLLING_AVERAGE_SIZE && !g_calibrationActive) {
-                // Capture and reset debug counters atomically-ish (good enough for diagnostics)
-                uint16_t notRotating = g_notRotatingCount;
-                uint16_t skip = g_skipCount;
-                uint16_t render = g_renderCount;
-                g_notRotatingCount = 0;
-                g_skipCount = 0;
-                g_renderCount = 0;
-
-                sendTelemetry(
-                    static_cast<uint32_t>(esp_timer_get_time()),
-                    static_cast<uint32_t>(revTimer.getMicrosecondsPerRevolution()),
-                    revsSinceTelemetry,
-                    notRotating, skip, render
-                );
-                revsSinceTelemetry = 0;
             }
         }
     }
@@ -270,6 +252,11 @@ void setup() {
     // Initialize effect manager (creates queue, starts first effect)
     effectManager.begin();
 
+    // Start diagnostic stats collection (sends to motor controller every 500ms)
+    RotorDiagnosticStats::instance().setEffectNumber(1);  // Initial effect
+    RotorDiagnosticStats::instance().setBrightness(effectManager.getBrightness());
+    RotorDiagnosticStats::instance().start(500);
+
     Serial.printf("Starting with effect 1\n");
     Serial.println("\n=== POV Display Ready ===");
 }
@@ -288,7 +275,7 @@ void loop() {
 
     // 2. Handle not-rotating state
     if (!timing.isRotating || !timing.warmupComplete) {
-        g_notRotatingCount++;
+        RotorDiagnosticStats::instance().recordRenderEvent(false, true);  // notRotating=true
         handleNotRotating(strip);
         g_lastRenderedSlot = -1;  // Reset on stop so we start fresh
         return;
@@ -301,7 +288,7 @@ void loop() {
     timestamp_t now = esp_timer_get_time();
     if (now > target.targetTime) {
         // We're behind - skip this slot and try the next one
-        g_skipCount++;
+        RotorDiagnosticStats::instance().recordRenderEvent(false, false);  // skip
         g_lastRenderedSlot = target.slotNumber;
         return;
     }
@@ -340,7 +327,7 @@ void loop() {
 
     // 7. Fire at exact angular position
     strip.Show();
-    g_renderCount++;
+    RotorDiagnosticStats::instance().recordRenderEvent(true, false);  // rendered
 
     // 8. Update state for next iteration
     g_lastRenderedSlot = target.slotNumber;

@@ -2,6 +2,7 @@
 #define EFFECT_MANAGER_H
 
 #include "Effect.h"
+#include "RotorDiagnosticStats.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
@@ -184,6 +185,9 @@ public:
             effects[currentIndex]->begin();
         }
 
+        // Update diagnostic stats with new effect number
+        RotorDiagnosticStats::instance().setEffectNumber(effectNumber);
+
         Serial.printf("[EffectManager] Effect -> %d\n", effectNumber);
     }
 
@@ -193,6 +197,7 @@ public:
     void setBrightness(uint8_t level) {
         if (level > 10) level = 10;
         brightness = level;
+        RotorDiagnosticStats::instance().setBrightness(brightness);
         Serial.printf("[EffectManager] Brightness -> %d\n", brightness);
     }
 
@@ -202,6 +207,7 @@ public:
     void incrementBrightness() {
         if (brightness < 10) {
             brightness++;
+            RotorDiagnosticStats::instance().setBrightness(brightness);
             Serial.printf("[EffectManager] Brightness UP -> %d\n", brightness);
         }
     }
@@ -212,6 +218,7 @@ public:
     void decrementBrightness() {
         if (brightness > 0) {
             brightness--;
+            RotorDiagnosticStats::instance().setBrightness(brightness);
             Serial.printf("[EffectManager] Brightness DOWN -> %d\n", brightness);
         }
     }

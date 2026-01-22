@@ -2,7 +2,7 @@
 #define POV_ESPNOW_CONFIG_H
 
 #include <stdint.h>
-#include <esp_wifi.h>
+#include <WiFi.h>
 
 // MAC Addresses (verified via USB serial numbers)
 // LED Controller:   30:30:F9:33:E4:60 (Seeed XIAO ESP32S3)

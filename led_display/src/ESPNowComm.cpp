@@ -1,5 +1,6 @@
 #include "ESPNowComm.h"
 #include "EffectManager.h"
+#include "RotorDiagnosticStats.h"
 #include "messages.h"
 
 #include <cstddef>  // for offsetof
@@ -61,6 +62,12 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
             xQueueSend(effectManager.getCommandQueue(), &cmd, 0);
             break;
         }
+        case MSG_RESET_ROTOR_STATS: {
+            // Reset diagnostic stats counters
+            RotorDiagnosticStats::instance().reset();
+            Serial.println("[ESPNOW] Rotor stats reset");
+            break;
+        }
         default:
             Serial.printf("[ESPNOW] Unknown message type: %u\n", msgType);
             break;
@@ -76,9 +83,20 @@ static void onDataSent(const wifi_tx_info_t* tx_info, esp_now_send_status_t stat
 }
 
 // Helper to send and log errors
+// Records result in RotorDiagnosticStats for monitoring
 static bool espnowSend(const uint8_t* data, size_t len, const char* msgName) {
     esp_err_t result = esp_now_send(MOTOR_CONTROLLER_MAC, data, len);
-    if (result != ESP_OK) {
+    bool success = (result == ESP_OK);
+
+    // Record send result for diagnostics (except for stats messages themselves
+    // which are already tracked in RotorDiagnosticStats::sendViaEspNow)
+    // We track all sends here except MSG_ROTOR_STATS to avoid double-counting
+    uint8_t msgType = data[0];
+    if (msgType != MSG_ROTOR_STATS) {
+        RotorDiagnosticStats::instance().recordEspNowResult(success);
+    }
+
+    if (!success) {
         // Possible errors:
         // ESP_ERR_ESPNOW_NOT_INIT - not initialized
         // ESP_ERR_ESPNOW_ARG - invalid argument
@@ -86,9 +104,8 @@ static bool espnowSend(const uint8_t* data, size_t len, const char* msgName) {
         // ESP_ERR_ESPNOW_NOT_FOUND - peer not registered
         // ESP_ERR_ESPNOW_IF - WiFi interface mismatch
         Serial.printf("[ESPNOW] %s queue failed: %s\n", msgName, esp_err_to_name(result));
-        return false;
     }
-    return true;
+    return success;
 }
 
 void setupESPNow() {
@@ -136,22 +153,6 @@ void setupESPNow() {
     Serial.printf("[ESPNOW] Target (motor controller) MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
         MOTOR_CONTROLLER_MAC[0], MOTOR_CONTROLLER_MAC[1], MOTOR_CONTROLLER_MAC[2],
         MOTOR_CONTROLLER_MAC[3], MOTOR_CONTROLLER_MAC[4], MOTOR_CONTROLLER_MAC[5]);
-}
-
-void sendTelemetry(uint32_t timestamp_us, uint32_t hall_avg_us, uint16_t revolutions,
-                   uint16_t notRotatingCount, uint16_t skipCount, uint16_t renderCount) {
-    TelemetryMsg msg;
-    msg.timestamp_us = timestamp_us;
-    msg.hall_avg_us = hall_avg_us;
-    msg.revolutions = revolutions;
-    msg.notRotatingCount = notRotatingCount;
-    msg.skipCount = skipCount;
-    msg.renderCount = renderCount;
-
-    if (espnowSend(reinterpret_cast<uint8_t*>(&msg), sizeof(msg), "Telemetry")) {
-        Serial.printf("[ESPNOW] Sent telemetry: hall=%uus revs=%u notRot=%u skip=%u render=%u\n",
-                      hall_avg_us, revolutions, notRotatingCount, skipCount, renderCount);
-    }
 }
 
 // =============================================================================

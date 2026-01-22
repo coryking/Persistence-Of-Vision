@@ -3,6 +3,7 @@
 
 #include "geometry.h"
 #include "RollingAverage.h"
+#include "RotorDiagnosticStats.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
 #include "esp_timer.h"
@@ -131,6 +132,8 @@ public:
                 portENTER_CRITICAL(&_spinlock);
                 lastTimestamp = timestamp;
                 portEXIT_CRITICAL(&_spinlock);
+                // Record outlier for diagnostics
+                RotorDiagnosticStats::instance().recordOutlier(interval);
                 return;
             }
         }

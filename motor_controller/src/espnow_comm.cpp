@@ -10,6 +10,7 @@
 static uint32_t s_rxAccelPackets = 0;
 static uint32_t s_rxAccelSamples = 0;
 static uint32_t s_rxHallPackets = 0;
+static uint32_t s_rxRotorStatsPackets = 0;
 static size_t s_lastAccelLen = 0;
 
 // ESP-NOW receive callback - runs on WiFi task
@@ -40,25 +41,34 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
         return;
     }
 
-    switch (msgType) {
-        case MSG_TELEMETRY: {
-            if (len < sizeof(TelemetryMsg)) {
-                Serial.println("[ESPNOW] Telemetry msg too short");
-                return;
-            }
-
-            // Capture if recording
-            if (isCapturing()) {
-                captureWrite(msgType, data, len);
-            }
-
-            // Keep RPM display (low rate, useful feedback)
-            const TelemetryMsg* msg = reinterpret_cast<const TelemetryMsg*>(data);
-            uint32_t rpm = (msg->hall_avg_us > 0) ? (60000000UL / msg->hall_avg_us) : 0;
-            Serial.printf("[TELEMETRY] %lu RPM\n", rpm);
-            break;
+    if (msgType == MSG_ROTOR_STATS) {
+        s_rxRotorStatsPackets++;
+        if (len < sizeof(RotorStatsMsg)) {
+            Serial.println("[ESPNOW] RotorStats msg too short");
+            return;
         }
 
+        // Capture if recording
+        if (isCapturing()) {
+            captureWrite(msgType, data, len);
+        }
+
+        // Print structured output line for Python CLI parsing
+        const RotorStatsMsg* msg = reinterpret_cast<const RotorStatsMsg*>(data);
+        uint32_t rpm = (msg->hallAvg_us > 0) ? (60000000UL / msg->hallAvg_us) : 0;
+        Serial.printf("ROTOR_STATS seq=%lu created=%llu updated=%llu hall=%lu outliers=%lu "
+                      "last_outlier_us=%lu hall_avg_us=%lu rpm=%lu espnow_ok=%lu espnow_fail=%lu "
+                      "render=%u skip=%u not_rot=%u effect=%u brightness=%u\n",
+                      msg->reportSequence, msg->created_us, msg->lastUpdated_us,
+                      msg->hallEventsTotal, msg->hallOutliersFiltered,
+                      msg->lastOutlierInterval_us, msg->hallAvg_us, rpm,
+                      msg->espnowSendAttempts - msg->espnowSendFailures, msg->espnowSendFailures,
+                      msg->renderCount, msg->skipCount, msg->notRotatingCount,
+                      msg->effectNumber, msg->brightness);
+        return;
+    }
+
+    switch (msgType) {
         default:
             Serial.printf("[ESPNOW] Unknown message type: %u\n", msgType);
             break;
@@ -186,9 +196,21 @@ void resetEspNowStats() {
     s_rxAccelPackets = 0;
     s_rxAccelSamples = 0;
     s_rxHallPackets = 0;
+    s_rxRotorStatsPackets = 0;
     s_lastAccelLen = 0;
 }
 
 uint32_t getRxHallPackets() { return s_rxHallPackets; }
 uint32_t getRxAccelPackets() { return s_rxAccelPackets; }
 uint32_t getRxAccelSamples() { return s_rxAccelSamples; }
+uint32_t getRxRotorStatsPackets() { return s_rxRotorStatsPackets; }
+
+void sendResetRotorStats() {
+    ResetRotorStatsMsg msg;
+    esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
+    if (result == ESP_OK) {
+        Serial.println("[ESPNOW] Sent RESET_ROTOR_STATS");
+    } else {
+        Serial.printf("[ESPNOW] RESET_ROTOR_STATS failed: %s\n", esp_err_to_name(result));
+    }
+}

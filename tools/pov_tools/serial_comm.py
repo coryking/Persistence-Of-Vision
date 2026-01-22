@@ -223,6 +223,11 @@ class DeviceConnection:
         self._send_command("RXRESET")
         return self._read_until_ok_or_err()
 
+    def reset_rotor_stats(self) -> str:
+        """Send reset command to LED display to zero rotor diagnostic stats."""
+        self._send_command("RESET_ROTOR_STATS")
+        return self._read_until_ok_or_err()
+
     def dump(self) -> list[DumpedFile]:
         """Dump all telemetry files as CSV data."""
         self._send_command("DUMP")

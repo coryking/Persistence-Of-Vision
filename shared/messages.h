@@ -7,7 +7,7 @@
 
 // Message types for ESP-NOW communication between motor controller and display
 enum MessageType : uint8_t {
-    MSG_TELEMETRY = 1,         // Display -> Motor Controller
+    // DEPRECATED: MSG_TELEMETRY = 1 - replaced by MSG_ROTOR_STATS
     MSG_BRIGHTNESS_UP = 2,     // Motor Controller -> Display
     MSG_BRIGHTNESS_DOWN = 3,   // Motor Controller -> Display
     MSG_SET_EFFECT = 4,        // Motor Controller -> Display
@@ -18,21 +18,52 @@ enum MessageType : uint8_t {
     // Calibration messages (Display -> Motor Controller)
     MSG_ACCEL_SAMPLES = 10,    // Batched accelerometer samples
     MSG_HALL_EVENT = 11,       // Individual hall trigger event
+    // Diagnostic stats (Display -> Motor Controller)
+    MSG_ROTOR_STATS = 12,      // Periodic diagnostic statistics
+    // Commands (Motor Controller -> Display)
+    MSG_RESET_ROTOR_STATS = 13, // Reset diagnostic stats counters
 };
 
-// Display -> Motor Controller: Telemetry
-// Sent every ROLLING_AVERAGE_SIZE revolutions
-// All counters are reset after each send (delta since last telemetry)
-struct TelemetryMsg {
-    uint8_t type = MSG_TELEMETRY;
-    timestamp_t timestamp_us;      // ESP timestamp (esp_timer_get_time()) - 64-bit
-    period_t hall_avg_us;          // Rolling average hall sensor period (microseconds)
-    uint16_t revolutions;          // Revolutions since last message
-    // Debug counters for strobe diagnosis (reset each telemetry send)
-    uint16_t notRotatingCount;     // Times handleNotRotating was called
-    uint16_t skipCount;            // Times we skipped (behind schedule)
-    uint16_t renderCount;          // Times we actually rendered + Show()
+// =============================================================================
+// Diagnostic Stats Messages (Display -> Motor Controller)
+// Timer-based diagnostics for debugging hall sensor and ESP-NOW issues
+// =============================================================================
+
+// Display -> Motor Controller: Rotor diagnostic statistics
+// Sent every 500ms by RotorDiagnosticStats timer
+struct RotorStatsMsg {
+    uint8_t type = MSG_ROTOR_STATS;  // 1 byte
+    uint32_t reportSequence;          // 4 bytes - increments each send
+    timestamp_t created_us;           // 8 bytes - when stats were reset
+    timestamp_t lastUpdated_us;       // 8 bytes - most recent update
+
+    // Hall sensor stats
+    uint32_t hallEventsTotal;         // 4 bytes - total since reset
+    uint32_t hallOutliersFiltered;    // 4 bytes - rejected (< 50ms)
+    uint32_t lastOutlierInterval_us;  // 4 bytes - most recent bad interval
+    period_t hallAvg_us;              // 4 bytes - smoothed period (for RPM calc)
+
+    // ESP-NOW stats
+    uint32_t espnowSendAttempts;      // 4 bytes
+    uint32_t espnowSendFailures;      // 4 bytes
+
+    // Render pipeline stats (delta since last report)
+    uint16_t renderCount;             // 2 bytes - successful renders
+    uint16_t skipCount;               // 2 bytes - skipped (behind schedule)
+    uint16_t notRotatingCount;        // 2 bytes - loop exited early
+
+    // Current state
+    uint8_t effectNumber;             // 1 byte
+    uint8_t brightness;               // 1 byte
 } __attribute__((packed));
+// Size: 53 bytes (well under ESP-NOW limit)
+
+// Motor Controller -> Display: Reset diagnostic stats
+// Zeros all counters and updates created_us
+struct ResetRotorStatsMsg {
+    uint8_t type = MSG_RESET_ROTOR_STATS;
+} __attribute__((packed));
+// Size: 1 byte
 
 // Motor Controller -> Display: Increment brightness
 struct BrightnessUpMsg {

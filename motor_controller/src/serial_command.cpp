@@ -86,6 +86,7 @@ static void dispatch(char* cmd) {
     else if (strcmp(cmd, "MOTOR_ON") == 0)  motorOnSerial();
     else if (strcmp(cmd, "MOTOR_OFF") == 0) motorOffSerial();
     else if (strcmp(cmd, "RXRESET") == 0) { resetEspNowStats(); Serial.println("OK"); }
+    else if (strcmp(cmd, "RESET_ROTOR_STATS") == 0) { sendResetRotorStats(); Serial.println("OK"); }
     else Serial.println("ERR: Unknown command");
 }
 
