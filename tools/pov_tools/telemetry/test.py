@@ -470,9 +470,12 @@ def write_manifest(result: TestResult) -> None:
 
 
 def create_archive(result: TestResult) -> Path:
-    """Create a .tgz archive of all telemetry files."""
+    """Create a .tgz archive of all telemetry files.
+
+    Archive is placed in the parent telemetry directory, not the subdirectory.
+    """
     archive_name = f"{result.output_dir.name}.tgz"
-    archive_path = result.output_dir / archive_name
+    archive_path = result.output_dir.parent / archive_name
 
     with tarfile.open(archive_path, "w:gz") as tar:
         # Add all CSV files
