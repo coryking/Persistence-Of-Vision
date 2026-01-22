@@ -32,4 +32,5 @@ void captureDeleteSerial();  // DELETE command - prints OK
 void captureWrite(uint8_t msgType, const uint8_t* data, size_t len);
 
 CaptureState getCaptureState();
-bool isCapturing();  // Convenience: returns true if RECORDING
+bool isCapturing();       // Convenience: returns true if RECORDING
+bool isDumpInProgress();  // True during DUMP command (suppresses debug output)

@@ -80,6 +80,9 @@ static TaskHandle_t s_captureTask = nullptr;
 // Task acknowledgment flag - set when task has stopped and closed files
 static volatile bool s_taskStopped = true;  // Start stopped
 
+// Dump-in-progress flag - suppresses debug serial output during DUMP
+static volatile bool s_dumpInProgress = false;
+
 // Message types for capture queue
 enum class CaptureMessageType : uint8_t {
     DATA,   // Telemetry data to write
@@ -721,6 +724,10 @@ bool isCapturing() {
     return s_state == CaptureState::RECORDING;
 }
 
+bool isDumpInProgress() {
+    return s_dumpInProgress;
+}
+
 // ============================================================================
 // Serial Command Interface (script-friendly output)
 // ============================================================================
@@ -831,9 +838,13 @@ void captureDump() {
     // Don't stop recording - just dump what's there
     // (Unlike capturePlay which stops first)
 
+    // Suppress debug output (e.g. ROTOR_STATS) during dump to avoid corrupting CSV
+    s_dumpInProgress = true;
+
     File dir = LittleFS.open(TELEMETRY_DIR);
     if (!dir || !dir.isDirectory()) {
         Serial.println(">>>");  // Empty dump marker
+        s_dumpInProgress = false;
         return;
     }
 
@@ -861,6 +872,7 @@ void captureDump() {
     dir.close();
 
     Serial.println(">>>");  // End of dump marker
+    s_dumpInProgress = false;
 }
 
 void captureStartSerial() {
