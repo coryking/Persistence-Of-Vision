@@ -8,26 +8,35 @@ Physical hardware documentation for the spinning POV display rotor.
 
 **Rotation direction:** Counter-clockwise when viewed from above (looking down at LEDs). This is software-configurable via motor controller.
 
-**Rotor mass:** ~153g (without balancing weight)
+**Rotor mass:** 152g (fully assembled spinning mass: Rotor Base + Rotor Lid + 3 screws + grub screw)
 
-The rotor is a hollow sandwich structure:
+**Arm length:** 104.5mm from center to tip
+
+### Enclosure Structure
+
+The rotor enclosure consists of two 3D-printed parts (Onshape naming):
+
+- **Rotor Base** (top part): LEDs mounted on top surface; internal cavity houses electronics (ESP32, IMU, buck converter, wireless power board) mounted upside-down. Has an 84mm diameter, ~3mm deep cutout that seats the RX coil.
+- **Rotor Lid** (bottom part): Flat mating surface meets the Rotor Base, capturing the coil. Shaft cylinder below accepts the motor shaft.
+- **Fasteners**: 3 flat-head hex screws through arm undersides; grub screw locks motor shaft in place.
 
 ```
 ROTOR (spinning)
 ┌─────────────────────────────┐
-│      TOP PLATE (LEDs)       │  ← LEDs visible on top surface
+│      ROTOR BASE (LEDs)      │  ← LEDs visible on top surface
 │  ┌───────────────────────┐  │
 │  │ Components mounted    │  │  ← ESP32, IMU, hall sensor, etc.
-│  │ upside-down (chips    │  │     foam-taped to underside of top plate
+│  │ upside-down (chips    │  │     foam-taped to underside
 │  │ face DOWN)            │  │
 │  │                       │  │
 │  │ ○ Hall sensor         │  │  ← Branded face DOWN, 52mm from center
 │  │   (at coil plane)     │  │     radially outside wireless coil
 │  │                       │  │
-│  │ ═══ RX Coil ═══       │  │  ← 82mm diameter, rests on lid
+│  │ [  84mm coil cutout  ]│  │  ← ~3mm deep seat for RX coil
+│  │ ═══ RX Coil ═══       │  │  ← 82mm diameter coil sits in cutout
 │  └───────────────────────┘  │
-│         LID                 │  ← Screws onto top plate
-│    ║ shaft cylinder ║       │  ← Accepts motor shaft
+│       ROTOR LID             │  ← Flat mating surface, 3 hex screws
+│    ║ shaft cylinder ║       │  ← Accepts motor shaft (grub screw)
 └─────────────────────────────┘
         ~6-7mm gap
 ┌─────────────────────────────┐
@@ -41,6 +50,21 @@ The hall sensor and trigger magnet are:
 - At 52mm radius from rotation center
 - Coplanar with the wireless coils (same horizontal level)
 - Radially outside the coils (82mm diameter = 41mm radius)
+
+### Component Positions
+
+All angles measured counter-clockwise from hall sensor (0°), viewed from above looking down at LEDs.
+
+| Component | Angle | Radius (mm) | Notes |
+|-----------|-------|-------------|-------|
+| Hall sensor | 0° | 52.0 | Reference point |
+| IMU | 0° | 25.4 | Aligned with hall sensor |
+| Arm 1 | 60° | 104.5 (tip) | |
+| ESP32 | 140° | ~32.5 | Rough estimate |
+| Arm 3 | 180° | 104.5 (tip) | |
+| Buck converter | 283° | 28.2 | Center of mass |
+| Arm 2 | 300° | 104.5 (tip) | |
+| Wireless power board | ~0° | ~0 | Inductor coil centered on rotation axis |
 
 ## Microcontroller
 
@@ -139,7 +163,7 @@ For RPM calculation, this offset is irrelevant (cancels out). For correlating te
 
 **Mounting orientation:**
 
-The IMU is mounted upside-down (chip facing floor), 28mm from rotation center:
+The IMU is mounted upside-down (chip facing floor), 25.4mm from rotation center:
 
 | IMU Axis | Physical Direction | Notes |
 |----------|-------------------|-------|
