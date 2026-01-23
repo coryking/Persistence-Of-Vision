@@ -116,6 +116,18 @@ Power is delivered wirelessly to the spinning rotor via inductive coupling.
   - Prevents brownouts during WiFi TX + LED current transients
   - Buffers buck converter control loop response time (~10-100µs)
 
+### EMI from Wireless Coil
+
+The wireless power module operates at ~60kHz, which couples into nearby wiring via electric field (capacitive coupling). Symptoms include noise on the 5V rail (~150-200mV pk-pk) and false interrupts on high-impedance signal lines.
+
+**Mitigations implemented:**
+- External pullup resistors on open-collector outputs (reduces voltage swing from coupled noise)
+- Bypass caps on power lines to sensitive components
+- Separating signal wires from noisy power wires (don't braid output signals with 5V)
+
+**Potential further mitigation:**
+Grounded aluminum foil between the RX coil and electronics could reduce electric field coupling. Magnetic field shielding at 60kHz requires thicker material (skin depth in aluminum ~0.34mm) and risks detuning the wireless power resonant circuit. Not implemented; current mitigations are sufficient.
+
 ## LEDs
 
 - **Type**: HD107S (APA102-compatible, faster PWM than SK9822)
@@ -143,9 +155,17 @@ Detects magnet on stationary frame once per revolution for timing reference.
   - Operate point (BOP): 35-450 Gauss (output turns ON, pulls low)
   - Release point (BRP): 25-430 Gauss (output turns OFF, returns high)
   - Hysteresis: 20-80 Gauss typical
-  - Supply: 4.5-24V, open-collector output (internal pull-up enabled in firmware)
+  - Supply: 4.5-24V, open-collector output
   - Note: Discontinued, A1104 is recommended substitute
   - Datasheet: `docs/datasheets/A3141-2-3-4-hall-effect-sensor-Datasheet.txt`
+
+- **Wiring** (~100mm 30AWG silicone stranded wire to ESP32):
+  - 5V and GND braided together
+  - Output wire run separately (not braided with power) to reduce capacitive coupling
+  - **10µF ceramic bypass cap** spliced inline on 5V/GND, closer to hall sensor (filters ~60kHz wireless coil noise)
+  - **4.7kΩ external pullup** from output to 3.3V at ESP32 (stiffens the high-impedance node against capacitively-coupled noise; ESP32 internal pullup alone (~45kΩ) is insufficient)
+
+- **No hardware glitch filter**: The ESP32-S3 lacks the configurable "flex glitch filter" (`gpio_new_flex_glitch_filter`) that exists on newer chips (ESP32-C6, H2). The ESP-IDF docs mention it but it's not available on S3 hardware. The fixed "pin glitch filter" exists but only filters ~25ns pulses (useless for µs-scale noise). Rely on analog mitigations above instead.
 
 - **Trigger magnet** (on stator):
   - Type: 5x2mm neodymium disc (~2500-3000 Gauss at surface)
