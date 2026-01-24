@@ -1,6 +1,6 @@
 # Telemetry Capture
 
-Captures high-rate telemetry from the LED display to LittleFS for offline analysis.
+Captures high-rate telemetry from the LED display to dedicated flash partitions for offline analysis. Uses raw partition writes (bypassing filesystem overhead) to achieve the write speeds needed for 8kHz IMU data.
 
 ## Control Methods
 
@@ -39,9 +39,9 @@ See `POV_TELEMETRY_ANALYSIS_GUIDE.md` for analysis methodology.
 
 | Button | Action |
 |--------|--------|
-| RECORD | Start capture (deletes previous data) |
+| RECORD | Start capture (erases partitions first) |
 | STOP | Stop capture, print summary |
-| DELETE | Delete all captured files |
+| DELETE | Erase all telemetry partitions |
 
 Note: PLAY was removed from IR remote - use `pov telemetry dump` instead.
 
@@ -52,25 +52,27 @@ Line-based commands at 921600 baud (case-insensitive):
 | Command | Response | Description |
 |---------|----------|-------------|
 | `STATUS` | `IDLE` / `RECORDING` / `FULL` | Current capture state |
-| `START` | `OK` / `ERR: Already recording` | Start recording |
-| `STOP` | `OK` / `ERR: Not recording` | Stop recording |
-| `DELETE` | `OK` | Delete all files |
-| `LIST` | Tab-separated file list | List files on device |
-| `DUMP` | CSV data with `>>>` markers | Download all data |
+| `DELETE_ALL_CAPTURES` | `OK` | Erase all partitions (~5s, must call before START_CAPTURE) |
+| `START_CAPTURE` | `OK` / `ERR: Already recording` | Start recording (instant, no erase) |
+| `STOP_CAPTURE` | `OK` / `ERR: Not recording` | Stop recording, write header |
+| `LIST_CAPTURES` | Tab-separated file list | List captured data |
+| `DUMP_CAPTURES` | CSV data with `>>>` markers | Download all data |
 
-**LIST output format:**
+**Important**: DELETE_ALL_CAPTURES must be called before START_CAPTURE. The header is written on STOP_CAPTURE, so if interrupted before stop, data is incomplete.
+
+**LIST_CAPTURES output format:**
 ```
 MSG_ACCEL_SAMPLES.bin<TAB>1234<TAB>5678
 MSG_HALL_EVENT.bin<TAB>456<TAB>789
 <blank line = end of list>
 ```
 
-**DUMP output format:**
+**DUMP_CAPTURES output format:**
 ```
 >>> MSG_ACCEL_SAMPLES.bin
-timestamp_us,sequence_num,x,y,z
-1234567890,1,12,-34,981
-1234569140,2,11,-35,980
+timestamp_us,sequence_num,x,y,z,gx,gy,gz
+1234567890,1,12,-34,981,5,-10,32000
+1234569140,2,11,-35,980,4,-11,32001
 >>> MSG_HALL_EVENT.bin
 timestamp_us,period_us,rotation_num
 1234567890,25000,42
@@ -83,31 +85,76 @@ Note: `rotation_num` and `micros_since_hall` are computed in Python post-process
 ## Architecture
 
 - Main loop owns state machine (IDLE, RECORDING, FULL)
-- FreeRTOS task owns file write operations
+- FreeRTOS task owns flash write operations
 - Queue carries both DATA and STOP messages
-- Task wakes on RECORD, writes data, closes files on STOP, sleeps
+- Task wakes on RECORD, buffers data to 4KB sectors, writes to flash, closes on STOP, sleeps
 
 ## Data Flow
 
 ```
-ESP-NOW callback → captureWrite() → queue → captureTask → LittleFS
+ESP-NOW callback → captureWrite() → queue → captureTask → flash partition
 ```
+
+## Storage Design
+
+Uses raw flash partitions instead of a filesystem for maximum write throughput:
+- **LittleFS**: ~100-200 KB/s (journaling, wear leveling, metadata overhead)
+- **Raw partition**: ~400-800 KB/s (direct esp_partition_write)
+
+This matters because 8kHz IMU data at 16 bytes/sample = 128 KB/s sustained.
+
+### Partition Layout
+
+Defined in `partitions.csv`:
+
+| Partition | Size | Record Size | Max Records | Duration |
+|-----------|------|-------------|-------------|----------|
+| accel | 1.875 MB | 16 bytes | ~122,000 | ~15 sec @ 8kHz |
+| hall | 128 KB | 12 bytes | ~10,900 | ~218 sec @ 50/sec |
+| stats | 128 KB | 52 bytes | ~2,500 | ~21 min @ 2/sec |
+
+### Binary Format
+
+Each partition starts with a 32-byte header:
+
+```cpp
+struct TelemetryHeader {
+    uint32_t magic;           // 0x54454C4D "TELM"
+    uint32_t version;         // 1
+    uint64_t base_timestamp;  // First sample absolute time (microseconds)
+    uint32_t start_sequence;  // First sample sequence number
+    uint32_t sample_count;    // Total samples written
+    uint32_t reserved[2];     // Padding for future use
+};
+```
+
+**Record structures:**
+
+| Partition | Record Size | Fields |
+|-----------|-------------|--------|
+| accel | 16 bytes | delta_us (u32), x/y/z (i16 each), gx/gy/gz (i16 each) |
+| hall | 12 bytes | delta_us (u32), period_us (u32), rotation_num (u32) |
+| stats | 52 bytes | Full RotorStatsRecord (see messages.h) |
+
+Delta timestamps are offsets from the header's base_timestamp, converted to absolute timestamps during dump.
 
 ## Concurrency Model
 
-No locks needed - task is sole owner of file handles during recording. Main loop only touches files when task is asleep (after STOP acknowledged).
+No locks needed - task is sole owner of flash writes during recording. Main loop only touches partitions when task is asleep (after STOP acknowledged).
 
 ```
 Main loop                         captureTask
 ─────────                         ───────────
 captureStart()
-  delete old files (safe)
+  erase partitions (safe)
   wake task ──────────────────→  wakes up
-  state = RECORDING               writes DATA messages
+  state = RECORDING               buffers DATA messages
+                                  writes 4KB sectors to flash
                                   ...
 captureStop()
   send STOP via queue ────────→  receives STOP
-  wait for ack...                 closes files
+  wait for ack...                 flushes buffer
+                                  writes headers
                           ←────  sets s_taskStopped = true
   print summary                   sleeps (ulTaskNotifyTake)
   state = IDLE
@@ -118,8 +165,8 @@ captureStop()
 ```cpp
 struct CaptureMessage {
     CaptureMessageType type;  // DATA or STOP
-    uint8_t msgType;          // For DATA: file identifier
-    uint8_t len;
+    uint8_t msgType;          // For DATA: partition identifier
+    uint16_t len;
     uint8_t data[MAX_CAPTURE_PAYLOAD];
 };
 ```
@@ -130,44 +177,17 @@ struct CaptureMessage {
          captureStart()           captureStop()
   IDLE ─────────────────→ RECORDING ────────────→ IDLE
                               │
-                              │ (filesystem full)
+                              │ (partition full)
                               ↓
                             FULL ─── captureStop() ──→ IDLE
 ```
-
-## Binary File Format
-
-Files on LittleFS are self-describing binary format:
-
-```
-[1 byte: msgType] [records...]
-```
-
-The first byte is the message type (from `messages.h`), followed by packed binary records.
-
-**File naming**: `/telemetry/MSG_ACCEL_SAMPLES.bin`, `/telemetry/MSG_HALL_EVENT.bin`, etc.
-
-**Record structures** (from `telemetry_capture.cpp`):
-
-| Message Type | Record Size | Fields |
-|--------------|-------------|--------|
-| MSG_ACCEL_SAMPLES (10) | 16 bytes | timestamp_us (u64), sequence_num (u16), x/y/z (i16 each) |
-| MSG_HALL_EVENT (11) | 14 bytes | timestamp_us (u64), period_us (u32), rotation_num (u16) |
-| MSG_TELEMETRY (1) | 20 bytes | timestamp_us (u64), hall_avg_us (u32), revolutions (u16), counters... |
-
-**Field descriptions:**
-- `sequence_num` - Monotonic sample counter for drop detection (gaps indicate missed samples)
-- `x/y/z` - Raw IMU accelerometer values as int16 (16-bit signed, ±16g range)
-
-**Computed in post-processing** (added by `pov telemetry dump`):
-- `rotation_num` - Links accel samples to specific rotations (computed from timestamp correlation with hall events)
-- `micros_since_hall` - Microseconds since last hall trigger (compute phase as `micros_since_hall / period_us`)
 
 ## Files
 
 **Firmware:**
 - `src/telemetry_capture.{h,cpp}` - Capture implementation
 - `src/serial_command.{h,cpp}` - Serial command parser
+- `partitions.csv` - Flash partition layout
 
 **Python CLI:**
 - `tools/pov_tools/` - CLI package
@@ -175,5 +195,5 @@ The first byte is the message type (from `messages.h`), followed by packed binar
 - `tools/pov_tools/telemetry.py` - Telemetry commands
 
 **Data:**
-- `/telemetry/*.bin` on LittleFS (device)
+- Flash partitions on device (accel, hall, stats)
 - `telemetry/*.csv` in project root (downloaded, gitignored)

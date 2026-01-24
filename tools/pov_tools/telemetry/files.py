@@ -18,7 +18,7 @@ def list_files(
     """List telemetry files on device."""
     try:
         with get_connection(port) as conn:
-            files = conn.list_files()
+            files = conn.list_captures()
 
             if json_output:
                 data = [
@@ -53,7 +53,7 @@ def dump(
 
     try:
         with get_connection(port) as conn:
-            files = conn.dump()
+            files = conn.dump_captures()
 
             if not files:
                 if json_output:
@@ -95,20 +95,28 @@ def delete(
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ):
-    """Delete all telemetry files on device."""
+    """Delete all telemetry files on device.
+
+    Takes ~5 seconds to erase flash partitions. This erase is now separate
+    from START_CAPTURE, making start instant.
+    """
     if not force and not json_output:
-        confirm = typer.confirm("Delete all telemetry files?")
+        confirm = typer.confirm("Delete all telemetry files? (~5s erase)")
         if not confirm:
             raise typer.Abort()
 
     try:
         with get_connection(port) as conn:
-            result = conn.delete()
+            if not json_output:
+                with console.status("[bold]Erasing flash partitions...[/bold]"):
+                    result = conn.delete_all_captures()
+            else:
+                result = conn.delete_all_captures()
 
             if json_output:
                 print(json.dumps({"success": True, "message": result}))
             else:
-                console.print("[green]Files deleted[/green]")
+                console.print("[green]✓ Partitions erased[/green]")
 
     except DeviceError as e:
         err_console.print(f"[red]Error:[/red] {e}")
@@ -123,7 +131,7 @@ def view(
     """View a specific telemetry file from device."""
     try:
         with get_connection(port) as conn:
-            files = conn.dump()
+            files = conn.dump_captures()
 
             # Find matching file
             target = f"{msg_type}.bin"

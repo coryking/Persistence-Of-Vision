@@ -27,7 +27,6 @@ from .utils import create_timestamped_dir, TELEMETRY_DIR
 console = Console()
 err_console = Console(stderr=True)
 
-DEFAULT_SETTLE_TIME = 3.0  # Seconds to wait after speed change
 DEFAULT_RECORD_TIME = 5.0  # Seconds to record at each speed
 
 
@@ -72,7 +71,6 @@ class TestResult:
     error: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    settle_time: float = DEFAULT_SETTLE_TIME
     record_time: float = DEFAULT_RECORD_TIME
 
 
@@ -223,25 +221,22 @@ def print_step_summary(
 def run_test_sequence(
     conn: DeviceConnection,
     output_dir: Path,
-    settle_time: float = DEFAULT_SETTLE_TIME,
     record_time: float = DEFAULT_RECORD_TIME,
 ) -> TestResult:
     """Execute per-step telemetry capture.
 
     For each speed position (1 to MAX_SPEED_POSITION):
-    1. Delete telemetry files on device
+    1. Delete telemetry files on device (~5s, serves as motor settle time)
     2. Increase speed to target position
-    3. Wait settle_time seconds
-    4. Start recording
-    5. Wait record_time seconds
-    6. Stop recording
-    7. Dump to speed-specific subdirectory
+    3. Start recording (instant, no erase)
+    4. Wait record_time seconds
+    5. Stop recording
+    6. Dump to speed-specific subdirectory
 
     Returns TestResult with all collected data.
     """
     result = TestResult(
         output_dir=output_dir,
-        settle_time=settle_time,
         record_time=record_time,
         started_at=datetime.now(),
     )
@@ -305,11 +300,7 @@ def run_test_sequence(
                     file_suffix="",  # Will be set after RPM is known
                 )
 
-                # 1. Delete existing telemetry files
-                conn.delete()
-                console.print("[dim]Cleared device telemetry[/dim]")
-
-                # 2. Ramp to target position
+                # 1. Ramp to target position first
                 while current_position < target_position:
                     response = conn.button(ButtonCommand.SPEED_UP)
                     if not response.startswith("OK"):
@@ -326,9 +317,10 @@ def run_test_sequence(
 
                 console.print(f"[dim]At position {current_position}[/dim]")
 
-                # 3. Settle
-                console.print(f"[dim]Settling for {settle_time}s...[/dim]")
-                time.sleep(settle_time)
+                # 2. Delete existing telemetry (~5s erase, serves as settle time)
+                with console.status("[bold]Erasing partitions (settling motor)...[/bold]"):
+                    conn.delete_all_captures()
+                console.print("[dim]✓ Partitions erased[/dim]")
 
                 # Safety check: confirm before continuing
                 if not Confirm.ask("Continue?", default=False):
@@ -341,8 +333,8 @@ def run_test_sequence(
                 accel_before = int(status.get("rx_accel_samples", 0))
                 hall_before = int(status.get("rx_hall_packets", 0))
 
-                # 4. Start recording
-                response = conn.start()
+                # 3. Start recording (instant now that erase is separate)
+                response = conn.start_capture()
                 if not response.startswith("OK"):
                     step_result.error = f"Failed to start recording: {response}"
                     step_result.success = False
@@ -351,11 +343,11 @@ def run_test_sequence(
                     break
                 console.print(f"[green]Recording for {record_time}s...[/green]")
 
-                # 5. Wait for record duration
+                # 4. Wait for record duration
                 time.sleep(record_time)
 
-                # 6. Stop recording
-                response = conn.stop()
+                # 5. Stop recording
+                response = conn.stop_capture()
                 if not response.startswith("OK"):
                     console.print(
                         f"[yellow]Warning: stop returned {response}[/yellow]"
@@ -378,8 +370,8 @@ def run_test_sequence(
                         f"[yellow]Warning: No hall packets collected![/yellow]"
                     )
 
-                # 7. Dump files, extract RPM, save with suffix
-                files = conn.dump()
+                # 6. Dump files, extract RPM, save with suffix
+                files = conn.dump_captures()
                 if files:
                     # Extract RPM from hall event data
                     step_result.rpm = extract_rpm_from_dump(files)
@@ -424,7 +416,7 @@ def run_test_sequence(
             result.aborted = True
             # Try to stop recording if it was in progress
             try:
-                conn.stop()
+                conn.stop_capture()
             except Exception:
                 pass
 
@@ -462,7 +454,6 @@ def _metrics_to_dict(m: Optional[StepMetrics]) -> Optional[dict[str, float | int
 def write_manifest(result: TestResult) -> None:
     """Write manifest.json with run metadata."""
     manifest = {
-        "settle_time": result.settle_time,
         "record_time": result.record_time,
         "speeds_captured": [s.position for s in result.steps if s.success],
         "started_at": result.started_at.isoformat() if result.started_at else None,
@@ -514,9 +505,6 @@ def test(
     output: Optional[Path] = typer.Option(
         None, "--output", "-o", help="Output directory base"
     ),
-    settle_time: float = typer.Option(
-        DEFAULT_SETTLE_TIME, "--settle", "-s", help="Seconds to settle after speed change"
-    ),
     record_time: float = typer.Option(
         DEFAULT_RECORD_TIME, "--record", "-r", help="Seconds to record at each speed"
     ),
@@ -525,11 +513,10 @@ def test(
     """Run per-step telemetry capture.
 
     For each speed position (1-10):
-    1. Delete telemetry files on device
-    2. Increase speed to target position
-    3. Wait SETTLE seconds (default 3)
-    4. Record for RECORD seconds (default 5)
-    5. Dump to flat files with step and RPM suffix
+    1. Increase speed to target position
+    2. Delete telemetry (erase takes ~5s, serves as settle time)
+    3. Record for RECORD seconds (default 5)
+    4. Dump to flat files with step and RPM suffix
 
     Output structure:
       telemetry/<timestamp>/
@@ -547,12 +534,12 @@ def test(
     if not json_output:
         console.print("[bold]POV Per-Step Telemetry Capture[/bold]")
         console.print(f"Output: {output_dir}")
-        console.print(f"Settle time: {settle_time}s, Record time: {record_time}s")
+        console.print(f"Record time: {record_time}s (erase doubles as settle time)")
         console.print()
 
     try:
         with DeviceConnection(port=port) as conn:
-            result = run_test_sequence(conn, output_dir, settle_time, record_time)
+            result = run_test_sequence(conn, output_dir, record_time)
 
     except DeviceError as e:
         if json_output:
@@ -587,7 +574,6 @@ def test(
             ],
             "aborted": result.aborted,
             "error": result.error,
-            "settle_time": result.settle_time,
             "record_time": result.record_time,
         }
         print(json.dumps(output_data, indent=2))

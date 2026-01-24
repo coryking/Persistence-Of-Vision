@@ -77,12 +77,12 @@ static void dispatch(char* cmd) {
     }
 
     // Simple commands
-    if (strcmp(cmd, "START") == 0)       captureStartSerial();
-    else if (strcmp(cmd, "STOP") == 0)   captureStopSerial();
-    else if (strcmp(cmd, "DUMP") == 0)   captureDump();
-    else if (strcmp(cmd, "DELETE") == 0) captureDeleteSerial();
+    if (strcmp(cmd, "START_CAPTURE") == 0)       captureStartSerial();
+    else if (strcmp(cmd, "STOP_CAPTURE") == 0)   captureStopSerial();
+    else if (strcmp(cmd, "DUMP_CAPTURES") == 0)  captureDump();
+    else if (strcmp(cmd, "DELETE_ALL_CAPTURES") == 0) captureDeleteSerial();
     else if (strcmp(cmd, "STATUS") == 0) statusSerial();
-    else if (strcmp(cmd, "LIST") == 0)   captureList();
+    else if (strcmp(cmd, "LIST_CAPTURES") == 0)  captureList();
     else if (strcmp(cmd, "MOTOR_ON") == 0)  motorOnSerial();
     else if (strcmp(cmd, "MOTOR_OFF") == 0) motorOffSerial();
     else if (strcmp(cmd, "RXRESET") == 0) { resetEspNowStats(); Serial.println("OK"); }

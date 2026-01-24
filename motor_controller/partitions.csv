@@ -1,0 +1,16 @@
+# Name,   Type, SubType, Offset,   Size,     Flags
+# Custom partition table for raw telemetry storage
+# Total flash: 4MB (0x400000)
+#
+# Telemetry partitions use custom subtypes 0x80-0x82 for data:
+#   accel - 1.875MB for ~122K 16-byte IMU samples (15+ sec @ 8kHz)
+#   hall  - 128KB for ~10K 12-byte hall events
+#   stats - 128KB for ~2.5K 52-byte rotor stats records
+#
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xe000,   0x2000,
+app0,     app,  ota_0,   0x10000,  0x1C0000,
+accel,    data, 0x80,    0x1D0000, 0x1E0000,
+hall,     data, 0x81,    0x3B0000, 0x20000,
+stats,    data, 0x82,    0x3D0000, 0x20000,
+coredump, data, coredump,0x3F0000, 0x10000,

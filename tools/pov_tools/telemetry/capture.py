@@ -12,10 +12,13 @@ def start(
     port: str = typer.Option(DEFAULT_PORT, "--port", "-p", help="Serial port"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ):
-    """Start recording telemetry."""
+    """Start recording telemetry.
+
+    Note: Call 'delete' first to erase partitions. START_CAPTURE is now instant.
+    """
     try:
         with get_connection(port) as conn:
-            result = conn.start()
+            result = conn.start_capture()
 
             if json_output:
                 success = result == "OK"
@@ -41,7 +44,7 @@ def stop(
     """Stop recording telemetry."""
     try:
         with get_connection(port) as conn:
-            result = conn.stop()
+            result = conn.stop_capture()
 
             if json_output:
                 success = result == "OK"

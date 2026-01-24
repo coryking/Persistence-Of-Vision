@@ -1,14 +1,12 @@
 #include "telemetry_capture.h"
 #include "messages.h"
-#include <LittleFS.h>
 #include <Arduino.h>
+#include <esp_partition.h>
 #include <esp_now.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
-
-// Reserve space to avoid completely filling filesystem
-static const size_t FS_RESERVE_BYTES = 50 * 1024;
+#include <cstring>
 
 // Maximum payload size for captured messages - use ESP-NOW v2.0 max
 static const size_t MAX_CAPTURE_PAYLOAD = ESP_NOW_MAX_DATA_LEN_V2;
@@ -20,56 +18,6 @@ static const uint32_t QUEUE_RECEIVE_TIMEOUT_MS = 100; // Task queue poll interva
 static const uint32_t QUEUE_SEND_TIMEOUT_MS = 100;    // Blocking queue send timeout
 static const int STOP_SEND_MAX_RETRIES = 10;          // Retries for sending STOP to queue
 
-// Telemetry directory
-static const char* TELEMETRY_DIR = "/telemetry";
-
-// Binary record formats (packed structs for file storage)
-// Note: rotation_num and micros_since_hall are computed in Python post-processing
-// from timestamp correlation with hall events
-struct AccelRecord {
-    timestamp_t timestamp;      // 64-bit absolute timestamp (expanded from delta)
-    sequence_t sequence_num;    // Sample sequence for drop detection (expanded from start + index)
-    accel_raw_t x;              // X axis (int16_t - MPU-9250 raw values)
-    accel_raw_t y;              // Y axis
-    accel_raw_t z;              // Z axis
-    gyro_raw_t gx;              // Gyro X axis (int16_t)
-    gyro_raw_t gy;              // Gyro Y axis
-    gyro_raw_t gz;              // Gyro Z axis
-} __attribute__((packed));  // 22 bytes total
-
-struct HallRecord {
-    timestamp_t timestamp;      // 64-bit: when hall sensor triggered
-    period_t period_us;         // 32-bit: time since previous trigger
-    rotation_t rotation_num;    // Revolution counter (links to AccelRecord)
-} __attribute__((packed));
-
-// RotorStatsRecord - diagnostic stats from LED display
-// Stored directly in same format as received (RotorStatsMsg minus type byte)
-struct RotorStatsRecord {
-    uint32_t reportSequence;          // Report sequence number
-    timestamp_t created_us;           // When stats were reset
-    timestamp_t lastUpdated_us;       // Most recent update
-
-    // Hall sensor stats
-    uint32_t hallEventsTotal;         // Total hall events since reset
-    uint32_t hallOutliersFiltered;    // Rejected events
-    uint32_t lastOutlierInterval_us;  // Most recent bad interval
-    period_t hallAvg_us;              // Smoothed period
-
-    // ESP-NOW stats
-    uint32_t espnowSendAttempts;
-    uint32_t espnowSendFailures;
-
-    // Render pipeline stats
-    uint16_t renderCount;
-    uint16_t skipCount;
-    uint16_t notRotatingCount;
-
-    // Current state
-    uint8_t effectNumber;
-    uint8_t brightness;
-} __attribute__((packed));  // 52 bytes (53 - 1 byte type)
-
 // State
 static CaptureState s_state = CaptureState::IDLE;
 
@@ -77,200 +25,118 @@ static CaptureState s_state = CaptureState::IDLE;
 static QueueHandle_t s_captureQueue = nullptr;
 static TaskHandle_t s_captureTask = nullptr;
 
-// Task acknowledgment flag - set when task has stopped and closed files
+// Task acknowledgment flag - set when task has stopped and flushed
 static volatile bool s_taskStopped = true;  // Start stopped
 
 // Dump-in-progress flag - suppresses debug serial output during DUMP
 static volatile bool s_dumpInProgress = false;
 
+// Queue full counter for diagnostics
+static volatile uint32_t s_queueFullCount = 0;
+
 // Message types for capture queue
 enum class CaptureMessageType : uint8_t {
     DATA,   // Telemetry data to write
-    STOP    // Close files and acknowledge
+    STOP    // Flush and acknowledge
 };
 
 // Message wrapper for queue (commands + raw ESP-NOW payload)
 struct CaptureMessage {
     CaptureMessageType type;
-    uint8_t msgType;    // For DATA: which file (MSG_ACCEL_SAMPLES, etc.)
+    uint8_t msgType;    // For DATA: which partition (MSG_ACCEL_SAMPLES, etc.)
     uint16_t len;       // ESP-NOW v2.0 can be up to 1470 bytes
     uint8_t data[MAX_CAPTURE_PAYLOAD];
 } __attribute__((packed));
 
 static const size_t CAPTURE_QUEUE_SIZE = 32;  // ~0.8 sec buffer at 40 batches/sec
 
-// Track open file handles (sparse array indexed by msgType)
-// Only a few will be used, but keeps lookup simple
-static const size_t MAX_MSG_TYPES = 16;
-static File s_files[MAX_MSG_TYPES];
-static bool s_fileOpen[MAX_MSG_TYPES];
-static uint32_t s_recordCounts[MAX_MSG_TYPES];
-static uint32_t s_bytesWritten[MAX_MSG_TYPES];
+// =============================================================================
+// Partition Writer State
+// =============================================================================
 
-// Forward declaration (defined later)
-static const char* getMsgTypeName(uint8_t msgType);
+struct PartitionWriter {
+    const esp_partition_t* partition;
+    size_t write_offset;      // Next write position (starts after header)
+    uint64_t base_timestamp;  // Set on first sample
+    uint32_t start_sequence;  // First sample sequence
+    uint32_t sample_count;    // Total samples written
 
-// Check if filesystem has enough space
-static bool hasSpace() {
-    size_t used = LittleFS.usedBytes();
-    size_t total = LittleFS.totalBytes();
-    return (total - used) > FS_RESERVE_BYTES;
-}
+    uint8_t buffer[FLASH_SECTOR_SIZE];  // Sector buffer
+    size_t buffer_used;
 
-// Get filename for a message type (human-readable names)
-static String getFilename(uint8_t msgType) {
-    return String(TELEMETRY_DIR) + "/" + getMsgTypeName(msgType) + ".bin";
-}
+    // Initialize writer for a partition
+    void init(const esp_partition_t* part) {
+        partition = part;
+        reset();
+    }
 
-// Open file for a message type (lazy creation)
-static bool ensureFileOpen(uint8_t msgType) {
-    if (msgType >= MAX_MSG_TYPES) return false;
+    void reset() {
+        write_offset = sizeof(TelemetryHeader);  // Skip header
+        base_timestamp = 0;
+        start_sequence = 0;
+        sample_count = 0;
+        buffer_used = 0;
+    }
 
-    if (s_fileOpen[msgType]) {
-        // Verify file handle is still valid
-        if (!s_files[msgType]) {
-            Serial.printf("[CAPTURE] File %u handle became invalid!\n", msgType);
-            s_fileOpen[msgType] = false;
-            // Fall through to reopen
-        } else {
-            return true;
+    // Check if partition has room for more data
+    bool hasSpace(size_t needed) const {
+        if (!partition) return false;
+        return (write_offset + buffer_used + needed) <= partition->size;
+    }
+
+    // Flush buffer to flash (when sector full or on stop)
+    bool flush() {
+        if (!partition || buffer_used == 0) return true;
+
+        // Pad to 4-byte alignment (flash write requirement)
+        size_t aligned = (buffer_used + 3) & ~3;
+        if (aligned > buffer_used) {
+            memset(buffer + buffer_used, 0xFF, aligned - buffer_used);
         }
-    }
 
-    String filename = getFilename(msgType);
-    s_files[msgType] = LittleFS.open(filename, "w");
-    if (!s_files[msgType]) {
-        Serial.printf("[CAPTURE] Failed to create %s\n", filename.c_str());
-        return false;
-    }
-
-    // Write header byte (msgType) as first byte - self-describing format
-    s_files[msgType].write(msgType);
-
-    Serial.printf("[CAPTURE] Opened %s for writing\n", filename.c_str());
-    s_fileOpen[msgType] = true;
-    s_recordCounts[msgType] = 0;
-    s_bytesWritten[msgType] = 0;
-    return true;
-}
-
-// Write raw bytes to file
-static bool writeRecord(uint8_t msgType, const void* data, size_t len) {
-    if (!ensureFileOpen(msgType)) return false;
-
-    if (!hasSpace()) {
-        Serial.println("[CAPTURE] CAPTURE FULL - filesystem limit reached");
-        s_state = CaptureState::FULL;
-        return false;
-    }
-
-    size_t written = s_files[msgType].write((const uint8_t*)data, len);
-    if (written != len) {
-        Serial.printf("[CAPTURE] Write failed: %zu/%zu bytes\n", written, len);
-        return false;
-    }
-
-    s_recordCounts[msgType]++;
-    s_bytesWritten[msgType] += len;
-    return true;
-}
-
-// Write a batch of records (for accel samples)
-static bool writeBatch(uint8_t msgType, const void* data, size_t len, uint32_t recordCount) {
-    if (!ensureFileOpen(msgType)) return false;
-
-    if (!hasSpace()) {
-        Serial.println("[CAPTURE] CAPTURE FULL - filesystem limit reached");
-        s_state = CaptureState::FULL;
-        return false;
-    }
-
-    File& f = s_files[msgType];
-    size_t written = f.write((const uint8_t*)data, len);
-    if (written != len) {
-        int err = f.getWriteError();
-        Serial.printf("[CAPTURE] Write failed: file=%u wrote=%zu/%zu err=%d valid=%d pos=%zu\n",
-                      msgType, written, len, err, (bool)f, f.position());
-        return false;
-    }
-
-    s_recordCounts[msgType] += recordCount;
-    s_bytesWritten[msgType] += len;
-    return true;
-}
-
-// Close all open files
-static void closeAllFiles() {
-    for (size_t i = 0; i < MAX_MSG_TYPES; i++) {
-        if (s_fileOpen[i]) {
-            s_files[i].close();
-            s_fileOpen[i] = false;
+        esp_err_t err = esp_partition_write(partition, write_offset, buffer, aligned);
+        if (err != ESP_OK) {
+            Serial.printf("[CAPTURE] Flash write failed: %s\n", esp_err_to_name(err));
+            return false;
         }
-    }
-}
 
-// Delete all files in telemetry directory
-static void deleteAllFiles() {
-    File dir = LittleFS.open(TELEMETRY_DIR);
-    if (!dir || !dir.isDirectory()) {
-        Serial.println("[CAPTURE] No telemetry dir to clean");
-        return;
+        write_offset += aligned;
+        buffer_used = 0;
+        return true;
     }
 
-    int count = 0;
-    File file = dir.openNextFile();
-    while (file) {
-        String path = String(TELEMETRY_DIR) + "/" + file.name();
-        file.close();
-        if (LittleFS.remove(path)) {
-            count++;
-        } else {
-            Serial.printf("[CAPTURE] Failed to delete %s\n", path.c_str());
+    // Write header to partition start
+    bool writeHeader() {
+        if (!partition) return false;
+
+        TelemetryHeader header = {};
+        header.magic = TELEMETRY_MAGIC;
+        header.version = TELEMETRY_VERSION;
+        header.base_timestamp = base_timestamp;
+        header.start_sequence = start_sequence;
+        header.sample_count = sample_count;
+
+        esp_err_t err = esp_partition_write(partition, 0, &header, sizeof(header));
+        if (err != ESP_OK) {
+            Serial.printf("[CAPTURE] Header write failed: %s\n", esp_err_to_name(err));
+            return false;
         }
-        file = dir.openNextFile();
+        return true;
     }
-    dir.close();
-    if (count > 0) {
-        Serial.printf("[CAPTURE] Deleted %d files\n", count);
-    }
-}
+};
 
-// Send STOP command to capture queue with retry logic.
-// Returns true if STOP was successfully queued, false otherwise.
-static bool sendStopToQueue() {
-    if (!s_captureQueue) return false;
+static PartitionWriter s_accel;
+static PartitionWriter s_hall;
+static PartitionWriter s_stats;
 
-    CaptureMessage msg = {};
-    msg.type = CaptureMessageType::STOP;
+// =============================================================================
+// Partition Lookup
+// =============================================================================
 
-    // Check queue space first for diagnostics
-    UBaseType_t spaces = uxQueueSpacesAvailable(s_captureQueue);
-    if (spaces == 0) {
-        Serial.printf("[CAPTURE] Queue full (%d items), waiting for space\n",
-                      (int)uxQueueMessagesWaiting(s_captureQueue));
-    }
-
-    // Try to send STOP - retry if queue full
-    for (int attempt = 0; attempt < STOP_SEND_MAX_RETRIES; attempt++) {
-        if (xQueueSend(s_captureQueue, &msg, pdMS_TO_TICKS(QUEUE_SEND_TIMEOUT_MS)) == pdPASS) {
-            return true;
-        }
-        // Queue still full, give task time to drain
-        vTaskDelay(pdMS_TO_TICKS(50));
-    }
-
-    Serial.println("[CAPTURE] Failed to send STOP after retries");
-    return false;
-}
-
-// Wait for capture task to acknowledge stop.
-// Returns true if task acknowledged within timeout, false otherwise.
-static bool waitForTaskStop() {
-    uint32_t startMs = millis();
-    while (!s_taskStopped && (millis() - startMs) < TASK_STOP_TIMEOUT_MS) {
-        vTaskDelay(pdMS_TO_TICKS(TASK_STOP_POLL_MS));
-    }
-    return s_taskStopped;
+static const esp_partition_t* findPartition(uint8_t subtype) {
+    return esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
+                                    static_cast<esp_partition_subtype_t>(subtype),
+                                    nullptr);
 }
 
 // Get human-readable name for message type
@@ -283,99 +149,113 @@ static const char* getMsgTypeName(uint8_t msgType) {
     }
 }
 
-// Dump a file as CSV (interactive format with headers)
-// Expects file position to be at start of records (past header byte)
-// dataSize = bytes of record data (file size minus header byte)
-static void dumpFileCSV(uint8_t msgType, File& file, size_t dataSize) {
+// Get partition name for message type
+static const char* getPartitionName(uint8_t msgType) {
     switch (msgType) {
-        case MSG_ACCEL_SAMPLES: {
-            size_t recordCount = dataSize / sizeof(AccelRecord);
-            Serial.printf("=== FILE: %s.bin (%zu records) ===\n",
-                          getMsgTypeName(msgType), recordCount);
-            // Note: rotation_num and micros_since_hall computed in Python post-processing
-            Serial.println("timestamp_us,sequence_num,x,y,z,gx,gy,gz");
-
-            AccelRecord rec;
-            while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%u,%d,%d,%d,%d,%d,%d\n",
-                              rec.timestamp, rec.sequence_num,
-                              rec.x, rec.y, rec.z, rec.gx, rec.gy, rec.gz);
-            }
-            break;
-        }
-
-        case MSG_HALL_EVENT: {
-            size_t recordCount = dataSize / sizeof(HallRecord);
-            Serial.printf("=== FILE: %s.bin (%zu records) ===\n",
-                          getMsgTypeName(msgType), recordCount);
-            Serial.println("timestamp_us,period_us,rotation_num");
-
-            HallRecord rec;
-            while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%u,%u\n", rec.timestamp, rec.period_us, rec.rotation_num);
-            }
-            break;
-        }
-
-        case MSG_ROTOR_STATS: {
-            size_t recordCount = dataSize / sizeof(RotorStatsRecord);
-            Serial.printf("=== FILE: %s.bin (%zu records) ===\n",
-                          getMsgTypeName(msgType), recordCount);
-            Serial.println("seq,created_us,updated_us,hall_total,outliers,last_outlier_us,"
-                           "hall_avg_us,espnow_ok,espnow_fail,render,skip,not_rot,effect,brightness");
-
-            RotorStatsRecord rec;
-            while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%u,%llu,%llu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
-                              rec.reportSequence, rec.created_us, rec.lastUpdated_us,
-                              rec.hallEventsTotal, rec.hallOutliersFiltered, rec.lastOutlierInterval_us,
-                              rec.hallAvg_us, rec.espnowSendAttempts - rec.espnowSendFailures, rec.espnowSendFailures,
-                              rec.renderCount, rec.skipCount, rec.notRotatingCount,
-                              rec.effectNumber, rec.brightness);
-            }
-            break;
-        }
-
-        default: {
-            // Unknown type - dump as hex
-            Serial.printf("=== FILE: %s.bin (UNKNOWN, %zu bytes) ===\n",
-                          getMsgTypeName(msgType), dataSize);
-            Serial.println("offset,hex");
-
-            uint8_t buf[16];
-            size_t offset = 0;
-            while (size_t n = file.read(buf, sizeof(buf))) {
-                Serial.printf("%04zu,", offset);
-                for (size_t i = 0; i < n; i++) {
-                    Serial.printf("%02X ", buf[i]);
-                }
-                Serial.println();
-                offset += n;
-            }
-            break;
-        }
+        case MSG_ACCEL_SAMPLES: return "accel";
+        case MSG_HALL_EVENT: return "hall";
+        case MSG_ROTOR_STATS: return "stats";
+        default: return "unknown";
     }
 }
 
-// Wait for any serial input
-static void waitForKeypress() {
-    Serial.println("\nPress any key to continue...");
-    Serial.flush();
+// =============================================================================
+// Erase Partitions
+// =============================================================================
 
-    // Clear any pending input
-    while (Serial.available()) Serial.read();
+static bool eraseAllPartitions() {
+    bool success = true;
 
-    // Wait for new input
-    while (!Serial.available()) {
-        delay(10);
+    if (s_accel.partition) {
+        esp_err_t err = esp_partition_erase_range(s_accel.partition, 0, s_accel.partition->size);
+        if (err != ESP_OK) {
+            Serial.printf("[CAPTURE] Erase accel failed: %s\n", esp_err_to_name(err));
+            success = false;
+        }
+        s_accel.reset();
     }
 
-    // Clear the input
-    while (Serial.available()) Serial.read();
-    Serial.println();
+    if (s_hall.partition) {
+        esp_err_t err = esp_partition_erase_range(s_hall.partition, 0, s_hall.partition->size);
+        if (err != ESP_OK) {
+            Serial.printf("[CAPTURE] Erase hall failed: %s\n", esp_err_to_name(err));
+            success = false;
+        }
+        s_hall.reset();
+    }
+
+    if (s_stats.partition) {
+        esp_err_t err = esp_partition_erase_range(s_stats.partition, 0, s_stats.partition->size);
+        if (err != ESP_OK) {
+            Serial.printf("[CAPTURE] Erase stats failed: %s\n", esp_err_to_name(err));
+            success = false;
+        }
+        s_stats.reset();
+    }
+
+    return success;
 }
 
-// Process a single message from the queue (runs in captureTask context)
+// =============================================================================
+// Write Records to Partition Buffer
+// =============================================================================
+
+static bool writeAccelSample(const AccelSampleRaw& sample) {
+    if (!s_accel.hasSpace(sizeof(AccelSampleRaw))) {
+        s_state = CaptureState::FULL;
+        return false;
+    }
+
+    // Copy to buffer
+    memcpy(s_accel.buffer + s_accel.buffer_used, &sample, sizeof(sample));
+    s_accel.buffer_used += sizeof(sample);
+    s_accel.sample_count++;
+
+    // Flush when buffer full (256 samples = 4KB)
+    if (s_accel.buffer_used >= FLASH_SECTOR_SIZE) {
+        return s_accel.flush();
+    }
+    return true;
+}
+
+static bool writeHallRecord(const HallRecordRaw& record) {
+    if (!s_hall.hasSpace(sizeof(HallRecordRaw))) {
+        s_state = CaptureState::FULL;
+        return false;
+    }
+
+    memcpy(s_hall.buffer + s_hall.buffer_used, &record, sizeof(record));
+    s_hall.buffer_used += sizeof(record);
+    s_hall.sample_count++;
+
+    // Flush when buffer approaches sector size
+    if (s_hall.buffer_used + sizeof(HallRecordRaw) > FLASH_SECTOR_SIZE) {
+        return s_hall.flush();
+    }
+    return true;
+}
+
+static bool writeStatsRecord(const RotorStatsRecord& record) {
+    if (!s_stats.hasSpace(sizeof(RotorStatsRecord))) {
+        s_state = CaptureState::FULL;
+        return false;
+    }
+
+    memcpy(s_stats.buffer + s_stats.buffer_used, &record, sizeof(record));
+    s_stats.buffer_used += sizeof(record);
+    s_stats.sample_count++;
+
+    // Flush when buffer approaches sector size
+    if (s_stats.buffer_used + sizeof(RotorStatsRecord) > FLASH_SECTOR_SIZE) {
+        return s_stats.flush();
+    }
+    return true;
+}
+
+// =============================================================================
+// Process Messages from Queue
+// =============================================================================
+
 static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
     switch (msgType) {
         case MSG_ACCEL_SAMPLES: {
@@ -390,28 +270,29 @@ static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
             size_t expected = ACCEL_MSG_HEADER_SIZE + (msg->sample_count * sizeof(AccelSampleWire));
             if (len < expected) return;
 
-            // Expand delta timestamps to absolute and build records
-            // Static to avoid stack overflow - called only from captureTask
-            static AccelRecord records[ACCEL_SAMPLES_MAX_BATCH];
-            for (uint8_t i = 0; i < msg->sample_count; i++) {
-                const AccelSampleWire& s = msg->samples[i];
-                // Expand delta to absolute timestamp
-                records[i].timestamp = msg->base_timestamp + s.delta_us;
-                // Expand sequence number
-                records[i].sequence_num = msg->start_sequence + i;
-                // Accelerometer
-                records[i].x = s.x;
-                records[i].y = s.y;
-                records[i].z = s.z;
-                // Gyroscope
-                records[i].gx = s.gx;
-                records[i].gy = s.gy;
-                records[i].gz = s.gz;
+            // Set base timestamp on first batch
+            if (s_accel.base_timestamp == 0) {
+                s_accel.base_timestamp = msg->base_timestamp;
+                s_accel.start_sequence = msg->start_sequence;
             }
 
-            // Single batched write
-            size_t totalBytes = msg->sample_count * sizeof(AccelRecord);
-            writeBatch(MSG_ACCEL_SAMPLES, records, totalBytes, msg->sample_count);
+            // Convert each sample to raw format with delta from base
+            for (uint8_t i = 0; i < msg->sample_count; i++) {
+                const AccelSampleWire& s = msg->samples[i];
+
+                AccelSampleRaw raw;
+                // Compute absolute timestamp, then delta from base
+                uint64_t abs_time = msg->base_timestamp + s.delta_us;
+                raw.delta_us = static_cast<uint32_t>(abs_time - s_accel.base_timestamp);
+                raw.x = s.x;
+                raw.y = s.y;
+                raw.z = s.z;
+                raw.gx = s.gx;
+                raw.gy = s.gy;
+                raw.gz = s.gz;
+
+                if (!writeAccelSample(raw)) return;
+            }
             break;
         }
 
@@ -419,11 +300,17 @@ static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
             if (len < sizeof(HallEventMsg)) return;
             const HallEventMsg* msg = reinterpret_cast<const HallEventMsg*>(data);
 
-            HallRecord rec;
-            rec.timestamp = msg->timestamp_us;
-            rec.period_us = msg->period_us;
-            rec.rotation_num = msg->rotation_num;
-            writeRecord(MSG_HALL_EVENT, &rec, sizeof(rec));
+            // Set base timestamp on first event
+            if (s_hall.base_timestamp == 0) {
+                s_hall.base_timestamp = msg->timestamp_us;
+            }
+
+            HallRecordRaw raw;
+            raw.delta_us = static_cast<uint32_t>(msg->timestamp_us - s_hall.base_timestamp);
+            raw.period_us = msg->period_us;
+            raw.rotation_num = msg->rotation_num;
+
+            writeHallRecord(raw);
             break;
         }
 
@@ -446,20 +333,73 @@ static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
             rec.notRotatingCount = msg->notRotatingCount;
             rec.effectNumber = msg->effectNumber;
             rec.brightness = msg->brightness;
-            writeRecord(MSG_ROTOR_STATS, &rec, sizeof(rec));
+
+            writeStatsRecord(rec);
             break;
         }
 
-        default: {
-            // Unknown message type - write raw bytes for future-proofing
-            writeRecord(msgType, data, len);
+        default:
+            // Unknown message type - ignore
             break;
-        }
     }
 }
 
+// =============================================================================
+// Flush and Finalize
+// =============================================================================
+
+static void flushAllBuffers() {
+    s_accel.flush();
+    s_hall.flush();
+    s_stats.flush();
+}
+
+static void writeAllHeaders() {
+    s_accel.writeHeader();
+    s_hall.writeHeader();
+    s_stats.writeHeader();
+}
+
+// =============================================================================
+// FreeRTOS Capture Task
+// =============================================================================
+
+// Send STOP command to capture queue with retry logic.
+static bool sendStopToQueue() {
+    if (!s_captureQueue) return false;
+
+    CaptureMessage msg = {};
+    msg.type = CaptureMessageType::STOP;
+
+    // Check queue space first for diagnostics
+    UBaseType_t spaces = uxQueueSpacesAvailable(s_captureQueue);
+    if (spaces == 0) {
+        Serial.printf("[CAPTURE] Queue full (%d items), waiting for space\n",
+                      (int)uxQueueMessagesWaiting(s_captureQueue));
+    }
+
+    // Try to send STOP - retry if queue full
+    for (int attempt = 0; attempt < STOP_SEND_MAX_RETRIES; attempt++) {
+        if (xQueueSend(s_captureQueue, &msg, pdMS_TO_TICKS(QUEUE_SEND_TIMEOUT_MS)) == pdPASS) {
+            return true;
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+
+    Serial.println("[CAPTURE] Failed to send STOP after retries");
+    return false;
+}
+
+// Wait for capture task to acknowledge stop.
+static bool waitForTaskStop() {
+    uint32_t startMs = millis();
+    while (!s_taskStopped && (millis() - startMs) < TASK_STOP_TIMEOUT_MS) {
+        vTaskDelay(pdMS_TO_TICKS(TASK_STOP_POLL_MS));
+    }
+    return s_taskStopped;
+}
+
 // FreeRTOS task that processes capture queue (runs on Core 1)
-// Task is a "writer service" - wakes up to write, sleeps when told to stop
 static void captureTask(void* pvParameters) {
     (void)pvParameters;
     // Static to avoid stack overflow - CaptureMessage is ~1475 bytes
@@ -482,34 +422,184 @@ static void captureTask(void* pvParameters) {
             }
         }
 
-        // STOP received - close files and signal done
-        closeAllFiles();
+        // STOP received - flush buffers and write headers
+        flushAllBuffers();
+        writeAllHeaders();
         s_taskStopped = true;
         // Loop back to wait for next recording session
     }
 }
 
-// ============================================================================
+// =============================================================================
+// Dump Partitions as CSV
+// =============================================================================
+
+// Read header from partition, return sample_count (0 if invalid)
+static uint32_t readPartitionHeader(const esp_partition_t* part, TelemetryHeader* header) {
+    if (!part) return 0;
+
+    esp_err_t err = esp_partition_read(part, 0, header, sizeof(TelemetryHeader));
+    if (err != ESP_OK) return 0;
+
+    if (header->magic != TELEMETRY_MAGIC || header->version != TELEMETRY_VERSION) {
+        return 0;
+    }
+    return header->sample_count;
+}
+
+// Dump accel partition as CSV
+static void dumpAccelCSV(bool scriptMode) {
+    TelemetryHeader header;
+    uint32_t count = readPartitionHeader(s_accel.partition, &header);
+    if (count == 0) return;
+
+    if (scriptMode) {
+        Serial.println(">>> MSG_ACCEL_SAMPLES.bin");
+    } else {
+        Serial.printf("=== FILE: MSG_ACCEL_SAMPLES.bin (%lu records) ===\n", count);
+    }
+    Serial.println("timestamp_us,sequence_num,x,y,z,gx,gy,gz");
+
+    // Read in chunks
+    static AccelSampleRaw samples[256];  // One sector worth
+    size_t offset = sizeof(TelemetryHeader);
+    uint32_t seq = header.start_sequence;
+
+    for (uint32_t remaining = count; remaining > 0; ) {
+        uint32_t batch = (remaining > 256) ? 256 : remaining;
+        size_t bytes = batch * sizeof(AccelSampleRaw);
+
+        esp_err_t err = esp_partition_read(s_accel.partition, offset, samples, bytes);
+        if (err != ESP_OK) {
+            Serial.printf("[CAPTURE] Read error at offset %zu: %s\n", offset, esp_err_to_name(err));
+            break;
+        }
+
+        for (uint32_t i = 0; i < batch; i++) {
+            const AccelSampleRaw& s = samples[i];
+            uint64_t timestamp = header.base_timestamp + s.delta_us;
+            Serial.printf("%llu,%u,%d,%d,%d,%d,%d,%d\n",
+                          timestamp, seq++,
+                          s.x, s.y, s.z, s.gx, s.gy, s.gz);
+        }
+
+        offset += bytes;
+        remaining -= batch;
+    }
+}
+
+// Dump hall partition as CSV
+static void dumpHallCSV(bool scriptMode) {
+    TelemetryHeader header;
+    uint32_t count = readPartitionHeader(s_hall.partition, &header);
+    if (count == 0) return;
+
+    if (scriptMode) {
+        Serial.println(">>> MSG_HALL_EVENT.bin");
+    } else {
+        Serial.printf("=== FILE: MSG_HALL_EVENT.bin (%lu records) ===\n", count);
+    }
+    Serial.println("timestamp_us,period_us,rotation_num");
+
+    static HallRecordRaw records[341];  // ~4KB worth (341 * 12 = 4092)
+    size_t offset = sizeof(TelemetryHeader);
+
+    for (uint32_t remaining = count; remaining > 0; ) {
+        uint32_t batch = (remaining > 341) ? 341 : remaining;
+        size_t bytes = batch * sizeof(HallRecordRaw);
+
+        esp_err_t err = esp_partition_read(s_hall.partition, offset, records, bytes);
+        if (err != ESP_OK) {
+            Serial.printf("[CAPTURE] Read error: %s\n", esp_err_to_name(err));
+            break;
+        }
+
+        for (uint32_t i = 0; i < batch; i++) {
+            const HallRecordRaw& r = records[i];
+            uint64_t timestamp = header.base_timestamp + r.delta_us;
+            Serial.printf("%llu,%u,%u\n", timestamp, r.period_us, r.rotation_num);
+        }
+
+        offset += bytes;
+        remaining -= batch;
+    }
+}
+
+// Dump stats partition as CSV
+static void dumpStatsCSV(bool scriptMode) {
+    TelemetryHeader header;
+    uint32_t count = readPartitionHeader(s_stats.partition, &header);
+    if (count == 0) return;
+
+    if (scriptMode) {
+        Serial.println(">>> MSG_ROTOR_STATS.bin");
+    } else {
+        Serial.printf("=== FILE: MSG_ROTOR_STATS.bin (%lu records) ===\n", count);
+    }
+    Serial.println("seq,created_us,updated_us,hall_total,outliers,last_outlier_us,"
+                   "hall_avg_us,espnow_ok,espnow_fail,render,skip,not_rot,effect,brightness");
+
+    static RotorStatsRecord records[78];  // ~4KB worth (78 * 52 = 4056)
+    size_t offset = sizeof(TelemetryHeader);
+
+    for (uint32_t remaining = count; remaining > 0; ) {
+        uint32_t batch = (remaining > 78) ? 78 : remaining;
+        size_t bytes = batch * sizeof(RotorStatsRecord);
+
+        esp_err_t err = esp_partition_read(s_stats.partition, offset, records, bytes);
+        if (err != ESP_OK) {
+            Serial.printf("[CAPTURE] Read error: %s\n", esp_err_to_name(err));
+            break;
+        }
+
+        for (uint32_t i = 0; i < batch; i++) {
+            const RotorStatsRecord& r = records[i];
+            Serial.printf("%u,%llu,%llu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+                          r.reportSequence, r.created_us, r.lastUpdated_us,
+                          r.hallEventsTotal, r.hallOutliersFiltered, r.lastOutlierInterval_us,
+                          r.hallAvg_us, r.espnowSendAttempts - r.espnowSendFailures, r.espnowSendFailures,
+                          r.renderCount, r.skipCount, r.notRotatingCount,
+                          r.effectNumber, r.brightness);
+        }
+
+        offset += bytes;
+        remaining -= batch;
+    }
+}
+
+// Wait for any serial input (for interactive play)
+static void waitForKeypress() {
+    Serial.println("\nPress any key to continue...");
+    Serial.flush();
+
+    while (Serial.available()) Serial.read();
+    while (!Serial.available()) delay(10);
+    while (Serial.available()) Serial.read();
+    Serial.println();
+}
+
+// =============================================================================
 // Public API
-// ============================================================================
+// =============================================================================
 
 void captureInit() {
-    if (!LittleFS.begin(true)) {  // true = format on fail
-        Serial.println("[CAPTURE] LittleFS mount failed!");
+    // Find telemetry partitions
+    s_accel.init(findPartition(PARTITION_SUBTYPE_ACCEL));
+    s_hall.init(findPartition(PARTITION_SUBTYPE_HALL));
+    s_stats.init(findPartition(PARTITION_SUBTYPE_STATS));
+
+    if (!s_accel.partition || !s_hall.partition || !s_stats.partition) {
+        Serial.println("[CAPTURE] ERROR: Missing telemetry partitions!");
+        Serial.printf("  accel: %s\n", s_accel.partition ? "OK" : "MISSING");
+        Serial.printf("  hall: %s\n", s_hall.partition ? "OK" : "MISSING");
+        Serial.printf("  stats: %s\n", s_stats.partition ? "OK" : "MISSING");
         return;
     }
 
-    // Create telemetry directory if needed
-    if (!LittleFS.exists(TELEMETRY_DIR)) {
-        LittleFS.mkdir(TELEMETRY_DIR);
-    }
-
-    // Initialize tracking arrays
-    for (size_t i = 0; i < MAX_MSG_TYPES; i++) {
-        s_fileOpen[i] = false;
-        s_recordCounts[i] = 0;
-        s_bytesWritten[i] = 0;
-    }
+    Serial.printf("[CAPTURE] Partitions found: accel=%zuKB hall=%zuKB stats=%zuKB\n",
+                  s_accel.partition->size / 1024,
+                  s_hall.partition->size / 1024,
+                  s_stats.partition->size / 1024);
 
     s_state = CaptureState::IDLE;
 
@@ -522,7 +612,6 @@ void captureInit() {
         Serial.println("[CAPTURE] Failed to create capture queue!");
         return;
     }
-    Serial.printf("[CAPTURE] Queue created: %p\n", (void*)s_captureQueue);
 
     // Create capture task (pinned to Core 1, app core)
     BaseType_t taskCreated = xTaskCreatePinnedToCore(
@@ -540,11 +629,14 @@ void captureInit() {
         s_captureQueue = nullptr;
         return;
     }
-    Serial.println("[CAPTURE] Capture task started");
+    Serial.println("[CAPTURE] Capture system ready (partition-based storage)");
+}
 
-    size_t total = LittleFS.totalBytes();
-    size_t used = LittleFS.usedBytes();
-    Serial.printf("[CAPTURE] LittleFS ready: %zu/%zu bytes used\n", used, total);
+void captureErase() {
+    Serial.println("[CAPTURE] Erasing partitions...");
+    uint32_t startMs = millis();
+    eraseAllPartitions();
+    Serial.printf("[CAPTURE] Erase complete (%lu ms)\n", millis() - startMs);
 }
 
 void captureStart() {
@@ -554,14 +646,14 @@ void captureStart() {
         return;
     }
 
-    // Task must be stopped before we can manipulate files
+    // Task must be stopped before we can start
     if (!s_taskStopped) {
         Serial.println("[CAPTURE] Task still running, cannot start");
         return;
     }
 
-    // Delete all existing files (safe - task is stopped)
-    deleteAllFiles();
+    // Erase partitions (this takes time but ensures clean start)
+    captureErase();
 
     // Drain any stale messages from queue
     if (s_captureQueue) {
@@ -575,11 +667,8 @@ void captureStart() {
         }
     }
 
-    // Reset tracking
-    for (size_t i = 0; i < MAX_MSG_TYPES; i++) {
-        s_recordCounts[i] = 0;
-        s_bytesWritten[i] = 0;
-    }
+    // Reset queue full counter
+    s_queueFullCount = 0;
 
     s_state = CaptureState::RECORDING;
 
@@ -607,26 +696,14 @@ void captureStop() {
         return;
     }
 
-    // Task has closed files - print summary
     Serial.println("[CAPTURE] CAPTURE STOPPED");
     Serial.println("--- Capture Summary ---");
-
-    bool anyData = false;
-    for (size_t i = 0; i < MAX_MSG_TYPES; i++) {
-        if (s_recordCounts[i] > 0) {
-            anyData = true;
-            Serial.printf("  %s (%zu): %lu records, %lu bytes\n",
-                          getMsgTypeName(i), i, s_recordCounts[i], s_bytesWritten[i]);
-        }
+    Serial.printf("  accel: %lu samples\n", s_accel.sample_count);
+    Serial.printf("  hall: %lu events\n", s_hall.sample_count);
+    Serial.printf("  stats: %lu records\n", s_stats.sample_count);
+    if (s_queueFullCount > 0) {
+        Serial.printf("  queue_full_drops: %lu\n", s_queueFullCount);
     }
-
-    if (!anyData) {
-        Serial.println("  (no data captured)");
-    }
-
-    size_t used = LittleFS.usedBytes();
-    size_t total = LittleFS.totalBytes();
-    Serial.printf("Filesystem: %zu/%zu bytes used\n", used, total);
 
     s_state = CaptureState::IDLE;
 }
@@ -637,45 +714,27 @@ void capturePlay() {
         captureStop();
     }
 
-    File dir = LittleFS.open(TELEMETRY_DIR);
-    if (!dir || !dir.isDirectory()) {
-        Serial.println("[CAPTURE] No capture data");
-        return;
+    bool hasData = false;
+
+    TelemetryHeader header;
+    if (readPartitionHeader(s_accel.partition, &header) > 0) {
+        dumpAccelCSV(false);
+        hasData = true;
     }
 
-    // Iterate through files
-    bool anyFiles = false;
-    File file = dir.openNextFile();
-    while (file) {
-        if (!file.isDirectory()) {
-            String name = file.name();
-            String fullPath = String(TELEMETRY_DIR) + "/" + name;
-            file.close();
-
-            // Open for reading
-            File readFile = LittleFS.open(fullPath, "r");
-            if (readFile && readFile.size() > 1) {
-                // Read header byte to get message type
-                uint8_t msgType = readFile.read();
-                size_t dataSize = readFile.size() - 1;  // Exclude header byte
-
-                if (anyFiles) {
-                    waitForKeypress();
-                }
-                dumpFileCSV(msgType, readFile, dataSize);
-                readFile.close();
-                anyFiles = true;
-            } else if (readFile) {
-                readFile.close();
-            }
-        } else {
-            file.close();
-        }
-        file = dir.openNextFile();
+    if (readPartitionHeader(s_hall.partition, &header) > 0) {
+        if (hasData) waitForKeypress();
+        dumpHallCSV(false);
+        hasData = true;
     }
-    dir.close();
 
-    if (!anyFiles) {
+    if (readPartitionHeader(s_stats.partition, &header) > 0) {
+        if (hasData) waitForKeypress();
+        dumpStatsCSV(false);
+        hasData = true;
+    }
+
+    if (!hasData) {
         Serial.println("[CAPTURE] No capture data");
     } else {
         Serial.println("\n=== DUMP COMPLETE ===");
@@ -683,22 +742,15 @@ void capturePlay() {
 }
 
 void captureDelete() {
-    // Stop recording first if needed (task will close files)
+    // Stop recording first if needed
     if (s_state == CaptureState::RECORDING || s_state == CaptureState::FULL) {
         captureStop();
     }
 
-    // Task is stopped - safe to delete files
-    deleteAllFiles();
-
-    // Reset tracking
-    for (size_t i = 0; i < MAX_MSG_TYPES; i++) {
-        s_recordCounts[i] = 0;
-        s_bytesWritten[i] = 0;
-    }
+    captureErase();
 
     s_state = CaptureState::IDLE;
-    Serial.println("[CAPTURE] Files deleted");
+    Serial.println("[CAPTURE] Partitions erased");
 }
 
 void captureWrite(uint8_t msgType, const uint8_t* data, size_t len) {
@@ -713,7 +765,9 @@ void captureWrite(uint8_t msgType, const uint8_t* data, size_t len) {
     memcpy(msg.data, data, len);
 
     // Non-blocking send (drop message if queue full)
-    xQueueSend(s_captureQueue, &msg, 0);
+    if (xQueueSend(s_captureQueue, &msg, 0) != pdPASS) {
+        s_queueFullCount = s_queueFullCount + 1;
+    }
 }
 
 CaptureState getCaptureState() {
@@ -728,9 +782,9 @@ bool isDumpInProgress() {
     return s_dumpInProgress;
 }
 
-// ============================================================================
+// =============================================================================
 // Serial Command Interface (script-friendly output)
-// ============================================================================
+// =============================================================================
 
 void captureStatus() {
     switch (s_state) {
@@ -741,135 +795,35 @@ void captureStatus() {
 }
 
 void captureList() {
-    File dir = LittleFS.open(TELEMETRY_DIR);
-    if (!dir || !dir.isDirectory()) {
-        Serial.println();  // Empty list - just blank line
-        return;
+    TelemetryHeader header;
+
+    uint32_t accelCount = readPartitionHeader(s_accel.partition, &header);
+    if (accelCount > 0) {
+        Serial.printf("MSG_ACCEL_SAMPLES.bin\t%lu\t%zu\n",
+                      accelCount, accelCount * sizeof(AccelSampleRaw));
     }
 
-    File file = dir.openNextFile();
-    while (file) {
-        if (!file.isDirectory() && file.size() > 1) {
-            // Read header byte to get message type
-            uint8_t msgType = file.read();
-            size_t dataSize = file.size() - 1;
-
-            // Calculate record count based on type
-            size_t recordCount = 0;
-            switch (msgType) {
-                case MSG_ACCEL_SAMPLES: recordCount = dataSize / sizeof(AccelRecord); break;
-                case MSG_HALL_EVENT:    recordCount = dataSize / sizeof(HallRecord); break;
-                case MSG_ROTOR_STATS:   recordCount = dataSize / sizeof(RotorStatsRecord); break;
-                default:                recordCount = dataSize; break;  // Unknown - show bytes
-            }
-
-            // Output: filename<TAB>records<TAB>bytes
-            Serial.printf("%s.bin\t%zu\t%zu\n", getMsgTypeName(msgType), recordCount, dataSize);
-        }
-        file.close();
-        file = dir.openNextFile();
+    uint32_t hallCount = readPartitionHeader(s_hall.partition, &header);
+    if (hallCount > 0) {
+        Serial.printf("MSG_HALL_EVENT.bin\t%lu\t%zu\n",
+                      hallCount, hallCount * sizeof(HallRecordRaw));
     }
-    dir.close();
+
+    uint32_t statsCount = readPartitionHeader(s_stats.partition, &header);
+    if (statsCount > 0) {
+        Serial.printf("MSG_ROTOR_STATS.bin\t%lu\t%zu\n",
+                      statsCount, statsCount * sizeof(RotorStatsRecord));
+    }
 
     Serial.println();  // Blank line = end of list
 }
 
-// Script-friendly dump with >>> markers
-static void dumpFileScript(uint8_t msgType, File& file, size_t dataSize) {
-    // Print filename marker
-    Serial.printf(">>> %s.bin\n", getMsgTypeName(msgType));
-
-    switch (msgType) {
-        case MSG_ACCEL_SAMPLES: {
-            // Note: rotation_num and micros_since_hall computed in Python post-processing
-            Serial.println("timestamp_us,sequence_num,x,y,z,gx,gy,gz");
-            AccelRecord rec;
-            while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%u,%d,%d,%d,%d,%d,%d\n",
-                              rec.timestamp, rec.sequence_num,
-                              rec.x, rec.y, rec.z, rec.gx, rec.gy, rec.gz);
-            }
-            break;
-        }
-
-        case MSG_HALL_EVENT: {
-            Serial.println("timestamp_us,period_us,rotation_num");
-            HallRecord rec;
-            while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%llu,%u,%u\n", rec.timestamp, rec.period_us, rec.rotation_num);
-            }
-            break;
-        }
-
-        case MSG_ROTOR_STATS: {
-            Serial.println("seq,created_us,updated_us,hall_total,outliers,last_outlier_us,"
-                           "hall_avg_us,espnow_ok,espnow_fail,render,skip,not_rot,effect,brightness");
-            RotorStatsRecord rec;
-            while (file.read((uint8_t*)&rec, sizeof(rec)) == sizeof(rec)) {
-                Serial.printf("%u,%llu,%llu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
-                              rec.reportSequence, rec.created_us, rec.lastUpdated_us,
-                              rec.hallEventsTotal, rec.hallOutliersFiltered, rec.lastOutlierInterval_us,
-                              rec.hallAvg_us, rec.espnowSendAttempts - rec.espnowSendFailures, rec.espnowSendFailures,
-                              rec.renderCount, rec.skipCount, rec.notRotatingCount,
-                              rec.effectNumber, rec.brightness);
-            }
-            break;
-        }
-
-        default: {
-            // Unknown - dump raw hex
-            Serial.println("offset,hex");
-            uint8_t buf[16];
-            size_t offset = 0;
-            while (size_t n = file.read(buf, sizeof(buf))) {
-                Serial.printf("%04zu,", offset);
-                for (size_t i = 0; i < n; i++) {
-                    Serial.printf("%02X ", buf[i]);
-                }
-                Serial.println();
-                offset += n;
-            }
-            break;
-        }
-    }
-}
-
 void captureDump() {
-    // Don't stop recording - just dump what's there
-    // (Unlike capturePlay which stops first)
-
-    // Suppress debug output (e.g. ROTOR_STATS) during dump to avoid corrupting CSV
     s_dumpInProgress = true;
 
-    File dir = LittleFS.open(TELEMETRY_DIR);
-    if (!dir || !dir.isDirectory()) {
-        Serial.println(">>>");  // Empty dump marker
-        s_dumpInProgress = false;
-        return;
-    }
-
-    File file = dir.openNextFile();
-    while (file) {
-        if (!file.isDirectory()) {
-            String name = file.name();
-            String fullPath = String(TELEMETRY_DIR) + "/" + name;
-            file.close();
-
-            File readFile = LittleFS.open(fullPath, "r");
-            if (readFile && readFile.size() > 1) {
-                uint8_t msgType = readFile.read();
-                size_t dataSize = readFile.size() - 1;
-                dumpFileScript(msgType, readFile, dataSize);
-                readFile.close();
-            } else if (readFile) {
-                readFile.close();
-            }
-        } else {
-            file.close();
-        }
-        file = dir.openNextFile();
-    }
-    dir.close();
+    dumpAccelCSV(true);
+    dumpHallCSV(true);
+    dumpStatsCSV(true);
 
     Serial.println(">>>");  // End of dump marker
     s_dumpInProgress = false;
@@ -885,8 +839,8 @@ void captureStartSerial() {
         return;
     }
 
-    // Delete existing files
-    deleteAllFiles();
+    // Note: Caller must use DELETE_ALL_CAPTURES first to erase partitions.
+    // START_CAPTURE is now fast (instant) - erase is done separately.
 
     // Drain stale messages
     if (s_captureQueue) {
@@ -894,11 +848,8 @@ void captureStartSerial() {
         while (xQueueReceive(s_captureQueue, &msg, 0) == pdPASS) {}
     }
 
-    // Reset tracking
-    for (size_t i = 0; i < MAX_MSG_TYPES; i++) {
-        s_recordCounts[i] = 0;
-        s_bytesWritten[i] = 0;
-    }
+    // Reset queue full counter
+    s_queueFullCount = 0;
 
     s_state = CaptureState::RECORDING;
 
@@ -945,12 +896,7 @@ void captureDeleteSerial() {
         s_state = CaptureState::IDLE;
     }
 
-    deleteAllFiles();
-
-    for (size_t i = 0; i < MAX_MSG_TYPES; i++) {
-        s_recordCounts[i] = 0;
-        s_bytesWritten[i] = 0;
-    }
+    eraseAllPartitions();
 
     Serial.println("OK");
 }

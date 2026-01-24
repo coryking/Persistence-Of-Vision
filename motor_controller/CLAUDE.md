@@ -84,7 +84,8 @@ All pins and constants are defined in `src/hardware_config.h`:
 - `src/command_processor.{h,cpp}` - Routes commands to motor or ESP-NOW
 - `src/led_indicator.{h,cpp}` - RGB LED status (stopped/running)
 - `src/espnow_comm.{h,cpp}` - ESP-NOW communication with LED display
-- `src/telemetry_capture.{h,cpp}` - Telemetry capture to LittleFS (FreeRTOS task)
+- `src/telemetry_capture.{h,cpp}` - Telemetry capture to flash partitions (FreeRTOS task)
+- `partitions.csv` - Custom partition table with telemetry storage areas
 - `platformio.ini` - Build configuration
 - `../shared/sagetv_buttons.h` - SageTV remote button codes
 - `../shared/messages.h` - ESP-NOW message structures
@@ -105,21 +106,23 @@ All pins and constants are defined in `src/hardware_config.h`:
 
 ## Telemetry Capture
 
-Captures high-rate telemetry from the LED display to LittleFS for offline analysis. Uses a FreeRTOS task for file writes to avoid blocking ESP-NOW callbacks.
+Captures high-rate telemetry from the LED display to dedicated flash partitions for offline analysis. Uses raw partition writes (bypassing filesystem overhead) to achieve write speeds needed for 8kHz IMU data. A FreeRTOS task handles buffered sector writes to avoid blocking ESP-NOW callbacks.
 
 **Control Methods**:
 - **IR Remote**: RECORD/STOP/DELETE buttons (PLAY removed - use CLI instead)
-- **Serial Commands**: START/STOP/DUMP/DELETE/STATUS/LIST (script-friendly)
+- **Serial Commands**: START_CAPTURE/STOP_CAPTURE/DUMP_CAPTURES/DELETE_ALL_CAPTURES/STATUS/LIST_CAPTURES
 - **Python CLI**: `pov telemetry <command>` (recommended for LLM use)
+
+**Important**: DELETE_ALL_CAPTURES must be called before START_CAPTURE. The erase (~5s) is separate from start (instant).
 
 **CLI Commands** (from project root after `uv sync`):
 ```bash
 pov telemetry status              # Get state + file list
-pov telemetry start               # Start recording
+pov telemetry delete              # Erase partitions (~5s, required before start)
+pov telemetry start               # Start recording (instant)
 pov telemetry stop                # Stop recording
 pov telemetry dump                # Download CSVs to telemetry/
 pov telemetry list                # List files on device
-pov telemetry delete              # Delete all files
 pov telemetry view MSG_ACCEL_SAMPLES  # Preview a file
 ```
 

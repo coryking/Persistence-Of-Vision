@@ -137,12 +137,12 @@ class DeviceConnection:
                 data[key] = value
         return data
 
-    def start(self) -> str:
+    def start_capture(self) -> str:
         """Start recording. Returns OK or error message."""
-        self._send_command("START")
+        self._send_command("START_CAPTURE")
         return self._read_until_ok_or_err()
 
-    def start_with_retry(
+    def start_capture_with_retry(
         self,
         max_retries: int = 5,
         retry_delay: float = 0.5,
@@ -165,7 +165,7 @@ class DeviceConnection:
 
         delay = retry_delay
         for attempt in range(max_retries + 1):
-            response = self.start()
+            response = self.start_capture()
             if response.startswith("OK"):
                 return response
             if "Task busy" not in response:
@@ -178,19 +178,28 @@ class DeviceConnection:
                 delay *= 1.5  # Exponential backoff
         return response
 
-    def stop(self) -> str:
+    def stop_capture(self) -> str:
         """Stop recording. Returns OK or error message."""
-        self._send_command("STOP")
+        self._send_command("STOP_CAPTURE")
         return self._read_until_ok_or_err()
 
-    def delete(self) -> str:
-        """Delete all telemetry files. Returns OK."""
-        self._send_command("DELETE")
-        return self._read_until_ok_or_err()
+    def delete_all_captures(self, timeout: float = 10.0) -> str:
+        """Delete all telemetry files. Takes ~5s for flash erase.
 
-    def list_files(self) -> list[FileInfo]:
+        Args:
+            timeout: Read timeout for erase operation (default 10s).
+        """
+        old_timeout = self._serial.timeout
+        self._serial.timeout = timeout
+        try:
+            self._send_command("DELETE_ALL_CAPTURES")
+            return self._read_until_ok_or_err()
+        finally:
+            self._serial.timeout = old_timeout
+
+    def list_captures(self) -> list[FileInfo]:
         """List telemetry files on device."""
-        self._send_command("LIST")
+        self._send_command("LIST_CAPTURES")
         files = []
         while True:
             line = self._read_line()
@@ -238,9 +247,9 @@ class DeviceConnection:
         self._send_command("RESET_ROTOR_STATS")
         return self._read_until_ok_or_err()
 
-    def dump(self) -> list[DumpedFile]:
+    def dump_captures(self) -> list[DumpedFile]:
         """Dump all telemetry files as CSV data."""
-        self._send_command("DUMP")
+        self._send_command("DUMP_CAPTURES")
         files = []
         current_file: Optional[DumpedFile] = None
 
