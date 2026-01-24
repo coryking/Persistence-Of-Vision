@@ -335,11 +335,9 @@ Bidirectional ESP-NOW communication established:
 - Sends random brightness UP/DOWN every 5 seconds (test mode)
 
 **LED Display:**
-- `include/DisplayState.h` - Atomic state struct with gamma-corrected `brightnessToScale()`
 - `include/ESPNowComm.h`, `src/ESPNowComm.cpp` - ESP-NOW module
-- Sends telemetry every 20 revolutions from hall processing task
-- Receives brightness commands, updates `g_displayState.brightness`
-- `include/SlotTiming.h` - Uses runtime brightness from DisplayState
+- `include/EffectManager.h` - State management for effect, brightness, mode
+- See `docs/ESP-NOW_ARCHITECTURE.md` for message flow and state ownership
 
 **Message Structures** in `shared/messages.h`:
 - `TelemetryMsg` - Display → Motor Controller

@@ -125,6 +125,18 @@ tools/
 | IR button codes | `docs/led_display/sagetv_remote_mapping.json` |
 | Timing constants | `led_display/include/types.h` |
 
+## ESP-NOW Communication
+
+For inter-device communication architecture:
+
+| What | Where |
+|------|-------|
+| Message types and structs | `shared/messages.h` |
+| MAC addresses / channel | `shared/espnow_config.h` |
+| Motor controller ESP-NOW | `motor_controller/src/espnow_comm.cpp` |
+| LED display ESP-NOW | `led_display/src/ESPNowComm.cpp` |
+| Architecture overview | `docs/ESP-NOW_ARCHITECTURE.md` |
+
 ## Build System
 
 All projects use **uv + PlatformIO**:

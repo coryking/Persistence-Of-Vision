@@ -20,6 +20,7 @@ from ..serial_comm import (
     extract_rpm_from_dump,
     DEFAULT_PORT,
 )
+from ..rotor_stats import RotorStats
 from ..constants import ButtonCommand, CALIBRATION_EFFECT, MAX_SPEED_POSITION
 from .utils import create_timestamped_dir, TELEMETRY_DIR
 
@@ -262,6 +263,24 @@ def run_test_sequence(
             result.error = f"Failed to set effect: {response}"
             return result
         console.print(f"[green]Effect set to {CALIBRATION_EFFECT}[/green]")
+
+        # Effect verification callback - retry if LED display shows wrong effect
+        expected_effect = int(CALIBRATION_EFFECT)
+        effect_retry_count = 0
+        max_effect_retries = 3
+
+        def on_rotor_stats(stats: RotorStats) -> None:
+            nonlocal effect_retry_count
+            if stats.effect != expected_effect:
+                effect_retry_count += 1
+                if effect_retry_count <= max_effect_retries:
+                    console.print(
+                        f"[yellow]Effect mismatch: expected {expected_effect}, "
+                        f"got {stats.effect}. Retrying ({effect_retry_count}/{max_effect_retries})...[/yellow]"
+                    )
+                    conn.button(expected_effect)
+
+        conn.on_rotor_stats = on_rotor_stats
 
         # Get initial position
         status = conn.status()

@@ -2,8 +2,10 @@
 
 import serial
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 from pathlib import Path
+
+from .rotor_stats import RotorStats
 
 
 # =============================================================================
@@ -61,6 +63,7 @@ class DeviceConnection:
         self.baud = baud
         self.timeout = timeout
         self._serial: Optional[serial.Serial] = None
+        self.on_rotor_stats: Optional[Callable[[RotorStats], None]] = None
 
     def __enter__(self) -> "DeviceConnection":
         try:
@@ -107,8 +110,15 @@ class DeviceConnection:
                 return line
             if not line:
                 raise DeviceError("Timeout waiting for response")
-            # Print debug output from device
-            console.print(f"[dim]{line}[/dim]")
+            # Try to parse as ROTOR_STATS
+            parsed = RotorStats.from_line(line)
+            if parsed:
+                console.print(f"[dim]{parsed}[/dim]")
+                if self.on_rotor_stats:
+                    self.on_rotor_stats(parsed)
+            else:
+                # Print raw debug output from device
+                console.print(f"[dim]{line}[/dim]")
 
     def status(self) -> dict[str, str]:
         """Get unified device status as key: value dict.
