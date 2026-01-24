@@ -149,6 +149,21 @@ void setupESPNow() {
         return;
     }
 
+    // Configure PHY rate for high throughput (devices are <100mm apart)
+    // Default 1 Mbps 802.11b has 192µs preamble overhead per packet
+    // 54 Mbps 802.11g has 20µs preamble - 34x more packets/sec capacity
+    esp_now_rate_config_t rateConfig = {
+        .phymode = WIFI_PHY_MODE_11G,
+        .rate = WIFI_PHY_RATE_54M,
+        .ersu = false,
+        .dcm = false
+    };
+    if (esp_now_set_peer_rate_config(MOTOR_CONTROLLER_MAC, &rateConfig) == ESP_OK) {
+        Serial.println("[ESPNOW] PHY rate set to 54 Mbps (802.11g)");
+    } else {
+        Serial.println("[ESPNOW] Warning: PHY rate config failed, using default 1 Mbps");
+    }
+
     Serial.printf("[ESPNOW] My MAC: %s\n", WiFi.macAddress().c_str());
     Serial.printf("[ESPNOW] Target (motor controller) MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
         MOTOR_CONTROLLER_MAC[0], MOTOR_CONTROLLER_MAC[1], MOTOR_CONTROLLER_MAC[2],

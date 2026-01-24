@@ -127,6 +127,15 @@ void setupESPNow() {
         return;
     }
 
+    // Match LED display PHY rate for symmetric link
+    esp_now_rate_config_t rateConfig = {
+        .phymode = WIFI_PHY_MODE_11G,
+        .rate = WIFI_PHY_RATE_54M,
+        .ersu = false,
+        .dcm = false
+    };
+    esp_now_set_peer_rate_config(DISPLAY_MAC, &rateConfig);
+
     Serial.printf("[ESPNOW] My MAC: %s\n", WiFi.macAddress().c_str());
     Serial.printf("[ESPNOW] Target (display) MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
         DISPLAY_MAC[0], DISPLAY_MAC[1], DISPLAY_MAC[2],

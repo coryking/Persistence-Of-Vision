@@ -119,15 +119,14 @@ struct AccelSampleWire {
     gyro_raw_t gx, gy, gz;       // 6 bytes (3 × int16_t) - gyroscope
 } __attribute__((packed));
 
-// Maximum samples per batch
-// At 1kHz, 50 samples = 50ms of data = ~20 packets/sec
-// Header: 12 bytes, Per sample: 14 bytes (accel + gyro)
-// Max with v2.0: (1470 - 12) / 14 = 104 samples, but 50 provides reasonable latency
-static constexpr size_t ACCEL_SAMPLES_MAX_BATCH = 50;
-
 // AccelSampleMsg header size (type + sample_count + base_timestamp + start_sequence)
 static constexpr size_t ACCEL_MSG_HEADER_SIZE =
     sizeof(uint8_t) + sizeof(uint8_t) + sizeof(timestamp_t) + sizeof(sequence_t);
+
+// Maximum samples per batch - auto-computed to fill ESP-NOW v2.0 payload
+// Adjusts automatically if AccelSampleWire or header size changes
+static constexpr size_t ACCEL_SAMPLES_MAX_BATCH =
+    (ESPNOW_MAX_PAYLOAD_V2 - ACCEL_MSG_HEADER_SIZE) / sizeof(AccelSampleWire);
 
 // Display -> Motor Controller: Batched accelerometer samples with delta timestamps
 // Motor controller expands deltas to absolute timestamps when writing to file
