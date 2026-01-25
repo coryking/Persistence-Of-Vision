@@ -322,6 +322,10 @@ def run_test_sequence(
                     conn.delete_all_captures()
                 console.print("[dim]✓ Partitions erased[/dim]")
 
+                # Reset LED display stats so espnow counters are fresh for this step
+                conn.reset_rotor_stats()
+                console.print("[dim]✓ Rotor stats reset[/dim]")
+
                 # Safety check: confirm before continuing
                 if not Confirm.ask("Continue?", default=False):
                     console.print("[yellow]Aborted by user[/yellow]")

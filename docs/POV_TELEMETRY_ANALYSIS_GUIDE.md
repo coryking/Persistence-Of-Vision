@@ -1,15 +1,194 @@
 # POV Display Telemetry Analysis Guide
 
-## Overview
+This document describes the methodology for analyzing telemetry data from the POV display's IMU and Hall effect sensor to characterize rotational imbalance and determine optimal counterweight placement.
 
-This document describes the methodology for analyzing telemetry data from the POV display's IMU (accelerometer + gyroscope) and Hall effect sensor to:
-1. Characterize rotational imbalance (wobble)
-2. Determine optimal counterweight placement
-3. Compare before/after balance adjustments
+> **Hardware reference:** Physical assembly, sensor specs, and component positions are documented in `HARDWARE.md`. This guide focuses on analysis methodology.
 
 ---
 
-## Data Acquisition Workflow
+## The Physics of Rotational Imbalance
+
+Understanding the underlying physics is essential for interpreting telemetry data correctly. This section covers the theory; later sections cover the practical workflow.
+
+### Imbalance Force
+
+An imbalanced rotating mass creates centrifugal force proportional to the square of angular velocity:
+
+```
+F = m Ã— Ï‰Â² Ã— r
+
+Where:
+  m = imbalance mass (kg)
+  Ï‰ = angular velocity (rad/s) = RPM Ã— 2Ï€/60
+  r = radius of imbalance from rotation axis (m)
+```
+
+This Ï‰Â² relationship is fundamentalâ€”imbalance effects grow quadratically with speed. A rotor that wobbles slightly at 700 RPM will wobble 16Ã— more at 2800 RPM (4Â² = 16).
+
+### Wobble Response
+
+The imbalance force causes the disc to tilt and precess. The gyroscope's X and Y axes (perpendicular to the rotation axis) measure this wobble as angular rates:
+
+```
+wobble_magnitude = âˆš(gxÂ² + gyÂ²)   [Â°/s]
+```
+
+For a simple rigid rotor well below its critical speed, wobble magnitude scales with Ï‰Â²:
+
+```
+wobble = k Ã— RPMÂ² + offset
+
+Where k is determined by imbalance mass, radius, and system stiffness.
+```
+
+A linear fit of wobble vs RPMÂ² with RÂ² > 0.9 confirms classic imbalance behavior.
+
+### Critical Speed and Dynamic Response
+
+Critical speed is the RPM where the rotor's spin frequency matches a natural resonance of the mechanical system. At critical speed, vibration amplitude spikes dramatically and the phase relationship between the heavy spot and measured response shifts.
+
+The full dynamic response follows the Jeffcott rotor model:
+
+```
+A/e = fÂ² / âˆš[(1-fÂ²)Â² + (2Î¶f)Â²]
+
+Where:
+  A = vibration amplitude
+  e = effective eccentricity (imbalance offset)
+  f = Ï‰/Ï‰n = rotation frequency / natural frequency  
+  Î¶ = damping ratio (typically 0.01-0.1)
+```
+
+This simplifies in different operating regimes:
+
+| Regime | Frequency Ratio | Amplitude Behavior | Phase Lag |
+|--------|-----------------|-------------------|-----------|
+| Well below critical | f < 0.5 | wobble âˆ RPMÂ² | ~0Â° |
+| Near critical | f â‰ˆ 0.7-1.3 | Amplified, non-linear | 45Â°-135Â° |
+| At critical | f = 1 | Peak amplitude â‰ˆ e/(2Î¶) | 90Â° |
+| Above critical | f > 1.5 | Amplitude approaches constant | ~180Â° |
+
+The phase lag between heavy spot (cause) and measured high spot (response) is:
+
+```
+Ï†_lag = atan2(2Î¶f, 1-fÂ²)
+```
+
+**For this POV display:** The rotor mass is 152g with arm tips at 104.5mm radius. If you observe worse vibration at lower RPMs that improves at higher speeds, you may be operating above a critical speed. In that regime, the heavy spot is approximately 180Â° opposite from where you might naively expect based on raw phase measurements.
+
+### From Measured Phase to Heavy Spot Location
+
+The full phase correction from measured gyroscope data to actual heavy spot location:
+
+```
+Î¸_heavy = Î¸_measured - Ï†_lag + Î¸_sensor + Î¸_integration
+
+Where:
+  Î¸_measured   = phase from atan2(mean_gy, mean_gx) or sinusoid fit
+  Ï†_lag        = speed-dependent lag (0Â° well below critical, ~180Â° well above)
+  Î¸_sensor     = hall sensor trigger offset (~6Â° per HARDWARE.md)
+  Î¸_integration = 90Â° for gyroscope (rate/velocity measurement)
+```
+
+For operation well above critical speed (where Ï†_lag â‰ˆ 180Â°):
+
+```
+Î¸_heavy â‰ˆ Î¸_measured - 180Â° + 6Â° + 90Â° = Î¸_measured - 84Â°
+```
+
+For operation well below critical speed (where Ï†_lag â‰ˆ 0Â°):
+
+```
+Î¸_heavy â‰ˆ Î¸_measured + 6Â° + 90Â° = Î¸_measured + 96Â°
+```
+
+The counterweight placement is always opposite the heavy spot:
+
+```
+Î¸_counterweight = Î¸_heavy + 180Â°
+```
+
+**Practical note:** These offsets should be verified empirically using trial weights. If your first counterweight attempt consistently misses in the same direction, adjust the offset accordingly.
+
+### ISO Balance Quality Reference
+
+ISO 21940-11 defines balance quality grades. The permissible residual unbalance:
+
+```
+U_per (gÂ·mm) = 9549 Ã— G Ã— m / n
+
+Where:
+  G = balance quality grade
+  m = rotor mass (kg)
+  n = maximum service speed (RPM)
+```
+
+For this POV display (152g rotor, 2800 RPM max, targeting G 6.3 for general machinery):
+
+```
+U_per = 9549 Ã— 6.3 Ã— 0.152 / 2800 = 3.3 gÂ·mm
+```
+
+This means acceptable balance is achieved with, for example, a 0.1g imbalance at 33mm radius, or 0.05g at 66mm radius. For reference, a US dime is 2.27gâ€”even small coins represent significant imbalance at the arm tips.
+
+---
+
+## Sensor Configuration
+
+### IMU Mounting and Axes
+
+The MPU-9250 IMU is mounted upside-down at 25.4mm radius from rotation center, aligned with the hall sensor at 0Â°. See `HARDWARE.md` for detailed orientation.
+
+| IMU Axis | Physical Direction | During CCW Rotation |
+|----------|-------------------|---------------------|
+| **X+** | Radial outward | Saturates from centrifugal force |
+| **Y+** | Tangent (toward 90Â°) | Does not saturate |
+| **Z+** | Down (toward ground) | GZ negative during CCW rotation |
+
+**Gyroscope axes for wobble analysis:**
+- **GX and GY** measure wobble/precession (tilt rates perpendicular to rotation axis)
+- **GZ** measures rotation rate but saturates above ~333 RPM (Â±2000Â°/s limit)
+
+**Accelerometer axes:**
+- **X** saturates from centrifugal acceleration at operating speedsâ€”ignore for analysis
+- **Y and Z** remain unsaturated and can be used for phase analysis via angle binning
+
+### Expected Saturation
+
+At operating speeds (700-2800 RPM), expect:
+
+| Sensor | Saturates? | Why |
+|--------|------------|-----|
+| GZ (gyro) | Yes | Rotation rate exceeds Â±2000Â°/s above 333 RPM |
+| X accel | Yes | Centrifugal acceleration exceeds Â±16g |
+| GX, GY (gyro) | No | Wobble rates are much smaller |
+| Y, Z accel | No | Tangential and axial forces are manageable |
+
+Saturation of GZ and X-accel is normal and expected. Use the pre-computed `rpm` column (derived from hall sensor timing) rather than attempting to calculate RPM from saturated GZ.
+
+### Sampling Rate
+
+The IMU samples at 8kHz, which is vastly above the Nyquist requirement:
+
+| RPM | Rotation Freq | Nyquist Minimum | Actual | Margin |
+|-----|---------------|-----------------|--------|--------|
+| 700 | 11.7 Hz | 23 Hz | 8000 Hz | 350Ã— |
+| 2800 | 46.7 Hz | 93 Hz | 8000 Hz | 86Ã— |
+
+This high sample rate provides excellent resolution for angle binning (~170 samples per revolution at 2800 RPM) and robust noise rejection through averaging.
+
+### Hall Effect Sensor Timing
+
+The A3144 hall sensor triggers on the falling edge when entering the magnet's field, approximately 6Â° before closest approach to the magnet. This creates a fixed offset:
+
+- `angle_deg = 0Â°` in telemetry â†’ sensor is ~6Â° before the magnet
+- `angle_deg â‰ˆ 6Â°` â†’ sensor at closest approach
+
+For imbalance analysis, this offset is constant and can be folded into the phase correction. For correlating specific angles to physical rotor positions, subtract 6Â° from telemetry angles.
+
+---
+
+## Data Acquisition
 
 ### Capture Command
 
@@ -24,69 +203,40 @@ Options:
   --json           Output results as JSON
 ```
 
-### Input: Telemetry Directory
+### Directory Structure
 
-You'll be given a path like:
-```
-/Users/coryking/projects/POV_Project/telemetry/2026-01-12T16-17-47
-```
-
-### Directory Structure (Per-Step Capture)
-
-All files are in a flat structure with step number and RPM suffixes:
+Telemetry captures produce a flat directory with per-step files:
 
 ```
-telemetry/2026-01-12T16-17-47/
-├── MSG_ACCEL_SAMPLES_step_01_245rpm.csv
-├── MSG_HALL_EVENT_step_01_245rpm.csv
-├── MSG_ACCEL_SAMPLES_step_02_312rpm.csv
-├── MSG_HALL_EVENT_step_02_312rpm.csv
-├── ...
-├── MSG_ACCEL_SAMPLES_step_10_892rpm.csv
-├── MSG_HALL_EVENT_step_10_892rpm.csv
-└── manifest.json
+telemetry/2026-01-24T11-50-05/
+â”œâ”€â”€ MSG_ACCEL_SAMPLES_step_01_245rpm.csv
+â”œâ”€â”€ MSG_HALL_EVENT_step_01_245rpm.csv
+â”œâ”€â”€ MSG_ACCEL_SAMPLES_step_02_312rpm.csv
+â”œâ”€â”€ MSG_HALL_EVENT_step_02_312rpm.csv
+â”œâ”€â”€ ...
+â”œâ”€â”€ MSG_ACCEL_SAMPLES_step_10_892rpm.csv
+â”œâ”€â”€ MSG_HALL_EVENT_step_10_892rpm.csv
+â””â”€â”€ manifest.json
 ```
 
-### Expected Files
+### Data Format
 
-| File | Description |
-|------|-------------|
-| `MSG_ACCEL_SAMPLES_step_XX_NNNrpm.csv` | IMU data (accel + gyro) with pre-computed engineering units for speed position XX at NNN RPM |
-| `MSG_HALL_EVENT_step_XX_NNNrpm.csv` | Hall effect sensor triggers with period/RPM for speed position XX |
-| `manifest.json` | Run metadata (timing, sample counts, RPM per step) |
-
-### Step 1: Copy Files to Claude's Environment
-
-```
-Use Filesystem:copy_file_user_to_claude for each CSV file
-Files will appear in /mnt/user-data/uploads/
-```
-
-### Step 2: Quick Data Inspection
-
-Check file sizes, column headers, and sample values before full analysis.
-
----
-
-## Data Format (Current)
-
-### MSG_ACCEL_SAMPLES.csv Columns
+**MSG_ACCEL_SAMPLES columns:**
 
 | Column | Description | Units |
 |--------|-------------|-------|
-| `timestamp_us` | Microsecond timestamp | μs |
-| `sequence_num` | Sample sequence number | - |
-| `rotation_num` | Rotation count since start | - |
-| `micros_since_hall` | Time since last hall trigger | μs |
-| `angle_deg` | **Pre-computed** angular position | degrees (0-360) |
-| `rpm` | **Pre-computed** RPM from gyro | RPM |
-| `x_g`, `y_g`, `z_g` | Accelerometer in g's | g |
-| `gx_dps`, `gy_dps`, `gz_dps` | Gyroscope in degrees/second | °/s |
-| `gyro_wobble_dps` | **Pre-computed** wobble magnitude | °/s |
-| `is_x_saturated` | X-axis accel saturation flag | bool |
-| `is_gz_saturated` | Z-axis gyro saturation flag | bool |
+| `timestamp_us` | Microsecond timestamp | Âµs |
+| `sequence_num` | Sample sequence number | â€” |
+| `rotation_num` | Rotation count since start | â€” |
+| `micros_since_hall` | Time since last hall trigger | Âµs |
+| `angle_deg` | Pre-computed angular position | degrees (0-360) |
+| `rpm` | Pre-computed RPM from hall timing | RPM |
+| `x_g`, `y_g`, `z_g` | Accelerometer readings | g |
+| `gx_dps`, `gy_dps`, `gz_dps` | Gyroscope readings | Â°/s |
+| `gyro_wobble_dps` | Pre-computed âˆš(gxÂ² + gyÂ²) | Â°/s |
+| `is_y_saturated`, `is_gz_saturated` | Saturation flags | bool |
 
-### MSG_HALL_EVENT.csv Columns
+**MSG_HALL_EVENT columns:**
 
 | Column | Description |
 |--------|-------------|
@@ -94,434 +244,463 @@ Check file sizes, column headers, and sample values before full analysis.
 | `period_us` | Time since previous trigger |
 | `rotation_num` | Rotation count |
 
-### manifest.json Structure
-
-```json
-{
-  "settle_time": 3.0,
-  "record_time": 5.0,
-  "speeds_captured": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-  "started_at": "2026-01-12T16:17:47",
-  "completed_at": "2026-01-12T16:30:22",
-  "aborted": false,
-  "error": null,
-  "steps": [
-    {
-      "position": 1,
-      "accel_samples": 4500,
-      "hall_packets": 150,
-      "rpm": 450.0,
-      "success": true
-    },
-    ...
-  ]
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `settle_time` | Seconds waited after speed change before recording |
-| `record_time` | Seconds of recording at each speed |
-| `speeds_captured` | List of successfully captured speed positions |
-| `steps[].accel_samples` | IMU samples collected during recording |
-| `steps[].hall_packets` | Hall events during recording |
-| `steps[].rpm` | RPM at end of recording |
+**manifest.json** contains run metadata including timing, sample counts, and measured RPM per step.
 
 ---
 
-## Test Structure
+## Analysis Workflow
 
-### Per-Step Capture Protocol
-
-For each speed position (1-10):
-1. **Delete** telemetry files on device (fresh start)
-2. **Speed up** to target position
-3. **Settle** for configurable time (default 3s) - motor reaches steady-state
-4. **Record** for configurable time (default 5s) - capture pure steady-state data
-5. **Stop** recording and **dump** to speed-specific subdirectory
-
-**Key advantage**: Each speed's data is captured after the motor has fully stabilized at that speed, eliminating the spin-up transient that contaminates continuous-capture data.
-
-### Steady-State Data
-
-With per-step capture, the entire recording is steady-state data (the settle time handles spin-up). No windowing is needed - use all samples in each file.
-
----
-
-## Sensor Orientation & Known Limitations
-
-> **Canonical hardware reference:** See `docs/led_display/HARDWARE.md` for physical assembly and sensor specs.
-
-**Rotation direction:** Counter-clockwise when viewed from above (software-configurable).
-
-### IMU Mounting
-
-- **Mounting method**: Double-sided foam tape, upside-down (chip facing floor)
-- **Alignment**: Approximately aligned, not precision-mounted
-- **Z+**: Points DOWN (toward ground)
-- **X+**: Points radially outward (saturates from centrifugal force)
-- **Y+**: Tangent to rotation, in direction of CCW rotation
-
-### Expected Saturation (NORMAL!)
-
-| Axis | Saturation Expected? | Why |
-|------|---------------------|-----|
-| **GZ (gyro)** | ✅ YES | Main rotation axis, ±2000°/s limit exceeded above ~333 RPM. **Negative** during CCW rotation. |
-| **X accel** | ✅ YES | Points radially outward, centrifugal acceleration exceeds ±16g |
-| GX, GY (gyro) | ❌ No | Wobble/precession axes |
-| Y, Z accel | ❌ No | Tangential and axial, lower forces |
-
-### What This Means
-
-- **Ignore GZ for RPM calculation** at speeds above ~333 RPM (use Hall sensor or pre-computed `rpm` column)
-- **GX and GY are the money** - they show wobble/precession
-- **X accel saturation is fine** - we use Y and Z for phase analysis
-
----
-
-## The Physics & Math
-
-### Imbalance Force
-
-An imbalanced rotating mass creates centrifugal force:
-
-```
-F = m × ω² × r
-
-Where:
-  m = imbalance mass (kg)
-  ω = angular velocity (rad/s) = RPM × 2π/60
-  r = radius of imbalance from rotation axis (m)
-```
-
-**Key insight**: Force scales with **ω²** (RPM squared), so imbalance effects grow quadratically with speed.
-
-### Wobble Response
-
-The imbalance force causes the disc to tilt/precess. The gyroscope's X and Y axes (perpendicular to rotation) measure this wobble:
-
-```
-wobble_magnitude = sqrt(gx² + gy²)  [°/s]
-
-Expected relationship:
-  wobble ∝ RPM²
-  
-Fit model:
-  wobble = slope × RPM² + intercept
-```
-
-A good fit (R² > 0.9) with positive slope confirms classic imbalance.
-
-### Precession Direction
-
-The **DC offset** of GX and GY indicates the tilt direction:
+### Step 1: Load and Inspect Data
 
 ```python
-precession_direction = atan2(mean(gy), mean(gx))  # degrees
+import json
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+from scipy.optimize import curve_fit
+
+base_dir = Path('/path/to/telemetry/run')
+
+# Load manifest
+with open(base_dir / 'manifest.json') as f:
+    manifest = json.load(f)
+
+# Load each speed step
+results = []
+for step in manifest['steps']:
+    if not step['success']:
+        continue
+    
+    pos = step['position']
+    rpm = step['rpm']
+    
+    # Find matching files (filename includes RPM)
+    accel_file = list(base_dir.glob(f'MSG_ACCEL_SAMPLES_step_{pos:02d}_*.csv'))[0]
+    hall_file = list(base_dir.glob(f'MSG_HALL_EVENT_step_{pos:02d}_*.csv'))[0]
+    
+    df = pd.read_csv(accel_file)
+    hall_df = pd.read_csv(hall_file)
+    
+    results.append({
+        'position': pos,
+        'rpm': rpm,
+        'accel_df': df,
+        'hall_df': hall_df,
+    })
 ```
 
-This direction should be **consistent across speeds**å
+Quick sanity checks:
+- Verify file sizes are reasonable (not truncated)
+- Check that RPM values in manifest match pre-computed `rpm` column means
+- Confirm expected number of rotations per step
 
-The precession axis is related to (but not exactly equal to) the heavy spot location.
+### Step 2: Calculate Per-Step Metrics
 
-### Phase Analysis
+For each speed step, calculate:
 
-To find where the heavy spot is relative to the Hall sensor:
+```python
+def analyze_step(df, rpm):
+    """Analyze a single speed step's telemetry data."""
+    
+    # Wobble magnitude (pre-computed, or calculate from raw)
+    wobble_mean = df['gyro_wobble_dps'].mean()
+    wobble_std = df['gyro_wobble_dps'].std()
+    
+    # Precession direction from gyro DC offset
+    gx_mean = df['gx_dps'].mean()
+    gy_mean = df['gy_dps'].mean()
+    precession_dir = np.degrees(np.arctan2(gy_mean, gx_mean))
+    
+    return {
+        'rpm': rpm,
+        'rpm_squared': rpm ** 2,
+        'wobble_mean': wobble_mean,
+        'wobble_std': wobble_std,
+        'gx_mean': gx_mean,
+        'gy_mean': gy_mean,
+        'precession_dir': precession_dir,
+    }
+```
 
-1. Bin samples by `angle_deg` (e.g., 10° bins)
-2. Average sensor values in each bin
-3. Fit a sinusoid: `y = A × sin(angle - φ) + offset`
-4. The phase φ indicates the heavy spot position
+### Step 3: Fit Wobble vs RPMÂ²
+
+```python
+def linear_model(x, slope, intercept):
+    return slope * x + intercept
+
+# Extract data for fitting
+rpm_squared = [r['rpm_squared'] for r in step_results]
+wobble = [r['wobble_mean'] for r in step_results]
+
+# Fit
+popt, pcov = curve_fit(linear_model, rpm_squared, wobble)
+slope, intercept = popt
+
+# Calculate RÂ²
+residuals = np.array(wobble) - linear_model(np.array(rpm_squared), *popt)
+ss_res = np.sum(residuals**2)
+ss_tot = np.sum((np.array(wobble) - np.mean(wobble))**2)
+r_squared = 1 - (ss_res / ss_tot)
+
+print(f"Wobble = {slope:.2e} Ã— RPMÂ² + {intercept:.1f}")
+print(f"RÂ² = {r_squared:.3f}")
+```
+
+**Interpreting the fit:**
+
+| RÂ² Value | Interpretation |
+|----------|----------------|
+| > 0.95 | Excellentâ€”classic imbalance dominates |
+| 0.9 - 0.95 | Goodâ€”imbalance is primary effect |
+| 0.7 - 0.9 | Acceptableâ€”some non-ideal behavior present |
+| < 0.7 | Investigateâ€”possible resonance, fixture issues, or multiple imbalance sources |
+
+If RÂ² is poor, check for:
+- Speed steps near a structural resonance (wobble spike at specific RPM)
+- Mechanical issues (loose screws, rubbing, bearing problems)
+- IMU mounting failure (foam tape letting go)
+
+### Step 4: Phase Analysis
+
+Two complementary approaches for determining heavy spot angle:
+
+**Approach A: Precession Direction (simpler)**
+
+The DC offset of GX and GY indicates the tilt direction:
+
+```python
+# Aggregate across all speed steps (weighted by RPMÂ² for emphasis on higher speeds)
+weights = np.array([r['rpm_squared'] for r in step_results])
+weights = weights / weights.sum()
+
+gx_weighted = sum(r['gx_mean'] * w for r, w in zip(step_results, weights))
+gy_weighted = sum(r['gy_mean'] * w for r, w in zip(step_results, weights))
+
+precession_angle = np.degrees(np.arctan2(gy_weighted, gx_weighted))
+```
+
+Check consistency: precession direction should be stable across speeds (std < 10Â°) if operating in a consistent regime. Large shifts between speeds indicate resonance effects.
+
+**Approach B: Sinusoid Fit to Angle-Binned Data (more robust)**
+
+Bin samples by angular position and fit a sinusoid:
 
 ```python
 def sinusoid(x, amp, phase, offset):
     return amp * np.sin(np.radians(x - phase)) + offset
+
+def fit_phase(df, signal_col='gy_dps', bin_width=10):
+    """Fit sinusoid to angle-binned signal to extract phase."""
+    
+    # Create angle bins
+    bins = np.arange(0, 360 + bin_width, bin_width)
+    df['angle_bin'] = pd.cut(df['angle_deg'], bins=bins, labels=bins[:-1])
+    
+    # Average signal in each bin
+    binned = df.groupby('angle_bin')[signal_col].mean()
+    angles = binned.index.astype(float) + bin_width/2  # bin centers
+    values = binned.values
+    
+    # Initial guess
+    amp_guess = (values.max() - values.min()) / 2
+    phase_guess = angles[np.argmax(values)]
+    offset_guess = values.mean()
+    
+    # Fit
+    try:
+        popt, _ = curve_fit(sinusoid, angles, values, 
+                           p0=[amp_guess, phase_guess, offset_guess])
+        amp, phase, offset = popt
+        
+        # Calculate RÂ²
+        predicted = sinusoid(angles, *popt)
+        ss_res = np.sum((values - predicted)**2)
+        ss_tot = np.sum((values - values.mean())**2)
+        r_squared = 1 - (ss_res / ss_tot)
+        
+        return {'amplitude': amp, 'phase': phase, 'offset': offset, 'r_squared': r_squared}
+    except:
+        return None
 ```
 
-**Quality metric**: R² of the sinusoid fit
-- R² > 0.3: Good, trust this estimate
-- R² 0.1-0.3: Weak but usable
-- R² < 0.1: Too noisy, discard
+Quality thresholds for sinusoid fit RÂ²:
 
-### Counterweight Calculation
+| RÂ² Value | Interpretation |
+|----------|----------------|
+| > 0.5 | Strong signalâ€”trust this phase estimate |
+| 0.3 - 0.5 | Moderateâ€”usable but verify with multiple speeds |
+| < 0.3 | Weakâ€”likely dominated by noise, use precession direction instead |
 
+### Step 5: Determine Counterweight Placement
+
+Combining the phase measurement with corrections:
+
+```python
+def calculate_counterweight_angle(measured_phase, operating_regime='above_critical'):
+    """
+    Calculate counterweight placement angle.
+    
+    Args:
+        measured_phase: Phase from precession direction or sinusoid fit (degrees)
+        operating_regime: 'below_critical', 'above_critical', or 'unknown'
+    
+    Returns:
+        Recommended counterweight angle (degrees, 0-360)
+    """
+    
+    HALL_OFFSET = 6.0       # Hall triggers 6Â° before magnet (from HARDWARE.md)
+    GYRO_INTEGRATION = 90.0  # Gyroscope measures rate, not displacement
+    
+    if operating_regime == 'below_critical':
+        phase_lag = 0.0
+    elif operating_regime == 'above_critical':
+        phase_lag = 180.0
+    else:
+        # Conservative: assume above critical if low-RPM vibration > high-RPM
+        phase_lag = 180.0
+    
+    # Heavy spot location
+    heavy_spot = measured_phase - phase_lag + HALL_OFFSET + GYRO_INTEGRATION
+    
+    # Counterweight goes opposite
+    counterweight = heavy_spot + 180.0
+    
+    # Normalize to 0-360
+    counterweight = counterweight % 360
+    
+    return counterweight, heavy_spot % 360
 ```
-Counterweight moment = mass × radius
 
-To balance:
-  m_counterweight × r_counterweight = m_imbalance × r_imbalance
+---
 
-Placement:
-  angle_counterweight = angle_heavy_spot + 180°
+## The Influence Coefficient Method
+
+Industrial balancers don't rely solely on theoretical phase corrections. Instead, they empirically calibrate the relationship between weight placement and vibration response. This approach implicitly captures all system dynamics without requiring accurate theoretical models.
+
+### Procedure
+
+1. **Baseline run:** Measure vibration vector Vâ‚€ (magnitude and phase) at a fixed test speed
+
+2. **Trial weight run:** Add a known trial weight W_trial at a known angle, measure new vibration Vâ‚
+
+3. **Calculate influence coefficient:**
+   ```
+   C = (Vâ‚ - Vâ‚€) / W_trial
+   
+   Where all quantities are complex vectors:
+     V = magnitude Ã— e^(i Ã— phase)
+     W_trial = mass Ã— radius Ã— e^(i Ã— angle)
+   ```
+
+4. **Calculate correction weight:**
+   ```
+   W_correction = -Vâ‚€ / C
+   ```
+
+5. **Apply and verify:** Remove trial weight, add correction weight at calculated angle, confirm vibration reduction
+
+### Implementation
+
+```python
+def influence_coefficient_balance(v0_mag, v0_phase, v1_mag, v1_phase,
+                                   trial_mass, trial_radius, trial_angle):
+    """
+    Calculate correction weight using influence coefficient method.
+    
+    Args:
+        v0_mag, v0_phase: Baseline vibration (magnitude in Â°/s, phase in degrees)
+        v1_mag, v1_phase: Vibration with trial weight
+        trial_mass: Trial weight mass (grams)
+        trial_radius: Trial weight radius from center (mm)
+        trial_angle: Trial weight angle (degrees)
+    
+    Returns:
+        correction_mass, correction_angle, expected_reduction
+    """
+    
+    # Convert to complex vectors
+    V0 = v0_mag * np.exp(1j * np.radians(v0_phase))
+    V1 = v1_mag * np.exp(1j * np.radians(v1_phase))
+    W_trial = (trial_mass * trial_radius) * np.exp(1j * np.radians(trial_angle))
+    
+    # Influence coefficient
+    delta_V = V1 - V0
+    C = delta_V / W_trial
+    
+    # Correction weight
+    W_correction = -V0 / C
+    
+    correction_moment = np.abs(W_correction)  # gÂ·mm
+    correction_angle = np.degrees(np.angle(W_correction)) % 360
+    
+    # Expected reduction (theoreticalâ€”actual will vary)
+    expected_residual = np.abs(V0 + C * W_correction)
+    expected_reduction = (v0_mag - expected_residual) / v0_mag * 100
+    
+    return {
+        'correction_moment_gmm': correction_moment,
+        'correction_angle': correction_angle,
+        'expected_reduction_pct': expected_reduction,
+        'influence_coefficient': C,
+    }
 ```
+
+### Why This Works
+
+The influence coefficient captures everything:
+- Phase lag from critical speed effects
+- Sensor integration offsets
+- Mounting geometry quirks
+- Bearing and support characteristics
+
+No theoretical corrections neededâ€”it's purely empirical. The tradeoff is requiring an extra test run with a trial weight.
+
+### Trial Weight Guidelines
+
+- Use a weight that produces measurable but not dangerous vibration change (aim for 20-50% increase)
+- Place at a convenient known angle (e.g., at an arm position: 60Â°, 180Â°, or 300Â°)
+- Use the same test speed for baseline, trial, and verification runs
+- Ensure good repeatability between runs (let system stabilize)
 
 ---
 
 ## Counterweight Options
 
-Cory is using coins as balancing weights.  We want to find the correct location for the correct weight.
+US coins as balancing weights:
 
-### Available Coins (US Currency)
+| Coin | Mass | At 50mm radius | At 100mm radius |
+|------|------|----------------|-----------------|
+| Dime | 2.27g | 113.5 gÂ·mm | 227 gÂ·mm |
+| Penny | 2.50g | 125 gÂ·mm | 250 gÂ·mm |
+| Nickel | 5.00g | 250 gÂ·mm | 500 gÂ·mm |
+| Quarter | 5.67g | 283.5 gÂ·mm | 567 gÂ·mm |
 
-| Coin | Mass |
-|------|------|
-| Dime | 2.27g |
-| Penny | 2.50g |
-| Nickel | 5.00g |
-| Quarter | 5.67g |
+For reference, the ISO G 6.3 permissible unbalance for this rotor is 3.3 gÂ·mmâ€”even a dime at the arm tips represents ~70Ã— the "acceptable" imbalance for precision machinery. For a POV display, you're balancing for vibration reduction and bearing life, not precision grinding, so practical targets are less stringent.
 
 ### Tuning Strategy
 
-**Two adjustment axes**:
+Two adjustment axes:
+1. **Mass:** Swap coin type (discrete steps)
+2. **Radius:** Move coin in/out along arm (continuous adjustment)
 
-1. **Mass**: Swap coin type (discrete steps)
-2. **Radius**: Move coin in/out (continuous adjustment)
+Since moment = mass Ã— radius, moving a coin inward is equivalent to using a lighter coin. Fine-tuning radius is more precise than swapping coins.
 
-Since `moment = mass × radius`:
-- Moving a nickel **inward by 10%** reduces moment by 10%
-- This is more precise than swapping between coin types
+### Practical Process
 
-### Typical Process
-
-1) Determine what angle to use relative to the hall effect sensor and establish a baseline with no counterbalance applied
-2) Place a weight somewhere along that angle
-3) Run the test, collect the data
-4) Compare against baseline
-5) Make adjustments by moving the current coin in or out radialially or changing the coin for a lighter or heavier one.
-6) Goto step three until happy with result.
-
-### Notes
-
-* It's a pain to adjust the weight, it's held on by painters tape.  This is why i'd like to first establish a fixed angle along the top of the rotor to place weights.  I'll draw it in with a permanent marker or something.
+1. Establish baseline with no counterweight
+2. Mark a reference line on the rotor at the calculated counterweight angle
+3. Place initial weight (start with a dime or penny)
+4. Capture telemetry, compare wobble to baseline
+5. Adjust:
+   - Wobble decreased â†’ good direction, fine-tune mass/radius
+   - Wobble increased â†’ wrong angle or overcorrected, reassess
+   - Wobble unchanged â†’ weight too small or wrong angle
+6. Iterate until satisfied
 
 ---
 
-## Analysis Sequence
+## Interpreting Results
 
-### For a Single Dataset (Per-Step Capture)
+### Good Balance Indicators
 
-```python
-import json
-from pathlib import Path
+- âœ… Wobble reduced by 50%+ from unbalanced baseline
+- âœ… Precession direction stable (std < 10Â°) across speeds
+- âœ… Wobble vs RPMÂ² maintains good RÂ² after correction
+- âœ… No audible resonance or table shaking at operating speeds
 
-# 1. Load manifest
-base_dir = Path('/mnt/user-data/uploads/telemetry_run')
-with open(base_dir / 'manifest.json') as f:
-    manifest = json.load(f)
+### Warning Signs
 
-# 2. Load data from each speed directory
-results = []
-for step in manifest['steps']:
-    if not step['success']:
-        continue
-    pos = step['position']
-    step_dir = base_dir / f'speed_{pos:02d}'
+- âš ï¸ Crossover behavior (weight helps at low RPM, hurts at high RPM) â†’ weight affecting balance in wrong plane, or near resonance
+- âš ï¸ Precession direction shifts significantly between configs â†’ multiple imbalance sources
+- âš ï¸ Poor RÂ² on wobble fit â†’ possible resonance, mechanical issues, or complex dynamics
+- âš ï¸ Inconsistent phase estimates across speeds â†’ operating near critical speed
 
-    df = pd.read_csv(step_dir / 'MSG_ACCEL_SAMPLES.csv')
-    hall_df = pd.read_csv(step_dir / 'MSG_HALL_EVENT.csv')
+### Physical Checks
 
-    # All samples are steady-state (no windowing needed)
-    results.append({
-        'position': pos,
-        'rpm': step['rpm'],
-        'accel_df': df,
-        'hall_df': hall_df,
-    })
-
-# 3. Per-step analysis (on full dataset, no windowing):
-#    - Mean RPM (from manifest or df['rpm'].mean())
-#    - Mean wobble (gyro_wobble_dps)
-#    - Mean GX, GY
-#    - Precession direction = atan2(gy_mean, gx_mean)
-#    - Phase analysis via sinusoid fit
-
-# 4. Aggregate analysis:
-#    - Wobble vs RPM² fit (expect R² > 0.9)
-#    - Precession direction consistency (expect std < 5°)
-#    - Weighted phase estimate for counterweight placement
-
-# 5. Generate plots:
-#    - Wobble vs RPM with quadratic fit
-#    - Precession direction by step
-#    - GX vs GY (should be linear, ~45° line)
-#    - Angle-binned sensor data at different speeds
-#    - Polar plot of phase estimates
-```
-
-### For A/B Comparison (With vs Without Weight)
-
-```python
-# 1. Analyze both datasets independently
-
-# 2. Compare:
-#    - Wobble at each speed step (% change)
-#    - Precession direction shift
-#    - Wobble slope (×10⁻⁵) change
-
-# 3. Interpret:
-#    - Wobble increased without weight → weight was helping
-#    - Crossover behavior (helps at low RPM, hurts at high) → weight too heavy or slightly misplaced
-#    - Precession direction stable → intrinsic imbalance direction unchanged
-```
+If data looks anomalous:
+- Is the IMU still attached? (foam tape can fail under vibration)
+- Is there mechanical rubbing or interference?
+- Are all screws tight?
+- Is the motor running smoothly?
+- Did anything shift between runs?
 
 ---
 
-## Key Metrics to Report
+## Reporting Format
 
-### Per-Step Table
+### Per-Step Summary Table
 
-| Step | RPM | Wobble (°/s) | GX | GY | Prec. Dir |
-|------|-----|--------------|----|----|-----------|
+| Step | RPM | Wobble (Â°/s) | GX mean | GY mean | Precession Dir |
+|------|-----|--------------|---------|---------|----------------|
+| 1 | 245 | 12.3 | -5.2 | 8.1 | 122Â° |
+| 2 | 312 | 18.7 | -7.8 | 12.4 | 122Â° |
+| ... | ... | ... | ... | ... | ... |
 
 ### Aggregate Summary
 
 ```
-Wobble vs RPM² fit:
-  - Slope: X.XX × 10⁻⁵
-  - R²: 0.XXX
-  
+Wobble vs RPMÂ² fit:
+  Slope: 2.34 Ã— 10â»âµ Â°/s per RPMÂ²
+  Intercept: 3.2 Â°/s
+  RÂ²: 0.967
+
 Precession direction:
-  - Mean: XX.X°
-  - Std: X.X°
-  
+  Mean: 122.4Â°
+  Std: 3.2Â°
+
+Phase analysis (sinusoid fit):
+  Weighted phase: 118.7Â°
+  Mean RÂ²: 0.62
+
 Balance recommendation:
-  - Heavy spot: ~XX° from hall sensor
-  - Counterweight: ~XX° from hall sensor
+  Operating regime: Above critical (inferred from low-RPM > high-RPM vibration)
+  Measured phase: 120Â°
+  Calculated heavy spot: ~36Â°
+  Counterweight placement: ~216Â° from hall sensor
 ```
 
-### For Comparisons
+### A/B Comparison Format
 
 ```
-                    Config A    Config B    Delta
-Wobble slope:       X.XX        X.XX        ±X.XX
-Precession dir:     XX.X°       XX.X°       ±X.X°
-Avg wobble change:  -           -           ±XX.X%
-```
-
-## Calibration Info
-
-> **Canonical hardware reference:** See `docs/led_display/HARDWARE.md` for full hall effect sensor specs.
-
-### From ISR Timestamp to Physical Position
-
-The telemetry timestamp chain:
-
-```
-Physical event          Electrical signal       Software capture
-─────────────────────────────────────────────────────────────────
-Magnet field exceeds  → A3144 output falls   → GPIO_INTR_NEGEDGE  → esp_timer_get_time()
-operate threshold       (0.18μs typical)        ISR fires            records timestamp
-```
-
-**Timing delays in this chain:**
-
-| Stage | Delay | Angular error @ 2800 RPM |
-|-------|-------|--------------------------|
-| Electrical (A3144 fall time) | 0.18μs typ, 2.0μs max | 0.003° typ, 0.034° max |
-| ISR latency (software jitter) | 1-2μs typical | 0.017-0.034° |
-| **Total electrical + software** | **~2μs** | **~0.03°** |
-
-The electrical and software timing are **negligible**. The dominant timing factor is the magnetic field geometry.
-
-### Hall Effect Sensor Angular Offset
-
-The hall sensor triggers **before** reaching the magnet due to magnetic field geometry.
-
-**Physical setup:**
-- Sensor/magnet radius: 52mm from rotation center
-- Air gap at closest approach: 3.5mm
-- Magnet: 5x2mm neodymium disc (~2500-3000 Gauss at surface)
-- A3144 operate threshold: 35-450 Gauss (wide tolerance, ~50 Gauss assumed)
-
-**Calculated offset:**
-
-| Parameter | Value |
-|-----------|-------|
-| Estimated field at 3.5mm gap | ~300 Gauss |
-| Assumed operate threshold | ~50 Gauss |
-| Trigger distance (total) | ~6.4mm |
-| Arc distance at trigger | ~5.3mm |
-| **Angular offset** | **~6°** |
-
-**What this means:**
-- `angle_deg = 0°` in telemetry = sensor is ~6° before the magnet (still approaching)
-- `angle_deg ≈ 6°` in telemetry = sensor at closest approach to magnet
-- The magnet position corresponds to **+6°** in the telemetry reference frame
-
-**For counterweight placement:**
-```
-physical_angle_from_magnet = telemetry_angle - 6°
-```
-
-If analysis says "place counterweight at 180°" (from hall reference), the physical placement is ~174° from the magnet.
-
-**Uncertainty:** ±2-3° due to:
-- A3144 operate point variation (35-450 Gauss range)
-- Magnetic field estimation
-- Air gap measurement tolerance
-
-### Verifying the Offset Empirically
-
-To verify this offset:
-1. Mark a visible reference point on the rotor at a known angle from the hall sensor
-2. Capture telemetry at low RPM (where timing is most accurate)
-3. Look for any signal anomaly (vibration, accelerometer spike) at the reference point
-4. Compare expected vs measured angle in telemetry
-
-## Interpretation Guidelines
-
-### Good Balance Indicators
-
-- ✅ Low wobble magnitude across all speeds
-- ✅ Precession direction std < 5°
-- ✅ Wobble vs RPM² has high R² (system is predictable)
-- ✅ Counterweight reduces wobble at ALL speeds (no crossover)
-
-### Warning Signs
-
-- ⚠️ Crossover behavior (weight helps at low RPM, hurts at high) → adjust counterweight moment
-- ⚠️ Precession direction shifts significantly between configs → weight affecting balance axis
-- ⚠️ Low R² on wobble fit → possible resonance or mechanical issues
-- ⚠️ Inconsistent phase estimates across speeds → sensor noise or complex dynamics
-
-### Physical Checks
-
-If data looks weird:
-- Is the IMU still attached? (tape can fail)
-- Is there mechanical rubbing or interference?
-- Are all screws tight?
-- Is the motor running smoothly?
-
----
-
-## Quick Reference: Analysis Command
-
-When given a telemetry directory, the analysis flow is:
-
-1. **Copy files** using `Filesystem:copy_file_user_to_claude`
-2. **Quick inspection** of file sizes and headers
-3. **Run step-windowed analysis** (last 3s of each 5s step)
-4. **Calculate per-step metrics**: RPM, wobble, GX/GY means, precession direction
-5. **Fit wobble vs RPM²** to confirm imbalance signature
-6. **Phase analysis** to find heavy spot angle
-7. **Generate comparison plots** if doing A/B test
-8. **Report recommendations** for counterweight adjustment
-
----
-
-## Appendix: Example Python Imports
-
-```python
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.optimize import curve_fit
-from scipy.stats import linregress
-import warnings
-warnings.filterwarnings('ignore')
+                      Baseline    With Weight    Change
+Wobble @ 2800 RPM:    45.2 Â°/s    18.7 Â°/s      -59%
+Wobble slope:         2.34e-5     0.89e-5       -62%
+Precession dir:       122Â°        125Â°          +3Â°
 ```
 
 ---
 
-*Document created: 2026-01-12*
+## Quick Reference
+
+### Key Equations
+
+| Quantity | Formula |
+|----------|---------|
+| Wobble magnitude | `âˆš(gxÂ² + gyÂ²)` |
+| Precession direction | `atan2(gy_mean, gx_mean)` |
+| Imbalance force | `F = m Ã— Ï‰Â² Ã— r` |
+| Phase lag | `atan2(2Î¶f, 1-fÂ²)` where f = Ï‰/Ï‰n |
+| Permissible unbalance | `U = 9549 Ã— G Ã— m / n` (gÂ·mm) |
+| Influence coefficient | `C = Î”V / W_trial` |
+
+### Phase Correction Quick Reference
+
+| If operating... | Phase lag | Heavy spot â‰ˆ |
+|-----------------|-----------|--------------|
+| Well below critical | ~0Â° | measured + 96Â° |
+| Well above critical | ~180Â° | measured - 84Â° |
+| Unknown | Use influence coefficient method |
+
+### Sensor Orientation Reminder
+
+- **GX, GY:** Wobble/precessionâ€”the signals you care about
+- **GZ:** Saturated above 333 RPMâ€”ignore for analysis
+- **X accel:** Saturatedâ€”ignore
+- **Y, Z accel:** Available for supplementary phase analysis
+
+---
+
+*Document version: 2026-01-24*
 *For POV Display balancing telemetry analysis*
+*Hardware reference: HARDWARE.md*
