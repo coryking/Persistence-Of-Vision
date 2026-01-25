@@ -173,12 +173,12 @@ def load_and_enrich(data_dir: Path) -> AnalysisContext:
     if "angle_deg" in enriched.columns:
         enriched["phase"] = enriched["angle_deg"] / 360.0
 
-    # Load speed_log if present and assign speed positions
+    # Load speed_log if present and assign speed presets
     speed_log_path = data_dir / "speed_log.csv"
     speed_log = None
     if speed_log_path.exists():
         speed_log = pd.read_csv(speed_log_path)
-        enriched = _assign_speed_positions(enriched, speed_log)
+        enriched = _assign_speed_presets(enriched, speed_log)
 
     # Create plots directory
     plots_dir = data_dir / "plots"
@@ -193,10 +193,10 @@ def load_and_enrich(data_dir: Path) -> AnalysisContext:
     )
 
 
-def _assign_speed_positions(
+def _assign_speed_presets(
     enriched: pd.DataFrame, speed_log: pd.DataFrame
 ) -> pd.DataFrame:
-    """Assign speed_position to each sample based on hall_packets boundaries.
+    """Assign speed_preset to each sample based on hall_packets boundaries.
 
     The speed_log contains cumulative hall_packets counts per position.
     We use these to partition rotation_num ranges:
@@ -209,11 +209,11 @@ def _assign_speed_positions(
         speed_log: DataFrame with position and hall_packets columns
 
     Returns:
-        enriched DataFrame with speed_position column added
+        enriched DataFrame with speed_preset column added
     """
     if "hall_packets" not in speed_log.columns:
         # Old format without hall_packets - can't assign positions
-        enriched["speed_position"] = np.nan
+        enriched["speed_preset"] = np.nan
         return enriched
 
     # Build cumulative rotation boundaries
@@ -237,13 +237,13 @@ def _assign_speed_positions(
 
     # Map indices to actual position values (1-indexed in speed_log)
     # Handle out-of-range rotations (before first or after last position)
-    speed_position = np.where(
+    speed_preset = np.where(
         position_indices < len(positions),
         positions[position_indices],
         np.nan,  # Rotations beyond the last position
     )
 
     enriched = enriched.copy()
-    enriched["speed_position"] = speed_position
+    enriched["speed_preset"] = speed_preset
 
     return enriched

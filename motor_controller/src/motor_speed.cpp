@@ -2,7 +2,7 @@
 #include "hardware_config.h"
 
 static bool motorEnabled = false;
-static int speedPosition = 1;
+static int speedPreset = 1;
 
 static uint8_t positionToPWM(int pos) {
     float percent = PWM_MIN_PERCENT +
@@ -13,13 +13,13 @@ static uint8_t positionToPWM(int pos) {
 
 void motorSpeedInit() {
     motorEnabled = false;
-    speedPosition = 1;
+    speedPreset = 1;
 }
 
 void togglePower() {
     motorEnabled = !motorEnabled;
     if (motorEnabled) {
-        speedPosition = 1;
+        speedPreset = 1;
     }
 }
 
@@ -28,7 +28,7 @@ bool motorPowerOn() {
         return false;  // Already on, no state change
     }
     motorEnabled = true;
-    speedPosition = 1;
+    speedPreset = 1;
     return true;
 }
 
@@ -41,14 +41,14 @@ bool motorPowerOff() {
 }
 
 void speedUp() {
-    if (speedPosition < SPEED_MAX_POS) {
-        speedPosition++;
+    if (speedPreset < SPEED_MAX_POS) {
+        speedPreset++;
     }
 }
 
 void speedDown() {
-    if (speedPosition > SPEED_MIN_POS) {
-        speedPosition--;
+    if (speedPreset > SPEED_MIN_POS) {
+        speedPreset--;
     }
 }
 
@@ -56,13 +56,13 @@ uint8_t getCurrentPWM() {
     if (!motorEnabled) {
         return 0;
     }
-    return positionToPWM(speedPosition);
+    return positionToPWM(speedPreset);
 }
 
 bool isEnabled() {
     return motorEnabled;
 }
 
-int getPosition() {
-    return speedPosition;
+int getSpeedPreset() {
+    return speedPreset;
 }

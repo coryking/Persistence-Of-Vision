@@ -31,8 +31,9 @@ def status(
                 # Motor status
                 motor_on = device_status.get("motor_enabled") == "1"
                 motor_state = "[green]ON[/green]" if motor_on else "[red]OFF[/red]"
-                position = device_status.get("speed_position", "?")
-                console.print(f"Motor: {motor_state} (position {position})")
+                preset = device_status.get("speed_preset", "?")
+                pwm = device_status.get("pwm_duty", "?")
+                console.print(f"Motor: {motor_state} (preset {preset}, pwm {pwm})")
 
                 # Capture status
                 capture = device_status.get("capture_state", "UNKNOWN")

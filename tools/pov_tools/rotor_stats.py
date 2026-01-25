@@ -13,6 +13,7 @@ class RotorStats:
     ROTOR_STATS seq=%lu created=%llu updated=%llu hall=%lu outliers=%lu
                 last_outlier_us=%lu hall_avg_us=%lu rpm=%lu espnow_ok=%lu espnow_fail=%lu
                 render=%u skip=%u not_rot=%u effect=%u brightness=%u
+                speedPreset=%d pwm=%u
     """
 
     seq: int
@@ -30,6 +31,8 @@ class RotorStats:
     not_rot: int
     effect: int
     brightness: int
+    speedPreset: int
+    pwm: int
 
     # Pattern for key=value pairs (handles both %lu and %u formats)
     _KV_PATTERN = re.compile(r"(\w+)=(\d+)")
@@ -65,6 +68,8 @@ class RotorStats:
                 not_rot=data["not_rot"],
                 effect=data["effect"],
                 brightness=data["brightness"],
+                speedPreset=data["speedPreset"],
+                pwm=data["pwm"],
             )
         except KeyError:
             # Missing required field - incomplete line
@@ -74,5 +79,6 @@ class RotorStats:
         """Format for display (single line, key info)."""
         return (
             f"ROTOR_STATS seq={self.seq} rpm={self.rpm} effect={self.effect} "
-            f"brightness={self.brightness} espnow={self.espnow_ok}/{self.espnow_ok + self.espnow_fail}"
+            f"brightness={self.brightness} speedPreset={self.speedPreset} pwm={self.pwm} "
+            f"espnow={self.espnow_ok}/{self.espnow_ok + self.espnow_fail}"
         )

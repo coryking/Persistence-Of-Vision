@@ -38,8 +38,8 @@ def gyro_wobble_analysis(ctx: AnalysisContext) -> AnalysisResult:
     if precession_plot:
         plots.append(precession_plot)
 
-    # C. Gyro Phase Analysis (per speed position)
-    if ctx.speed_log is not None and "speed_position" in enriched.columns:
+    # C. Gyro Phase Analysis (per speed preset)
+    if ctx.speed_log is not None and "speed_preset" in enriched.columns:
         gyro_phase_plot = _gyro_phase_analysis(ctx, enriched, metrics, findings)
         if gyro_phase_plot:
             plots.append(gyro_phase_plot)
@@ -145,14 +145,14 @@ def _wobble_vs_rpm_analysis(ctx, enriched, metrics, findings):
 
 
 def _precession_analysis(ctx, enriched, metrics, findings):
-    """Analyze precession from GX/GY DC offsets per speed position."""
-    # If we have speed positions, analyze per position
-    if ctx.speed_log is not None and "speed_position" in enriched.columns:
-        positions = enriched["speed_position"].dropna().unique()
+    """Analyze precession from GX/GY DC offsets per speed preset."""
+    # If we have speed presets, analyze per preset
+    if ctx.speed_log is not None and "speed_preset" in enriched.columns:
+        positions = enriched["speed_preset"].dropna().unique()
         positions = sorted([int(p) for p in positions if not np.isnan(p)])
 
         if len(positions) < 2:
-            findings.append("Insufficient speed positions for precession analysis")
+            findings.append("Insufficient speed presets for precession analysis")
             return None
 
         gx_means = []
@@ -161,7 +161,7 @@ def _precession_analysis(ctx, enriched, metrics, findings):
         pos_labels = []
 
         for pos in positions:
-            pos_data = enriched[enriched["speed_position"] == pos]
+            pos_data = enriched[enriched["speed_preset"] == pos]
             # Exclude first 2 seconds of each position (transition)
             if "timestamp_us" in pos_data.columns and len(pos_data) > 100:
                 t0 = pos_data["timestamp_us"].min()
@@ -216,7 +216,7 @@ def _precession_analysis(ctx, enriched, metrics, findings):
         ax.set_xlabel("Mean GX (°/s)")
         ax.set_ylabel("Mean GY (°/s)")
         ax.set_title(
-            f"Precession Direction by Speed Position\n(Direction consistency: std={circ_std:.0f}°)"
+            f"Precession Direction by Speed Preset\n(Direction consistency: std={circ_std:.0f}°)"
         )
         ax.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
         ax.axvline(x=0, color="gray", linestyle="--", alpha=0.5)
@@ -234,11 +234,11 @@ def _precession_analysis(ctx, enriched, metrics, findings):
 
 
 def _gyro_phase_analysis(ctx, enriched, metrics, findings):
-    """Fit sinusoids to GX/GY vs angle at each speed position."""
+    """Fit sinusoids to GX/GY vs angle at each speed preset."""
     if "angle_deg" not in enriched.columns:
         return None
 
-    positions = enriched["speed_position"].dropna().unique()
+    positions = enriched["speed_preset"].dropna().unique()
     positions = sorted([int(p) for p in positions if not np.isnan(p)])
 
     if len(positions) < 2:
@@ -248,7 +248,7 @@ def _gyro_phase_analysis(ctx, enriched, metrics, findings):
     phase_results = []
 
     for pos in positions:
-        pos_data = enriched[enriched["speed_position"] == pos].copy()
+        pos_data = enriched[enriched["speed_preset"] == pos].copy()
 
         # Exclude first 2 seconds
         if "timestamp_us" in pos_data.columns and len(pos_data) > 100:

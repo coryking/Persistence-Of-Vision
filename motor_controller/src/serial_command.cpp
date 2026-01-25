@@ -26,7 +26,8 @@ static const char* captureStateStr(CaptureState state) {
 // Unified STATUS command - returns all state in key: value format
 static void statusSerial() {
     Serial.printf("motor_enabled: %d\n", isEnabled() ? 1 : 0);
-    Serial.printf("speed_position: %d\n", getPosition());
+    Serial.printf("speed_preset: %d\n", getSpeedPreset());
+    Serial.printf("pwm_duty: %u\n", getCurrentPWM());
     Serial.printf("capture_state: %s\n", captureStateStr(getCaptureState()));
     Serial.printf("rx_hall_packets: %u\n", getRxHallPackets());
     Serial.printf("rx_accel_packets: %u\n", getRxAccelPackets());

@@ -11,18 +11,18 @@ from ..types import AnalysisContext, AnalysisResult
 def phase_analysis(ctx: AnalysisContext) -> AnalysisResult:
     """Analyze phase patterns and generate polar disc plots.
 
-    Uses speed positions from speed_log if available, otherwise falls back
+    Uses speed presets from speed_log if available, otherwise falls back
     to hardcoded RPM thresholds for backward compatibility.
     """
-    if ctx.speed_log is not None and "speed_position" in ctx.enriched.columns:
+    if ctx.speed_log is not None and "speed_preset" in ctx.enriched.columns:
         return _phase_analysis_by_position(ctx)
     else:
         return _phase_analysis_fallback(ctx)
 
 
 def _phase_analysis_by_position(ctx: AnalysisContext) -> AnalysisResult:
-    """Phase analysis using speed positions from speed_log."""
-    enriched = ctx.enriched.dropna(subset=["rpm", "speed_position"])
+    """Phase analysis using speed presets from speed_log."""
+    enriched = ctx.enriched.dropna(subset=["rpm", "speed_preset"])
     enriched = enriched[enriched["rpm"] < 10000]  # Remove glitch rotations
 
     plots = []
@@ -37,24 +37,24 @@ def _phase_analysis_by_position(ctx: AnalysisContext) -> AnalysisResult:
     n_bins = 72  # 5 degree resolution
     angles = np.linspace(0, 2 * np.pi, n_bins, endpoint=False)
 
-    positions = enriched["speed_position"].dropna().unique()
+    positions = enriched["speed_preset"].dropna().unique()
     positions = sorted([int(p) for p in positions if not np.isnan(p)])
 
     if len(positions) == 0:
-        findings.append("No valid speed positions found")
+        findings.append("No valid speed presets found")
         return AnalysisResult(
             name="phase_analysis", metrics=metrics, plots=plots, findings=findings
         )
 
-    findings.append(f"Analyzing {len(positions)} speed positions")
+    findings.append(f"Analyzing {len(positions)} speed presets")
 
     # Collect phase estimates from all positions and axes
     all_phase_estimates = []
 
-    # Identify low and high speed positions
+    # Identify low and high speed presets
     pos_rpm_means = {}
     for pos in positions:
-        pos_data = enriched[enriched["speed_position"] == pos]
+        pos_data = enriched[enriched["speed_preset"] == pos]
         pos_rpm_means[pos] = pos_data["rpm"].mean()
 
     # Sort positions by RPM
@@ -64,7 +64,7 @@ def _phase_analysis_by_position(ctx: AnalysisContext) -> AnalysisResult:
 
     # --- ANALYSIS PER POSITION ---
     for pos in positions:
-        pos_data = enriched[enriched["speed_position"] == pos].copy()
+        pos_data = enriched[enriched["speed_preset"] == pos].copy()
 
         # Exclude first 2 seconds for steady-state
         if "timestamp_us" in pos_data.columns and len(pos_data) > 100:
@@ -126,12 +126,12 @@ def _phase_analysis_by_position(ctx: AnalysisContext) -> AnalysisResult:
         metrics["phase_by_position"][f"position_{pos}"] = position_results
 
     # --- LOW SPEED POLAR PLOT ---
-    low_data = enriched[enriched["speed_position"].isin(low_positions)].copy()
+    low_data = enriched[enriched["speed_preset"].isin(low_positions)].copy()
     if len(low_data) > 100:
         # Exclude transitions
         if "timestamp_us" in low_data.columns:
             for pos in low_positions:
-                pos_mask = low_data["speed_position"] == pos
+                pos_mask = low_data["speed_preset"] == pos
                 if pos_mask.sum() > 100:
                     t0 = low_data.loc[pos_mask, "timestamp_us"].min()
                     low_data = low_data[
@@ -151,12 +151,12 @@ def _phase_analysis_by_position(ctx: AnalysisContext) -> AnalysisResult:
             findings.append(f"Low speed: {len(low_data):,} samples from positions {low_positions}")
 
     # --- HIGH SPEED POLAR PLOT AND FFT ---
-    high_data = enriched[enriched["speed_position"].isin(high_positions)].copy()
+    high_data = enriched[enriched["speed_preset"].isin(high_positions)].copy()
     if len(high_data) > 100:
         # Exclude transitions
         if "timestamp_us" in high_data.columns:
             for pos in high_positions:
-                pos_mask = high_data["speed_position"] == pos
+                pos_mask = high_data["speed_preset"] == pos
                 if pos_mask.sum() > 100:
                     t0 = high_data.loc[pos_mask, "timestamp_us"].min()
                     high_data = high_data[

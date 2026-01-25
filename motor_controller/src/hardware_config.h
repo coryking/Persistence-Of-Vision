@@ -33,6 +33,6 @@
 #define SPEED_MIN_POS      1
 #define SPEED_MAX_POS     10
 #define PWM_MIN_PERCENT   65.0f  // Minimum for reliable starting
-#define PWM_MAX_PERCENT   80.0f  // Safe maximum speed
+#define PWM_MAX_PERCENT  100.0f  // Maximum speed
 
 #endif // HARDWARE_CONFIG_H

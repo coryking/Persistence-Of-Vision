@@ -50,10 +50,10 @@ Simple modular design with IR remote control and ESP-NOW communication:
 
 **PWM Configuration**: 18kHz, 8-bit (validated to eliminate audible whine)
 
-**Speed Mapping**: Linear map from position 1-10 to PWM 65%-80%
-- 10 speed positions (no OFF position)
+**Speed Mapping**: Linear map from preset 1-10 to PWM 65%-80%
+- 10 speed presets (no OFF preset)
 - Power button enables/disables motor (sets PWM to 0 when disabled)
-- Always starts at position 1 (65% PWM) when powered on
+- Always starts at preset 1 (65% PWM) when powered on
 - PWM range limited to 65%-80% for safety and reliable starting
 
 ## Hardware Configuration
@@ -78,7 +78,7 @@ All pins and constants are defined in `src/hardware_config.h`:
 - `src/hardware_config.h` - Pin definitions and PWM constants
 - `src/main.cpp` - Main Arduino sketch (initialization and main loop)
 - `src/motor_control.{h,cpp}` - L298N motor driver interface
-- `src/motor_speed.{h,cpp}` - Speed state management (10 positions, on/off)
+- `src/motor_speed.{h,cpp}` - Speed state management (10 presets, on/off)
 - `src/remote_input.{h,cpp}` - IR receiver (SageTV RC5 remote decoding)
 - `src/commands.h` - Command enum (effects, brightness, power, speed)
 - `src/command_processor.{h,cpp}` - Routes commands to motor or ESP-NOW

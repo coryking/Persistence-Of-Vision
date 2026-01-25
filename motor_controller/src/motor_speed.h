@@ -13,6 +13,6 @@ void speedDown();
 
 uint8_t getCurrentPWM();
 bool isEnabled();
-int getPosition();
+int getSpeedPreset();
 
 #endif // MOTOR_SPEED_H

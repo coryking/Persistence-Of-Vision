@@ -39,7 +39,9 @@ The motor controller logs ROTOR_STATS to serial when receiving `RotorStatsMsg`. 
 
 Format:
 ```
-ROTOR_STATS seq=N created=T updated=T hall=N ... effect=N brightness=N
+ROTOR_STATS seq=N created=T updated=T hall=N ... effect=N brightness=N speedPreset=N pwm=N
 ```
+
+The `speedPreset` (1-10) and `pwm` (0-255) fields are added by the motor controller from its local state.
 
 See `motor_controller/src/espnow_comm.cpp:61` for the format string.

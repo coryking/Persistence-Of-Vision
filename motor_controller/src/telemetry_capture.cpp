@@ -1,5 +1,6 @@
 #include "telemetry_capture.h"
 #include "messages.h"
+#include "motor_speed.h"
 #include <Arduino.h>
 #include <esp_partition.h>
 #include <esp_now.h>
@@ -333,6 +334,8 @@ static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
             rec.notRotatingCount = msg->notRotatingCount;
             rec.effectNumber = msg->effectNumber;
             rec.brightness = msg->brightness;
+            rec.speedPreset = static_cast<uint8_t>(getSpeedPreset());
+            rec.pwmValue = getCurrentPWM();
 
             writeStatsRecord(rec);
             break;
@@ -537,7 +540,8 @@ static void dumpStatsCSV(bool scriptMode) {
         Serial.printf("=== FILE: MSG_ROTOR_STATS.bin (%lu records) ===\n", count);
     }
     Serial.println("seq,created_us,updated_us,hall_total,outliers,last_outlier_us,"
-                   "hall_avg_us,espnow_ok,espnow_fail,render,skip,not_rot,effect,brightness");
+                   "hall_avg_us,espnow_ok,espnow_fail,render,skip,not_rot,effect,brightness,"
+                   "speed_preset,pwm");
 
     static RotorStatsRecord records[78];  // ~4KB worth (78 * 52 = 4056)
     size_t offset = sizeof(TelemetryHeader);
@@ -554,12 +558,12 @@ static void dumpStatsCSV(bool scriptMode) {
 
         for (uint32_t i = 0; i < batch; i++) {
             const RotorStatsRecord& r = records[i];
-            Serial.printf("%u,%llu,%llu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+            Serial.printf("%u,%llu,%llu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
                           r.reportSequence, r.created_us, r.lastUpdated_us,
                           r.hallEventsTotal, r.hallOutliersFiltered, r.lastOutlierInterval_us,
                           r.hallAvg_us, r.espnowSendAttempts - r.espnowSendFailures, r.espnowSendFailures,
                           r.renderCount, r.skipCount, r.notRotatingCount,
-                          r.effectNumber, r.brightness);
+                          r.effectNumber, r.brightness, r.speedPreset, r.pwmValue);
         }
 
         offset += bytes;

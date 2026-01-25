@@ -38,7 +38,7 @@ def validation_analysis(ctx: AnalysisContext) -> AnalysisResult:
     _spin_direction_detection(enriched, metrics, findings)
 
     # C. RPM Stability Per Position
-    if ctx.speed_log is not None and "speed_position" in enriched.columns:
+    if ctx.speed_log is not None and "speed_preset" in enriched.columns:
         stability_plot = _rpm_stability_analysis(ctx, enriched, metrics, findings)
         if stability_plot:
             plots.append(stability_plot)
@@ -164,8 +164,8 @@ def _spin_direction_detection(enriched, metrics, findings):
 
 
 def _rpm_stability_analysis(ctx, enriched, metrics, findings):
-    """Analyze RPM stability per speed position."""
-    positions = enriched["speed_position"].dropna().unique()
+    """Analyze RPM stability per speed preset."""
+    positions = enriched["speed_preset"].dropna().unique()
     positions = sorted([int(p) for p in positions if not np.isnan(p)])
 
     if len(positions) < 2:
@@ -174,7 +174,7 @@ def _rpm_stability_analysis(ctx, enriched, metrics, findings):
     stability_results = []
 
     for pos in positions:
-        pos_data = enriched[enriched["speed_position"] == pos].copy()
+        pos_data = enriched[enriched["speed_preset"] == pos].copy()
 
         # Exclude first 2 seconds (transition)
         if "timestamp_us" in pos_data.columns and len(pos_data) > 100:
@@ -237,9 +237,9 @@ def _rpm_stability_analysis(ctx, enriched, metrics, findings):
     stds = [r["std_rpm"] for r in stability_results]
 
     ax.errorbar(positions_plot, means, yerr=stds, fmt="o-", capsize=5, capthick=2)
-    ax.set_xlabel("Speed Position")
+    ax.set_xlabel("Speed Preset")
     ax.set_ylabel("RPM")
-    ax.set_title(f"RPM Stability by Speed Position\n(Error bars = 1 std, avg std={avg_std:.1f} RPM)")
+    ax.set_title(f"RPM Stability by Speed Preset\n(Error bars = 1 std, avg std={avg_std:.1f} RPM)")
     ax.grid(True, alpha=0.3)
 
     # Add annotations for drift

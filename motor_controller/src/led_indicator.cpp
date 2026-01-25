@@ -71,7 +71,7 @@ void ledLoop() {
         setRGB(255, 128, 0);
     } else {  // RUNNING
         // Solid color gradient based on speed position
-        int pos = getPosition();
+        int pos = getSpeedPreset();
         RGBColor color = calculateRunningColor(pos);
         setRGB(color.r, color.g, color.b);
     }

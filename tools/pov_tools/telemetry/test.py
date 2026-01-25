@@ -21,7 +21,7 @@ from ..serial_comm import (
     DEFAULT_PORT,
 )
 from ..rotor_stats import RotorStats
-from ..constants import ButtonCommand, CALIBRATION_EFFECT, MAX_SPEED_POSITION
+from ..constants import ButtonCommand, CALIBRATION_EFFECT, MAX_SPEED_PRESET
 from .utils import create_timestamped_dir, TELEMETRY_DIR
 
 console = Console()
@@ -225,9 +225,9 @@ def run_test_sequence(
 ) -> TestResult:
     """Execute per-step telemetry capture.
 
-    For each speed position (1 to MAX_SPEED_POSITION):
+    For each speed preset (1 to MAX_SPEED_PRESET):
     1. Delete telemetry files on device (~5s, serves as motor settle time)
-    2. Increase speed to target position
+    2. Increase speed to target preset
     3. Start recording (instant, no erase)
     4. Wait record_time seconds
     5. Stop recording
@@ -277,31 +277,31 @@ def run_test_sequence(
 
         conn.on_rotor_stats = on_rotor_stats
 
-        # Get initial position
+        # Get initial preset
         status = conn.status()
-        if "speed_position" not in status:
-            result.error = "STATUS missing speed_position - firmware mismatch?"
+        if "speed_preset" not in status:
+            result.error = "STATUS missing speed_preset - firmware mismatch?"
             return result
-        current_position = int(status["speed_position"])
-        console.print(f"[dim]Initial position: {current_position}[/dim]")
+        current_preset = int(status["speed_preset"])
+        console.print(f"[dim]Initial preset: {current_preset}[/dim]")
         console.print()
 
         # Track previous step metrics for delta calculation
         previous_metrics: Optional[StepMetrics] = None
 
         try:
-            for target_position in range(1, MAX_SPEED_POSITION + 1):
+            for target_preset in range(1, MAX_SPEED_PRESET + 1):
                 console.print(
-                    f"[bold cyan]═══ Speed Position {target_position}/{MAX_SPEED_POSITION} ═══[/bold cyan]"
+                    f"[bold cyan]═══ Speed Preset {target_preset}/{MAX_SPEED_PRESET} ═══[/bold cyan]"
                 )
 
                 step_result = StepResult(
-                    position=target_position,
+                    position=target_preset,
                     file_suffix="",  # Will be set after RPM is known
                 )
 
-                # 1. Ramp to target position first
-                while current_position < target_position:
+                # 1. Ramp to target preset first
+                while current_preset < target_preset:
                     response = conn.button(ButtonCommand.SPEED_UP)
                     if not response.startswith("OK"):
                         step_result.error = f"Failed to increase speed: {response}"
@@ -310,12 +310,12 @@ def run_test_sequence(
                         result.error = step_result.error
                         break
                     status = conn.status()
-                    current_position = int(status["speed_position"])
+                    current_preset = int(status["speed_preset"])
 
                 if not step_result.success:
                     break
 
-                console.print(f"[dim]At position {current_position}[/dim]")
+                console.print(f"[dim]At preset {current_preset}[/dim]")
 
                 # 2. Delete existing telemetry (~5s erase, serves as settle time)
                 with console.status("[bold]Erasing partitions (settling motor)...[/bold]"):
@@ -382,7 +382,7 @@ def run_test_sequence(
 
                     # Build file suffix with step and RPM
                     rpm_part = f"_{int(step_result.rpm)}rpm" if step_result.rpm else ""
-                    step_result.file_suffix = f"_step_{target_position:02d}{rpm_part}"
+                    step_result.file_suffix = f"_step_{target_preset:02d}{rpm_part}"
 
                     # Display sample counts
                     rpm_str = f", {step_result.rpm:.0f} RPM" if step_result.rpm else ""
@@ -516,8 +516,8 @@ def test(
 ) -> None:
     """Run per-step telemetry capture.
 
-    For each speed position (1-10):
-    1. Increase speed to target position
+    For each speed preset (1-10):
+    1. Increase speed to target preset
     2. Delete telemetry (erase takes ~5s, serves as settle time)
     3. Record for RECORD seconds (default 5)
     4. Dump to flat files with step and RPM suffix
@@ -592,7 +592,7 @@ def test(
         else:
             successful = sum(1 for s in result.steps if s.success)
             console.print(
-                f"[green]Captured {successful}/{len(result.steps)} speed positions[/green]"
+                f"[green]Captured {successful}/{len(result.steps)} speed presets[/green]"
             )
             console.print(f"[dim]Results in: {result.output_dir}[/dim]")
             console.print(f"[dim]Archive: {archive_path}[/dim]")

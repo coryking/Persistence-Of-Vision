@@ -57,4 +57,4 @@ class ButtonCommand(IntEnum):
 
 # Convenience aliases
 CALIBRATION_EFFECT = ButtonCommand.EFFECT10
-MAX_SPEED_POSITION = 10
+MAX_SPEED_PRESET = 10

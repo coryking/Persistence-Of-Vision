@@ -84,9 +84,13 @@ struct RotorStatsRecord {
     // Current state
     uint8_t effectNumber;
     uint8_t brightness;
+
+    // Motor controller state (added by motor controller when storing)
+    uint8_t speedPreset;      // Motor speed preset (1-10)
+    uint8_t pwmValue;         // Actual PWM output (0-255)
 } __attribute__((packed));
 
-static_assert(sizeof(RotorStatsRecord) == 52, "RotorStatsRecord must be 52 bytes");
+static_assert(sizeof(RotorStatsRecord) == 54, "RotorStatsRecord must be 54 bytes");
 
 // =============================================================================
 // Public API
