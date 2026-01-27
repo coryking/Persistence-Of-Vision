@@ -41,8 +41,8 @@ static constexpr float DEFAULT_RESOLUTION = 3.0f;
 static constexpr float RENDER_TIME_SAFETY_MARGIN = 1.5f;
 
 // Outlier rejection: reject impossibly fast intervals (noise/bounce)
-// At 1200 RPM, one revolution takes 50,000 µs - faster than this is noise
-static constexpr interval_t MIN_REASONABLE_INTERVAL = 50000;  // 1200 RPM max
+// At 3000 RPM, one revolution takes 20,000 µs - faster than this is noise
+static constexpr interval_t MIN_REASONABLE_INTERVAL = 20000;  // 3000 RPM max
 
 /**
  * RevolutionTimer - High-precision revolution timing for POV displays

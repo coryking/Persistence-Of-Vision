@@ -100,6 +100,37 @@ class MotorSafetyContext:
         self._motor_started = False
 
 
+def _dump_and_save_step(
+    conn: DeviceConnection,
+    step_result: StepResult,
+    output_dir: Path,
+    position: int,
+) -> bool:
+    """Dump capture data from device and save to files.
+
+    Updates step_result with rpm, file_suffix, and csv_files.
+    Returns True if files were saved, False if no data.
+    """
+    files = conn.dump_captures()
+    if not files:
+        return False
+
+    # Extract RPM from hall event data
+    step_result.rpm = extract_rpm_from_dump(files)
+
+    # Build file suffix with step and RPM
+    rpm_part = f"_{int(step_result.rpm)}rpm" if step_result.rpm else ""
+    step_result.file_suffix = f"_step_{position:02d}{rpm_part}"
+
+    # Save files
+    step_result.csv_files = save_csv_files(files, output_dir, step_result.file_suffix)
+
+    # Enrich accel CSV with derived values
+    enrich_accel_csv(output_dir, step_result.file_suffix)
+
+    return True
+
+
 def compute_step_metrics(output_dir: Path, file_suffix: str) -> Optional[StepMetrics]:
     """Compute metrics from the enriched accel CSV for a step.
 
@@ -289,8 +320,13 @@ def run_test_sequence(
         # Track previous step metrics for delta calculation
         previous_metrics: Optional[StepMetrics] = None
 
+        # Track current step for recovery on interrupt
+        current_step_result: Optional[StepResult] = None
+        current_target_preset: Optional[int] = None
+
         try:
             for target_preset in range(1, MAX_SPEED_PRESET + 1):
+                current_target_preset = target_preset
                 console.print(
                     f"[bold cyan]═══ Speed Preset {target_preset}/{MAX_SPEED_PRESET} ═══[/bold cyan]"
                 )
@@ -299,6 +335,7 @@ def run_test_sequence(
                     position=target_preset,
                     file_suffix="",  # Will be set after RPM is known
                 )
+                current_step_result = step_result
 
                 # 1. Ramp to target preset first
                 while current_preset < target_preset:
@@ -375,15 +412,7 @@ def run_test_sequence(
                     )
 
                 # 6. Dump files, extract RPM, save with suffix
-                files = conn.dump_captures()
-                if files:
-                    # Extract RPM from hall event data
-                    step_result.rpm = extract_rpm_from_dump(files)
-
-                    # Build file suffix with step and RPM
-                    rpm_part = f"_{int(step_result.rpm)}rpm" if step_result.rpm else ""
-                    step_result.file_suffix = f"_step_{target_preset:02d}{rpm_part}"
-
+                if _dump_and_save_step(conn, step_result, output_dir, target_preset):
                     # Display sample counts
                     rpm_str = f", {step_result.rpm:.0f} RPM" if step_result.rpm else ""
                     console.print(
@@ -391,28 +420,21 @@ def run_test_sequence(
                         f"{step_result.hall_packets} hall{rpm_str}[/dim]"
                     )
 
-                    # Save files
-                    saved = save_csv_files(files, output_dir, step_result.file_suffix)
-                    enriched = enrich_accel_csv(output_dir, step_result.file_suffix)
-                    step_result.csv_files = saved
-                    for path in saved:
+                    for path in step_result.csv_files:
                         console.print(f"[green]Saved: {path.name}[/green]")
-                    if enriched:
-                        console.print("[dim]Enriched accel CSV[/dim]")
 
-                        # Compute and display step metrics
-                        metrics = compute_step_metrics(
-                            output_dir, step_result.file_suffix
-                        )
-                        if metrics:
-                            step_result.metrics = metrics
-                            print_step_summary(metrics, previous_metrics)
-                            previous_metrics = metrics
+                    # Compute and display step metrics
+                    metrics = compute_step_metrics(output_dir, step_result.file_suffix)
+                    if metrics:
+                        step_result.metrics = metrics
+                        print_step_summary(metrics, previous_metrics)
+                        previous_metrics = metrics
                 else:
                     console.print("[yellow]No telemetry data captured[/yellow]")
                     step_result.success = False
 
                 result.steps.append(step_result)
+                current_step_result = None  # Clear after successful save
                 console.print()
 
         except KeyboardInterrupt:
@@ -432,6 +454,23 @@ def run_test_sequence(
             console.print("[green]Motor OFF[/green]")
         else:
             console.print(f"[yellow]Warning: motor_off returned {response}[/yellow]")
+
+        # Try to recover partial step data if we were interrupted mid-capture
+        if current_step_result is not None and current_target_preset is not None:
+            console.print("[bold]Recovering partial capture...[/bold]")
+            try:
+                if _dump_and_save_step(
+                    conn, current_step_result, output_dir, current_target_preset
+                ):
+                    result.steps.append(current_step_result)
+                    console.print(
+                        f"[green]Recovered step {current_target_preset}: "
+                        f"{len(current_step_result.csv_files)} files saved[/green]"
+                    )
+                else:
+                    console.print("[yellow]No data to recover[/yellow]")
+            except Exception as e:
+                console.print(f"[yellow]Recovery failed: {e}[/yellow]")
 
     result.completed_at = datetime.now()
     return result
