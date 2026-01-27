@@ -2,7 +2,7 @@
 
 A hobby art project creating beautiful spinning LED displays using Persistence of Vision.
 
-![POV Display Wireless Power Coil](docs/photos/POV%20Display%20Wireless%20Coil.jpeg)
+[![Perlin Noise Effect](docs/photos/tiny-square-perlin-noise.gif)](docs/photos/perlin-noise-in-action.mp4)
 
 ## What is This?
 
@@ -12,12 +12,6 @@ A Persistence of Vision (POV) display creates images by spinning LEDs fast enoug
 - **10+ visual effects** - Rainbow spirals, Perlin noise, test patterns, and more
 - **Real-time rendering** - Calculates what to display based on rotation angle
 - **Wireless power** - Inductive coil eliminates slip rings
-
-### See It In Action
-
-https://github.com/user-attachments/assets/perlin-noise-in-action.mp4
-
-[View Video: Perlin Noise Effect](docs/photos/perlin-noise-in-action.mp4)
 
 ## Hardware
 
@@ -91,7 +85,7 @@ pov telemetry dump      # Download telemetry CSVs
 
 ## Photos
 
-### Inside the Display
+![POV Display Wireless Power Coil](docs/photos/POV%20Display%20Wireless%20Coil.jpeg)
 
 ![Old Display Insides](docs/photos/Old%20Display%20Insides.jpeg)
 
