@@ -19,7 +19,7 @@ See docs/led_display/ for LED display-specific documentation:
 
 See docs/motor_controller/ for motor controller-specific documentation:
 
-- **datasheets/** - L298N motor driver, RP2040 microcontroller datasheets
+- **datasheets/** - L298N motor driver datasheets
 - **archive/** - Outdated docs from previous ESP32/PID/FreeRTOS architecture
 
 ## Shared Documentation

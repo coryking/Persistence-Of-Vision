@@ -42,12 +42,13 @@ motor_controller/
 │   ├── main.cpp              # Main loop, setup
 │   ├── hardware_config.h     # Pin definitions (authoritative for motor controller hardware)
 │   ├── motor_control.h/cpp   # PWM motor control via L298N
-│   ├── encoder_control.h/cpp # Rotary encoder input
+│   ├── motor_speed.h/cpp     # Speed presets and adjustment
+│   ├── remote_input.h/cpp    # IR remote input handling
 │   └── led_indicator.h/cpp   # RGB status LED
 └── platformio.ini            # Build config (ESP32-S3-Zero, pioarduino platform)
 ```
 
-**Hardware:** ESP32-S3-Zero, L298N motor driver, rotary encoder, VS1838B IR receiver
+**Hardware:** ESP32-S3-Zero, L298N motor driver, VS1838B IR receiver, RGB LED
 
 ## LED Display (`led_display/`)
 

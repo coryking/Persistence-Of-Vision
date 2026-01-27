@@ -13,7 +13,7 @@ See **docs/PROJECT_STRUCTURE.md** for the complete, authoritative project layout
   - Rotating LED arrays, effect system, FreeRTOS-based hall sensor processing
 
 - **motor_controller/** - Motor controller firmware (ESP32-S3-Zero)
-  - Simple open-loop PWM control, rotary encoder input, RGB LED status, IR receiver
+  - Simple open-loop PWM control, RGB LED status, IR receiver
 
 - **shared/** - Shared headers for ESP-NOW communication between controllers
 
