@@ -8,7 +8,7 @@ A hobby art project creating beautiful spinning LED displays using Persistence o
 
 A Persistence of Vision (POV) display creates images by spinning LEDs fast enough that your eye blends them into a continuous picture. This project combines:
 
-- **Rotating LED arrays** - 3 arms with 11 LEDs each, creating a 33-row radial display
+- **Rotating LED arrays** - 3 arms with 40 LEDs total, creating a radial display
 - **10+ visual effects** - Rainbow spirals, Perlin noise, test patterns, and more
 - **Real-time rendering** - Calculates what to display based on rotation angle
 - **Wireless power** - Inductive coil eliminates slip rings
@@ -20,7 +20,7 @@ A Persistence of Vision (POV) display creates images by spinning LEDs fast enoug
 | Component | Part |
 |-----------|------|
 | MCU | Seeed XIAO ESP32-S3 |
-| LEDs | HD107S (3 arms × 11 LEDs) |
+| LEDs | HD107S (40 total: 13 + 13 + 14 per arm) |
 | IMU | MPU-9250 (accelerometer/gyroscope) |
 | Position Sensor | A3144 Hall Effect Sensor |
 | Power | 5V wireless inductive coil |

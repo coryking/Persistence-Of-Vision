@@ -7,7 +7,7 @@ ESP32-S3 firmware for the spinning POV display. Renders visual effects in real-t
 | Component | Part | Purpose |
 |-----------|------|---------|
 | MCU | Seeed XIAO ESP32-S3 | Main processor |
-| LEDs | HD107S × 33 | 3 arms, 11 LEDs each |
+| LEDs | HD107S × 40 | 3 arms (13 + 13 + 14) |
 | IMU | MPU-9250 | Vibration/balance telemetry |
 | Position | A3144 Hall Sensor | Rotation timing |
 
