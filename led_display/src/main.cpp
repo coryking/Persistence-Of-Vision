@@ -14,7 +14,7 @@
 #include "EffectManager.h"
 #include "ESPNowComm.h"
 #include "effects/NoiseField.h"
-#include "effects/NoiseFieldRGB.h"
+#include "effects/Radar.h"
 #include "effects/SolidArms.h"
 #include "effects/RpmArc.h"
 #include "effects/PerArmBlobs.h"
@@ -54,7 +54,7 @@ HallEffectDriver hallDriver(HardwareConfig::HALL_PIN);
 
 // Effect instances
 NoiseField noiseFieldEffect;
-NoiseFieldRGB noiseFieldRGBEffect;
+Radar radarEffect;
 SolidArms solidArmsEffect;
 RpmArc rpmArcEffect;
 PerArmBlobs perArmBlobsEffect;
@@ -214,7 +214,7 @@ void setupImu() {
 
 void registerEffects() {
     effectManager.registerEffect(&noiseFieldEffect);
-    effectManager.registerEffect(&noiseFieldRGBEffect);
+    effectManager.registerEffect(&radarEffect);
     effectManager.registerEffect(&solidArmsEffect);
     effectManager.registerEffect(&rpmArcEffect);
     effectManager.registerEffect(&perArmBlobsEffect);
