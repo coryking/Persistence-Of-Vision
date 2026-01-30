@@ -22,6 +22,43 @@ Each arm has 11 radial LEDs. The "virtual 33-pixel radial line" is a useful fict
 
 ---
 
+## The Spinning Brightness Floor (PWM + Rotation)
+
+PWM dimming on a spinning display creates a unique visual constraint that affects all effects.
+
+**How PWM works:** The LED isn't actually "dim" - it's fully bright (100%) for a shorter duration. A 10% brightness value means the LED is ON at full intensity for 10% of each PWM cycle, OFF for the remaining 90%.
+
+**The problem with spinning:** On a stationary display, your eye integrates these rapid on/off pulses into perceived dimness. But on a spinning POV display, each "on" pulse happens at a slightly different angular position. At low brightness values:
+
+- The "on" pulses are sparse enough that they don't blend together
+- Instead of smooth dim color, you see discrete bright dots scattered across the arc
+- The effect looks like bubbles, sparkles, or fireflies floating in the dark regions
+
+**Key implications:**
+
+1. **No smooth dark gradients** - You can't smoothly fade to black. At some threshold, the image breaks up from "solid color" into "sparkly dots"
+
+2. **Even RGB(1,1,1) is visible** - It's not invisibly dark; it's noticeably bright but spotty. The LED is at full brightness during its brief "on" time.
+
+3. **Dark-centered palettes work well** - When most noise values map to "dark," you get a field of subtle sparkles with occasional bright pops. This aesthetic works *with* the constraint rather than fighting it.
+
+4. **High contrast is inherent** - The display naturally clips the dark end into discrete dots, so effects tend toward high contrast regardless of intent.
+
+**Exploiting this effect:**
+
+This isn't just a limitation - it's an artistic opportunity:
+
+- **Firefly/bioluminescence effects** - Deliberately use low values to create floating point-sources
+- **Starfield backgrounds** - The sparkle texture reads as distant stars or particles
+- **Ember/spark effects** - Brief bright flashes against darkness
+- **Noise-based textures** - Dark-centered palettes create organic, living textures
+
+**Palette design guidance:**
+
+See `docs/led_display/POV_Perlin_Noise_Color_Theory.md` for palette design strategies (dark-centered vs bright-centered) and noise distribution considerations.
+
+---
+
 ## Core Types
 
 ### RenderContext

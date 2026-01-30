@@ -76,6 +76,8 @@ Put BLACK in the middle, bright colors at edges.
 - Rare accent colors POP dramatically against dark background
 - Looks like: embers, bioluminescence, fireflies, void lightning
 
+**The physics behind this:** On a spinning POV display, "dim" values don't render as smooth darkness. PWM dimming means the LED is at 100% brightness for a short duration - and on a spinning display, those brief pulses appear as discrete sparkles rather than blended dimness. Dark-centered palettes work *with* this effect: the "dark" regions become a subtle sparkle texture, and bright accents pop cleanly against it. See `docs/led_display/EFFECT_SYSTEM_DESIGN.md` § "The Spinning Brightness Floor" for the full explanation.
+
 ## Noise Rescaling
 
 Raw `inoise16()` output ranges ~9000-59500, not 0-65535. FastLED provides rescaling:
