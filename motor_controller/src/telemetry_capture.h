@@ -59,7 +59,7 @@ struct HallRecordRaw {
 
 static_assert(sizeof(HallRecordRaw) == 12, "HallRecordRaw must be 12 bytes");
 
-// Rotor stats for flash storage (52 bytes, from RotorStatsMsg minus type byte)
+// Rotor stats for flash storage (from RotorStatsMsg minus type byte)
 // Kept as-is since it's infrequently written (~2/sec)
 struct RotorStatsRecord {
     uint32_t reportSequence;          // Report sequence number
@@ -68,9 +68,14 @@ struct RotorStatsRecord {
 
     // Hall sensor stats
     uint32_t hallEventsTotal;         // Total hall events since reset
-    uint32_t hallOutliersFiltered;    // Rejected events
-    uint32_t lastOutlierInterval_us;  // Most recent bad interval
     period_t hallAvg_us;              // Smoothed period
+
+    // Enhanced outlier tracking (separate counters by rejection reason)
+    uint32_t outliersTooFast;         // Rejected: < MIN_REASONABLE_INTERVAL
+    uint32_t outliersTooSlow;         // Rejected: > MAX_INTERVAL_RATIO * avg
+    uint32_t outliersRatioLow;        // Rejected: < MIN_INTERVAL_RATIO * avg
+    uint32_t lastOutlierInterval_us;  // Most recent rejected interval
+    uint8_t lastOutlierReason;        // 0=none, 1=too_fast, 2=too_slow, 3=ratio_low
 
     // ESP-NOW stats
     uint32_t espnowSendAttempts;
@@ -90,7 +95,7 @@ struct RotorStatsRecord {
     uint8_t pwmValue;         // Actual PWM output (0-255)
 } __attribute__((packed));
 
-static_assert(sizeof(RotorStatsRecord) == 54, "RotorStatsRecord must be 54 bytes");
+static_assert(sizeof(RotorStatsRecord) == 63, "RotorStatsRecord must be 63 bytes");
 
 // =============================================================================
 // Public API

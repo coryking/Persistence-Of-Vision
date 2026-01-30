@@ -40,9 +40,15 @@ static constexpr size_t NUM_VALID_RESOLUTIONS = sizeof(VALID_RESOLUTIONS) / size
 static constexpr float DEFAULT_RESOLUTION = 3.0f;
 static constexpr float RENDER_TIME_SAFETY_MARGIN = 1.5f;
 
-// Outlier rejection: reject impossibly fast intervals (noise/bounce)
+// Outlier rejection constants
 // At 3000 RPM, one revolution takes 20,000 µs - faster than this is noise
 static constexpr interval_t MIN_REASONABLE_INTERVAL = 20000;  // 3000 RPM max
+
+// Ratio-based rejection (only applied when smoothedInterval is valid)
+// MAX_INTERVAL_RATIO catches missed triggers (expect ~2x if one missed)
+// MIN_INTERVAL_RATIO catches spurious triggers that passed absolute check
+static constexpr float MAX_INTERVAL_RATIO = 2.5f;  // reject if > 2.5x average
+static constexpr float MIN_INTERVAL_RATIO = 0.4f;  // reject if < 0.4x average
 
 /**
  * RevolutionTimer - High-precision revolution timing for POV displays
@@ -124,17 +130,39 @@ public:
         if (hasInterval) {
             interval = timestamp - lastTimestamp;
 
-            // OUTLIER REJECTION: Reject impossibly fast intervals (noise/bounce).
-            // Slow intervals are legitimate (hand-spin mode).
+            // CASE 1: Absolute minimum (noise/bounce) - < 20ms at any speed
+            // DO NOT update lastTimestamp - preserve valid reference point
             if (interval < MIN_REASONABLE_INTERVAL) {
-                // Reject this sample - don't update lastInterval or rolling average
-                // But DO update lastTimestamp so next interval is calculated correctly
-                portENTER_CRITICAL(&_spinlock);
-                lastTimestamp = timestamp;
-                portEXIT_CRITICAL(&_spinlock);
-                // Record outlier for diagnostics
-                RotorDiagnosticStats::instance().recordOutlier(interval);
+                RotorDiagnosticStats::instance().recordOutlierTooFast(interval);
                 return;
+            }
+
+            // CASE 2: Ratio-based rejection (only when we have valid average)
+            // Get smoothedInterval with brief lock (read-only)
+            interval_t currentSmoothed;
+            portENTER_CRITICAL(&_spinlock);
+            currentSmoothed = smoothedInterval;
+            portEXIT_CRITICAL(&_spinlock);
+
+            if (currentSmoothed > 0) {
+                float ratio = static_cast<float>(interval) / static_cast<float>(currentSmoothed);
+
+                // Too slow = likely missed trigger (interval is 2x+ expected)
+                // DO update lastTimestamp - we need to resync to current trigger
+                if (ratio > MAX_INTERVAL_RATIO) {
+                    portENTER_CRITICAL(&_spinlock);
+                    lastTimestamp = timestamp;
+                    portEXIT_CRITICAL(&_spinlock);
+                    RotorDiagnosticStats::instance().recordOutlierTooSlow(interval);
+                    return;
+                }
+
+                // Too fast vs average = spurious trigger passed absolute check
+                // DO NOT update lastTimestamp - preserve valid reference point
+                if (ratio < MIN_INTERVAL_RATIO) {
+                    RotorDiagnosticStats::instance().recordOutlierRatioLow(interval);
+                    return;
+                }
             }
         }
 

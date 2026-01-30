@@ -324,9 +324,12 @@ static void processMessage(uint8_t msgType, const uint8_t* data, size_t len) {
             rec.created_us = msg->created_us;
             rec.lastUpdated_us = msg->lastUpdated_us;
             rec.hallEventsTotal = msg->hallEventsTotal;
-            rec.hallOutliersFiltered = msg->hallOutliersFiltered;
-            rec.lastOutlierInterval_us = msg->lastOutlierInterval_us;
             rec.hallAvg_us = msg->hallAvg_us;
+            rec.outliersTooFast = msg->outliersTooFast;
+            rec.outliersTooSlow = msg->outliersTooSlow;
+            rec.outliersRatioLow = msg->outliersRatioLow;
+            rec.lastOutlierInterval_us = msg->lastOutlierInterval_us;
+            rec.lastOutlierReason = msg->lastOutlierReason;
             rec.espnowSendAttempts = msg->espnowSendAttempts;
             rec.espnowSendFailures = msg->espnowSendFailures;
             rec.renderCount = msg->renderCount;
@@ -539,8 +542,9 @@ static void dumpStatsCSV(bool scriptMode) {
     } else {
         Serial.printf("=== FILE: MSG_ROTOR_STATS.bin (%lu records) ===\n", count);
     }
-    Serial.println("seq,created_us,updated_us,hall_total,outliers,last_outlier_us,"
-                   "hall_avg_us,espnow_ok,espnow_fail,render,skip,not_rot,effect,brightness,"
+    Serial.println("seq,created_us,updated_us,hall_total,hall_avg_us,"
+                   "outliers_fast,outliers_slow,outliers_ratio,last_outlier_us,last_outlier_reason,"
+                   "espnow_ok,espnow_fail,render,skip,not_rot,effect,brightness,"
                    "speed_preset,pwm");
 
     static RotorStatsRecord records[78];  // ~4KB worth (78 * 52 = 4056)
@@ -558,10 +562,12 @@ static void dumpStatsCSV(bool scriptMode) {
 
         for (uint32_t i = 0; i < batch; i++) {
             const RotorStatsRecord& r = records[i];
-            Serial.printf("%u,%llu,%llu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
+            Serial.printf("%u,%llu,%llu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u\n",
                           r.reportSequence, r.created_us, r.lastUpdated_us,
-                          r.hallEventsTotal, r.hallOutliersFiltered, r.lastOutlierInterval_us,
-                          r.hallAvg_us, r.espnowSendAttempts - r.espnowSendFailures, r.espnowSendFailures,
+                          r.hallEventsTotal, r.hallAvg_us,
+                          r.outliersTooFast, r.outliersTooSlow, r.outliersRatioLow,
+                          r.lastOutlierInterval_us, r.lastOutlierReason,
+                          r.espnowSendAttempts - r.espnowSendFailures, r.espnowSendFailures,
                           r.renderCount, r.skipCount, r.notRotatingCount,
                           r.effectNumber, r.brightness, r.speedPreset, r.pwmValue);
         }

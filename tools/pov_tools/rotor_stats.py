@@ -9,9 +9,11 @@ from typing import Optional
 class RotorStats:
     """Parsed ROTOR_STATS message from LED display.
 
-    Format matches motor_controller/src/espnow_comm.cpp:61:
-    ROTOR_STATS seq=%lu created=%llu updated=%llu hall=%lu outliers=%lu
-                last_outlier_us=%lu hall_avg_us=%lu rpm=%lu espnow_ok=%lu espnow_fail=%lu
+    Format matches motor_controller/src/espnow_comm.cpp:
+    ROTOR_STATS seq=%lu created=%llu updated=%llu hall=%lu
+                outliers_fast=%lu outliers_slow=%lu outliers_ratio=%lu
+                last_outlier_us=%lu last_outlier_reason=%u hall_avg_us=%lu rpm=%lu
+                espnow_ok=%lu espnow_fail=%lu
                 render=%u skip=%u not_rot=%u effect=%u brightness=%u
                 speedPreset=%d pwm=%u
     """
@@ -20,8 +22,11 @@ class RotorStats:
     created: int
     updated: int
     hall: int
-    outliers: int
+    outliers_fast: int
+    outliers_slow: int
+    outliers_ratio: int
     last_outlier_us: int
+    last_outlier_reason: int
     hall_avg_us: int
     rpm: int
     espnow_ok: int
@@ -57,8 +62,11 @@ class RotorStats:
                 created=data["created"],
                 updated=data["updated"],
                 hall=data["hall"],
-                outliers=data["outliers"],
+                outliers_fast=data["outliers_fast"],
+                outliers_slow=data["outliers_slow"],
+                outliers_ratio=data["outliers_ratio"],
                 last_outlier_us=data["last_outlier_us"],
+                last_outlier_reason=data["last_outlier_reason"],
                 hall_avg_us=data["hall_avg_us"],
                 rpm=data["rpm"],
                 espnow_ok=data["espnow_ok"],
@@ -75,10 +83,16 @@ class RotorStats:
             # Missing required field - incomplete line
             return None
 
+    @property
+    def total_outliers(self) -> int:
+        """Total outliers across all categories."""
+        return self.outliers_fast + self.outliers_slow + self.outliers_ratio
+
     def __str__(self) -> str:
         """Format for display (single line, key info)."""
         return (
             f"ROTOR_STATS seq={self.seq} rpm={self.rpm} effect={self.effect} "
             f"brightness={self.brightness} speedPreset={self.speedPreset} pwm={self.pwm} "
+            f"outliers(f/s/r)={self.outliers_fast}/{self.outliers_slow}/{self.outliers_ratio} "
             f"espnow={self.espnow_ok}/{self.espnow_ok + self.espnow_fail}"
         )

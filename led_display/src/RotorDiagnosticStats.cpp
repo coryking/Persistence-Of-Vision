@@ -65,9 +65,12 @@ void RotorDiagnosticStats::reset() {
     _created_us = esp_timer_get_time();
     _lastUpdated_us = _created_us;
     _hallEventsTotal = 0;
-    _hallOutliersFiltered = 0;
-    _lastOutlierInterval_us = 0;
     _hallAvg_us = 0;
+    _outliersTooFast = 0;
+    _outliersTooSlow = 0;
+    _outliersRatioLow = 0;
+    _lastOutlierInterval_us = 0;
+    _lastOutlierReason = 0;
     _espnowSendAttempts = 0;
     _espnowSendFailures = 0;
     _renderCount = 0;
@@ -87,10 +90,29 @@ void RotorDiagnosticStats::recordHallEvent() {
     portEXIT_CRITICAL(&_spinlock);
 }
 
-void RotorDiagnosticStats::recordOutlier(interval_t interval_us) {
+void RotorDiagnosticStats::recordOutlierTooFast(interval_t interval_us) {
     portENTER_CRITICAL(&_spinlock);
-    _hallOutliersFiltered++;
+    _outliersTooFast++;
     _lastOutlierInterval_us = static_cast<uint32_t>(interval_us);
+    _lastOutlierReason = 1;  // too_fast
+    _lastUpdated_us = esp_timer_get_time();
+    portEXIT_CRITICAL(&_spinlock);
+}
+
+void RotorDiagnosticStats::recordOutlierTooSlow(interval_t interval_us) {
+    portENTER_CRITICAL(&_spinlock);
+    _outliersTooSlow++;
+    _lastOutlierInterval_us = static_cast<uint32_t>(interval_us);
+    _lastOutlierReason = 2;  // too_slow
+    _lastUpdated_us = esp_timer_get_time();
+    portEXIT_CRITICAL(&_spinlock);
+}
+
+void RotorDiagnosticStats::recordOutlierRatioLow(interval_t interval_us) {
+    portENTER_CRITICAL(&_spinlock);
+    _outliersRatioLow++;
+    _lastOutlierInterval_us = static_cast<uint32_t>(interval_us);
+    _lastOutlierReason = 3;  // ratio_low
     _lastUpdated_us = esp_timer_get_time();
     portEXIT_CRITICAL(&_spinlock);
 }
@@ -136,10 +158,13 @@ void RotorDiagnosticStats::setHallAvgUs(period_t avgUs) {
 
 void RotorDiagnosticStats::print() const {
     portENTER_CRITICAL(&_spinlock);
-    Serial.printf("[RotorStats] seq=%lu hall=%lu outliers=%lu lastOutlier=%luus "
-                  "espnow=%lu/%lu render=%u skip=%u notRot=%u effect=%u bright=%u\n",
-                  _reportSequence, _hallEventsTotal, _hallOutliersFiltered,
-                  _lastOutlierInterval_us, _espnowSendAttempts - _espnowSendFailures,
+    Serial.printf("[RotorStats] seq=%lu hall=%lu outliers(fast/slow/ratio)=%lu/%lu/%lu "
+                  "lastOutlier=%luus(reason=%u) espnow=%lu/%lu render=%u skip=%u notRot=%u "
+                  "effect=%u bright=%u\n",
+                  _reportSequence, _hallEventsTotal,
+                  _outliersTooFast, _outliersTooSlow, _outliersRatioLow,
+                  _lastOutlierInterval_us, _lastOutlierReason,
+                  _espnowSendAttempts - _espnowSendFailures,
                   _espnowSendAttempts, _renderCount, _skipCount, _notRotatingCount,
                   _effectNumber, _brightness);
     portEXIT_CRITICAL(&_spinlock);
@@ -165,9 +190,14 @@ void RotorDiagnosticStats::sendViaEspNow() {
 
     // Hall sensor stats
     msg.hallEventsTotal = _hallEventsTotal;
-    msg.hallOutliersFiltered = _hallOutliersFiltered;
-    msg.lastOutlierInterval_us = _lastOutlierInterval_us;
     msg.hallAvg_us = _hallAvg_us;
+
+    // Enhanced outlier tracking
+    msg.outliersTooFast = _outliersTooFast;
+    msg.outliersTooSlow = _outliersTooSlow;
+    msg.outliersRatioLow = _outliersRatioLow;
+    msg.lastOutlierInterval_us = _lastOutlierInterval_us;
+    msg.lastOutlierReason = _lastOutlierReason;
 
     // ESP-NOW stats
     msg.espnowSendAttempts = _espnowSendAttempts;

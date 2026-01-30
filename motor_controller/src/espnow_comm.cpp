@@ -59,13 +59,16 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
         if (!isDumpInProgress()) {
             const RotorStatsMsg* msg = reinterpret_cast<const RotorStatsMsg*>(data);
             uint32_t rpm = (msg->hallAvg_us > 0) ? (60000000UL / msg->hallAvg_us) : 0;
-            Serial.printf("ROTOR_STATS seq=%lu created=%llu updated=%llu hall=%lu outliers=%lu "
-                          "last_outlier_us=%lu hall_avg_us=%lu rpm=%lu espnow_ok=%lu espnow_fail=%lu "
+            Serial.printf("ROTOR_STATS seq=%lu created=%llu updated=%llu hall=%lu "
+                          "outliers_fast=%lu outliers_slow=%lu outliers_ratio=%lu "
+                          "last_outlier_us=%lu last_outlier_reason=%u hall_avg_us=%lu rpm=%lu "
+                          "espnow_ok=%lu espnow_fail=%lu "
                           "render=%u skip=%u not_rot=%u effect=%u brightness=%u "
                           "speedPreset=%d pwm=%u\n",
                           msg->reportSequence, msg->created_us, msg->lastUpdated_us,
-                          msg->hallEventsTotal, msg->hallOutliersFiltered,
-                          msg->lastOutlierInterval_us, msg->hallAvg_us, rpm,
+                          msg->hallEventsTotal,
+                          msg->outliersTooFast, msg->outliersTooSlow, msg->outliersRatioLow,
+                          msg->lastOutlierInterval_us, msg->lastOutlierReason, msg->hallAvg_us, rpm,
                           msg->espnowSendAttempts - msg->espnowSendFailures, msg->espnowSendFailures,
                           msg->renderCount, msg->skipCount, msg->notRotatingCount,
                           msg->effectNumber, msg->brightness,

@@ -40,9 +40,14 @@ struct RotorStatsMsg {
 
     // Hall sensor stats
     uint32_t hallEventsTotal;         // 4 bytes - total since reset
-    uint32_t hallOutliersFiltered;    // 4 bytes - rejected (< 50ms)
-    uint32_t lastOutlierInterval_us;  // 4 bytes - most recent bad interval
     period_t hallAvg_us;              // 4 bytes - smoothed period (for RPM calc)
+
+    // Enhanced outlier tracking (separate counters by rejection reason)
+    uint32_t outliersTooFast;         // 4 bytes - intervals < MIN_REASONABLE_INTERVAL
+    uint32_t outliersTooSlow;         // 4 bytes - intervals > MAX_INTERVAL_RATIO * avg
+    uint32_t outliersRatioLow;        // 4 bytes - intervals < MIN_INTERVAL_RATIO * avg
+    uint32_t lastOutlierInterval_us;  // 4 bytes - most recent rejected interval
+    uint8_t lastOutlierReason;        // 1 byte - 0=none, 1=too_fast, 2=too_slow, 3=ratio_low
 
     // ESP-NOW stats
     uint32_t espnowSendAttempts;      // 4 bytes
@@ -57,7 +62,7 @@ struct RotorStatsMsg {
     uint8_t effectNumber;             // 1 byte
     uint8_t brightness;               // 1 byte
 } __attribute__((packed));
-// Size: 53 bytes (well under ESP-NOW limit)
+// Size: 62 bytes (well under ESP-NOW limit)
 
 // Motor Controller -> Display: Reset diagnostic stats
 // Zeros all counters and updates created_us

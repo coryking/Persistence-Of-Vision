@@ -64,11 +64,24 @@ public:
     void recordHallEvent();
 
     /**
-     * Record an outlier that was filtered
-     * Called from RevolutionTimer when interval < MIN_REASONABLE_INTERVAL
+     * Record outlier rejected for being too fast (< MIN_REASONABLE_INTERVAL)
      * @param interval_us The rejected interval in microseconds
      */
-    void recordOutlier(interval_t interval_us);
+    void recordOutlierTooFast(interval_t interval_us);
+
+    /**
+     * Record outlier rejected for being too slow (> MAX_INTERVAL_RATIO * avg)
+     * Likely a missed trigger - interval is 2x+ expected
+     * @param interval_us The rejected interval in microseconds
+     */
+    void recordOutlierTooSlow(interval_t interval_us);
+
+    /**
+     * Record outlier rejected for ratio below threshold (< MIN_INTERVAL_RATIO * avg)
+     * Spurious trigger that passed absolute check but failed ratio check
+     * @param interval_us The rejected interval in microseconds
+     */
+    void recordOutlierRatioLow(interval_t interval_us);
 
     /**
      * Record ESP-NOW send result
@@ -125,9 +138,14 @@ private:
 
     // Hall sensor stats
     uint32_t _hallEventsTotal = 0;      // Total hall events since reset
-    uint32_t _hallOutliersFiltered = 0; // Rejected events (< MIN_REASONABLE_INTERVAL)
-    uint32_t _lastOutlierInterval_us = 0; // Most recent bad interval
     period_t _hallAvg_us = 0;           // Smoothed hall period
+
+    // Enhanced outlier tracking (separate counters by rejection reason)
+    uint32_t _outliersTooFast = 0;      // Rejected: < MIN_REASONABLE_INTERVAL
+    uint32_t _outliersTooSlow = 0;      // Rejected: > MAX_INTERVAL_RATIO * avg
+    uint32_t _outliersRatioLow = 0;     // Rejected: < MIN_INTERVAL_RATIO * avg
+    uint32_t _lastOutlierInterval_us = 0; // Most recent rejected interval
+    uint8_t _lastOutlierReason = 0;     // 0=none, 1=too_fast, 2=too_slow, 3=ratio_low
 
     // ESP-NOW stats
     uint32_t _espnowSendAttempts = 0;   // Total send attempts
