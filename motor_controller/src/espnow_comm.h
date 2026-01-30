@@ -43,4 +43,7 @@ uint32_t getRxRotorStatsPackets();
 // Send reset command to LED display (resets RotorDiagnosticStats counters)
 void sendResetRotorStats();
 
+// Send display power command to LED display (follows motor power state)
+void sendDisplayPower(bool enabled);
+
 #endif // ESPNOW_COMM_H

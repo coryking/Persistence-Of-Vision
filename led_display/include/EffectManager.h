@@ -5,6 +5,7 @@
 #include "RotorDiagnosticStats.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include <atomic>
 
 /**
  * Command types for cross-core communication
@@ -17,6 +18,7 @@ enum class EffectCommandType : uint8_t {
     EFFECT_MODE_PREV = 5,
     EFFECT_PARAM_UP = 6,
     EFFECT_PARAM_DOWN = 7,
+    DISPLAY_POWER = 8,
 };
 
 /**
@@ -135,6 +137,9 @@ public:
                         Serial.println("[EffectManager] Param -> down");
                     }
                     break;
+                case EffectCommandType::DISPLAY_POWER:
+                    setDisplayEnabled(cmd.value != 0);
+                    break;
             }
         }
     }
@@ -237,12 +242,27 @@ public:
         }
     }
 
+    /**
+     * Set display power state (controls whether LEDs render or go black)
+     * @param enabled true = render effects, false = LEDs off
+     */
+    void setDisplayEnabled(bool enabled) {
+        displayEnabled.store(enabled);
+        Serial.printf("[EffectManager] Display power -> %s\n", enabled ? "ON" : "OFF");
+    }
+
+    /**
+     * Check if display rendering is enabled
+     */
+    bool isDisplayEnabled() const { return displayEnabled.load(); }
+
 private:
     Effect* effects[MAX_EFFECTS];
     uint8_t effectCount;
     uint8_t currentIndex;     // 0-based internally
     uint8_t brightness;       // 0-10 scale
     QueueHandle_t commandQueue;
+    std::atomic<bool> displayEnabled{true};  // Power state (true = render, false = off)
 };
 
 #endif // EFFECT_MANAGER_H

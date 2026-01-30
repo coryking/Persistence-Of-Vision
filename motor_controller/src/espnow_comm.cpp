@@ -229,3 +229,14 @@ void sendResetRotorStats() {
         Serial.printf("[ESPNOW] RESET_ROTOR_STATS failed: %s\n", esp_err_to_name(result));
     }
 }
+
+void sendDisplayPower(bool enabled) {
+    DisplayPowerMsg msg;
+    msg.enabled = enabled ? 1 : 0;
+    esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
+    if (result == ESP_OK) {
+        Serial.printf("[ESPNOW] Sent DISPLAY_POWER %s\n", enabled ? "ON" : "OFF");
+    } else {
+        Serial.printf("[ESPNOW] DISPLAY_POWER failed: %s\n", esp_err_to_name(result));
+    }
+}

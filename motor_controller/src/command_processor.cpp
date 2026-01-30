@@ -26,6 +26,7 @@ void processCommand(Command cmd) {
         case Command::PowerToggle:
             togglePower();
             motorSetSpeed(getCurrentPWM());
+            sendDisplayPower(isEnabled());  // Sync display power with motor
             if (isEnabled()) {
                 ledShowRunning();
             } else {

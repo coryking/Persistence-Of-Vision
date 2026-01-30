@@ -68,6 +68,16 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
             Serial.println("[ESPNOW] Rotor stats reset");
             break;
         }
+        case MSG_DISPLAY_POWER: {
+            if (len < sizeof(DisplayPowerMsg)) {
+                Serial.println("[ESPNOW] DisplayPower msg too short");
+                return;
+            }
+            const DisplayPowerMsg* msg = reinterpret_cast<const DisplayPowerMsg*>(data);
+            EffectCommand cmd = {EffectCommandType::DISPLAY_POWER, msg->enabled};
+            xQueueSend(effectManager.getCommandQueue(), &cmd, 0);
+            break;
+        }
         default:
             Serial.printf("[ESPNOW] Unknown message type: %u\n", msgType);
             break;

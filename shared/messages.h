@@ -22,6 +22,7 @@ enum MessageType : uint8_t {
     MSG_ROTOR_STATS = 12,      // Periodic diagnostic statistics
     // Commands (Motor Controller -> Display)
     MSG_RESET_ROTOR_STATS = 13, // Reset diagnostic stats counters
+    MSG_DISPLAY_POWER = 14,     // Motor Controller -> Display (power on/off)
 };
 
 // =============================================================================
@@ -99,6 +100,12 @@ struct EffectParamUpMsg {
 // Motor Controller -> Display: Effect parameter down (effect-specific, e.g., palette)
 struct EffectParamDownMsg {
     uint8_t type = MSG_EFFECT_PARAM_DOWN;
+} __attribute__((packed));
+
+// Motor Controller -> Display: Power on/off control
+struct DisplayPowerMsg {
+    uint8_t type = MSG_DISPLAY_POWER;
+    uint8_t enabled;  // 1 = on, 0 = off
 } __attribute__((packed));
 
 // =============================================================================

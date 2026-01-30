@@ -265,6 +265,13 @@ void loop() {
     // Process any pending effect/brightness commands
     effectManager.processCommands();
 
+    // Check if display is powered off (motor controller sent power off)
+    if (!effectManager.isDisplayEnabled()) {
+        handleNotRotating(strip);
+        g_lastRenderedSlot = -1;  // Reset so we start fresh when powered back on
+        return;
+    }
+
     // ========== PRECISION TIMING MODEL ==========
     // We render for a FUTURE angular position, then wait until the disc
     // reaches that position before firing Show(). This ensures the angle
