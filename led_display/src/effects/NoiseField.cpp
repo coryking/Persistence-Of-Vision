@@ -41,6 +41,41 @@ static inline uint16_t applyTurbulence(uint16_t val) {
 }
 
 /**
+ * Quantize - reduce to discrete steps for stained-glass effect
+ * Input/output: 0-65535
+ * Creates distinct color "cells" with sharp edges
+ */
+static inline uint16_t applyQuantize(uint16_t val) {
+    // 4 levels: 0, 21845, 43690, 65535
+    return (val >> 14) * 21845;
+}
+
+/**
+ * Expanded center - push values away from center toward edges
+ * Input/output: 0-65535
+ * More frequent accent colors, less dark
+ */
+static inline uint16_t applyExpanded(uint16_t val) {
+    // Amplify distance from center by 1.5x
+    int32_t centered = (int32_t)val - 32768;
+    int32_t expanded = (centered * 3) / 2;  // 1.5x
+    int32_t result = expanded + 32768;
+    return (uint16_t)constrain(result, 0, 65535);
+}
+
+/**
+ * Compressed center - reduce distance from center
+ * Input/output: 0-65535
+ * Rarer accent pops, more subtle sparkle texture (meditative)
+ */
+static inline uint16_t applyCompressed(uint16_t val) {
+    // Reduce distance from center by 0.6x
+    int32_t centered = (int32_t)val - 32768;
+    int32_t compressed = (centered * 3) / 5;  // 0.6x
+    return (uint16_t)(compressed + 32768);
+}
+
+/**
  * Render NoiseField effect - flowing lava texture
  *
  * Uses FastLED's noiseCylinderCRGB for seamless cylindrical noise.
@@ -72,6 +107,9 @@ void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
             switch (contrastMode) {
                 case 1:  palIdx = applySCurve(noiseVal); break;
                 case 2:  palIdx = applyTurbulence(noiseVal); break;
+                case 3:  palIdx = applyQuantize(noiseVal); break;
+                case 4:  palIdx = applyExpanded(noiseVal); break;
+                case 5:  palIdx = applyCompressed(noiseVal); break;
                 default: palIdx = noiseVal; break;  // Mode 0: normal
             }
 
@@ -106,26 +144,36 @@ void NoiseField::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint1
 
 void NoiseField::nextMode() {
     contrastMode = (contrastMode + 1) % CONTRAST_MODE_COUNT;
-    const char* modeNames[] = {"Normal", "S-curve", "Turbulence"};
+    const char* modeNames[] = {"Normal", "S-curve", "Turbulence", "Quantize", "Expanded", "Compressed"};
     Serial.printf("[NoiseField] Contrast mode -> %s (%d)\n", modeNames[contrastMode], contrastMode);
 }
 
 void NoiseField::prevMode() {
     contrastMode = (contrastMode + CONTRAST_MODE_COUNT - 1) % CONTRAST_MODE_COUNT;
-    const char* modeNames[] = {"Normal", "S-curve", "Turbulence"};
+    const char* modeNames[] = {"Normal", "S-curve", "Turbulence", "Quantize", "Expanded", "Compressed"};
     Serial.printf("[NoiseField] Contrast mode -> %s (%d)\n", modeNames[contrastMode], contrastMode);
 }
 
 void NoiseField::paramUp() {
     paletteIndex = (paletteIndex + 1) % NOISE_PALETTE_COUNT;
     palette = *NOISE_PALETTES[paletteIndex];
-    const char* paletteNames[] = {"Ember", "Abyss", "Void", "Firefly"};
+    const char* paletteNames[] = {
+        "Ember", "Abyss", "Void", "Firefly",        // Original
+        "Sunset", "Ice", "Gold", "Lava",            // New hue families
+        "FireIce", "Synthwave",                     // Dual-hue
+        "EmberSubtle", "NeonAbyss"                  // Variations
+    };
     Serial.printf("[NoiseField] Palette -> %s (%d)\n", paletteNames[paletteIndex], paletteIndex);
 }
 
 void NoiseField::paramDown() {
     paletteIndex = (paletteIndex + NOISE_PALETTE_COUNT - 1) % NOISE_PALETTE_COUNT;
     palette = *NOISE_PALETTES[paletteIndex];
-    const char* paletteNames[] = {"Ember", "Abyss", "Void", "Firefly"};
+    const char* paletteNames[] = {
+        "Ember", "Abyss", "Void", "Firefly",        // Original
+        "Sunset", "Ice", "Gold", "Lava",            // New hue families
+        "FireIce", "Synthwave",                     // Dual-hue
+        "EmberSubtle", "NeonAbyss"                  // Variations
+    };
     Serial.printf("[NoiseField] Palette -> %s (%d)\n", paletteNames[paletteIndex], paletteIndex);
 }
