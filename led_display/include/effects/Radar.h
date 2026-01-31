@@ -92,8 +92,9 @@ private:
     // Random seed for target initialization
     uint16_t randomSeed = 12345;
 
-    // === Palette Array (defined in .cpp) ===
-    static const CRGBPalette16 phosphorPalettes[4];
+    // === Palette Arrays (defined in .cpp) ===
+    static const CRGBPalette16 phosphorPalettes[4];  // Blips (full brightness)
+    static const CRGBPalette16 sweepPalettes[4];     // Sweep trail (dimmer)
 
     // === Helper Methods ===
 
@@ -101,9 +102,10 @@ private:
      * Get color from phosphor palette based on decay time
      * @param ageUs Age of the phosphor in microseconds
      * @param maxAgeUs Maximum lifetime before fully dark
+     * @param forSweep true = use dim sweep palette, false = use bright blip palette
      * @return CRGB color from palette lookup
      */
-    CRGB getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs) const;
+    CRGB getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs, bool forSweep) const;
 
     /**
      * Initialize or respawn a world target at random position/velocity

@@ -4,49 +4,98 @@
 #include <cmath>
 
 // ============================================================
-// Phosphor Palettes
+// Phosphor Palettes - BLIP (full brightness for radar returns)
 // ============================================================
 
-// P7 (Blue-White → Yellow-Green) - WWII/Cold War standard
-// Inverse power law shape: fast initial drop, long tail
-DEFINE_GRADIENT_PALETTE(phosphorP7_gp) {
+// P7 Blip - WWII/Cold War standard
+// Inverse power law: very fast initial drop, long dim tail
+DEFINE_GRADIENT_PALETTE(phosphorP7_blip_gp) {
     0,   200, 200, 255,   // Bright blue-white flash
-    32,  150, 200, 150,   // Transitioning
-    96,  100, 180,  50,   // Yellow-green peak
-    192,  50, 100,  25,   // Dim green
+    4,   120, 180, 180,   // Rapid transition
+    16,   80, 160,  80,   // Yellow-green
+    48,   50, 120,  40,   // Dimming
+    128,  25,  60,  20,   // Dim green
     255,   0,   0,   0    // Black
 };
 
-// P12 (Orange, Medium persistence)
-DEFINE_GRADIENT_PALETTE(phosphorP12_gp) {
+// P12 Blip - Orange, Medium persistence
+DEFINE_GRADIENT_PALETTE(phosphorP12_blip_gp) {
     0,   255, 150,  50,   // Bright orange
-    128, 150,  80,  20,   // Mid decay
+    16,  180, 100,  30,   // Quick drop
+    64,  100,  60,  15,   // Dimming
     255,   0,   0,   0    // Black
 };
 
-// P19 (Orange, Very long persistence)
-DEFINE_GRADIENT_PALETTE(phosphorP19_gp) {
+// P19 Blip - Orange, Very long persistence
+DEFINE_GRADIENT_PALETTE(phosphorP19_blip_gp) {
     0,   255, 160,  60,   // Bright orange
-    192, 120,  60,  15,   // Slow decay
+    32,  180, 100,  35,   // Slow initial drop
+    128, 100,  50,  20,   // Long tail
     255,   0,   0,   0    // Black
 };
 
-// P1 (Green, Fast decay) - Classic oscilloscope
-DEFINE_GRADIENT_PALETTE(phosphorP1_gp) {
+// P1 Blip - Green, Fast decay (oscilloscope)
+DEFINE_GRADIENT_PALETTE(phosphorP1_blip_gp) {
     0,   100, 255, 100,   // Bright green
-    64,   50, 150,  50,   // Fast decay
+    8,    60, 180,  60,   // Very fast drop
+    32,   30, 100,  30,   // Dim quickly
     255,   0,   0,   0    // Black
 };
 
 // ============================================================
-// Static Palette Array
+// Phosphor Palettes - SWEEP (dimmer for ambient glow, ~35%)
+// ============================================================
+
+// P7 Sweep - dim ambient glow version
+DEFINE_GRADIENT_PALETTE(phosphorP7_sweep_gp) {
+    0,    70,  70,  90,   // Dim blue-white
+    4,    42,  63,  63,   // Rapid transition
+    16,   28,  56,  28,   // Yellow-green
+    48,   18,  42,  14,   // Dimming
+    128,   9,  21,   7,   // Very dim green
+    255,   0,   0,   0    // Black
+};
+
+// P12 Sweep - dim orange
+DEFINE_GRADIENT_PALETTE(phosphorP12_sweep_gp) {
+    0,    90,  52,  18,   // Dim orange
+    16,   63,  35,  10,   // Quick drop
+    64,   35,  21,   5,   // Dimming
+    255,   0,   0,   0    // Black
+};
+
+// P19 Sweep - dim orange long
+DEFINE_GRADIENT_PALETTE(phosphorP19_sweep_gp) {
+    0,    90,  56,  21,   // Dim orange
+    32,   63,  35,  12,   // Slow drop
+    128,  35,  18,   7,   // Long tail
+    255,   0,   0,   0    // Black
+};
+
+// P1 Sweep - dim green fast
+DEFINE_GRADIENT_PALETTE(phosphorP1_sweep_gp) {
+    0,    35,  90,  35,   // Dim green
+    8,    21,  63,  21,   // Very fast drop
+    32,   10,  35,  10,   // Dim quickly
+    255,   0,   0,   0    // Black
+};
+
+// ============================================================
+// Static Palette Arrays
 // ============================================================
 
 const CRGBPalette16 Radar::phosphorPalettes[4] = {
-    phosphorP7_gp,
-    phosphorP12_gp,
-    phosphorP19_gp,
-    phosphorP1_gp
+    phosphorP7_blip_gp,
+    phosphorP12_blip_gp,
+    phosphorP19_blip_gp,
+    phosphorP1_blip_gp
+};
+
+const CRGBPalette16 Radar::sweepPalettes[4] = {
+    phosphorP7_sweep_gp,
+    phosphorP12_sweep_gp,
+    phosphorP19_sweep_gp,
+    phosphorP1_sweep_gp
 };
 
 // ============================================================
@@ -165,7 +214,7 @@ Blip* Radar::findFreeBlip() {
 // Phosphor Color Lookup
 // ============================================================
 
-CRGB Radar::getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs) const {
+CRGB Radar::getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs, bool forSweep) const {
     if (ageUs >= maxAgeUs) {
         return CRGB::Black;
     }
@@ -174,8 +223,10 @@ CRGB Radar::getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs) const {
     // 0 = fresh (bright), 255 = fully decayed (black)
     uint8_t paletteIndex = static_cast<uint8_t>((ageUs * 255ULL) / maxAgeUs);
 
-    // Get palette for current phosphor type
-    const CRGBPalette16& palette = phosphorPalettes[static_cast<uint8_t>(currentPhosphorType)];
+    // Select palette: sweep uses dimmer palette, blips use full brightness
+    const CRGBPalette16& palette = forSweep
+        ? sweepPalettes[static_cast<uint8_t>(currentPhosphorType)]
+        : phosphorPalettes[static_cast<uint8_t>(currentPhosphorType)];
 
     // LINEARBLEND_NOWRAP prevents wrapping from index 255 back to 0
     // (default LINEARBLEND would blend black→white at end of palette)
@@ -287,9 +338,9 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
                 uint64_t sweepPeriodUs = (static_cast<uint64_t>(ANGLE_FULL_CIRCLE) * currentMicrosPerRev) / SWEEP_ANGLE_PER_REV;
                 uint64_t timeSinceSweepUs = (static_cast<uint64_t>(distBehind) * sweepPeriodUs) / ANGLE_FULL_CIRCLE;
 
-                // Get phosphor color based on time since sweep
+                // Get phosphor color based on time since sweep (dim sweep palette)
                 if (timeSinceSweepUs < SWEEP_DECAY_TIME_US) {
-                    color = getPhosphorColor(timeSinceSweepUs, SWEEP_DECAY_TIME_US);
+                    color = getPhosphorColor(timeSinceSweepUs, SWEEP_DECAY_TIME_US, true);
                 }
             }
 
@@ -306,17 +357,10 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
                 angle_t dist = angularDistanceAbsUnits(armAngle, blip.bearing);
                 if (dist > ctx.slotSizeUnits) continue;
 
-                // Blip matches - compute its color based on age
+                // Blip matches - compute its color based on age (bright blip palette)
                 timestamp_t blipAge = now - blip.createdAt;
                 if (blipAge < MAX_BLIP_LIFETIME_US) {
-                    CRGB blipColor = getPhosphorColor(blipAge, MAX_BLIP_LIFETIME_US);
-                    // Blips are brighter than trail - scale up
-                    blipColor.nscale8(200);  // 78% base brightness
-                    // Add extra boost for fresh blips
-                    if (blipAge < 500000) {  // First 0.5 seconds
-                        uint8_t boost = static_cast<uint8_t>(255 - (blipAge * 255 / 500000));
-                        blipColor += CRGB(boost/4, boost/4, boost/4);
-                    }
+                    CRGB blipColor = getPhosphorColor(blipAge, MAX_BLIP_LIFETIME_US, false);
                     color += blipColor;  // Additive blend
                 }
             }
