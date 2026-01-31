@@ -28,10 +28,29 @@ enum class PhosphorType : uint8_t {
     COUNT = 4
 };
 
+// Radar preset modes
+enum class RadarMode : uint8_t {
+    AIRCRAFT = 0,   // ATC scope: fast sweep, green phosphor
+    CLASSIC = 1,    // WWII drama: medium sweep, P7 blue-yellow
+    MARINE = 2,     // Shipping lanes: slow sweep, orange phosphor
+    ZOMBIE = 3,     // Waves coming at you!
+    COUNT = 4
+};
+
+// Preset configuration
+struct RadarPreset {
+    timestamp_t sweepPeriodUs;   // Time for one full sweep rotation
+    float targetSpeed;           // Units per second (wall-clock)
+    uint8_t minTargets;
+    uint8_t maxTargets;
+    PhosphorType phosphor;
+    const char* name;
+};
+
 // Normalized world coordinates: x,y in [-1, 1], display is inscribed circle
 struct WorldTarget {
     float x, y;           // Position (0,0 = center, radius 1 = edge)
-    float vx, vy;         // Velocity per radar sweep
+    float vx, vy;         // Velocity in units per second (wall-clock)
     bool active;
 };
 
@@ -54,18 +73,14 @@ public:
     void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) override;
     void nextMode() override;   // Cycle phosphor type
     void prevMode() override;   // Cycle phosphor type (reverse)
-    void paramUp() override;    // Increase target count
-    void paramDown() override;  // Decrease target count
+    void paramUp() override;    // Cycle to next preset mode
+    void paramDown() override;  // Cycle to previous preset mode
     bool requiresFullBrightness() const override { return true; }
 
 private:
     // === Configuration ===
-    static constexpr int MAX_WORLD_TARGETS = 5;
-    static constexpr int MAX_BLIPS = 20;  // ~4 blips per target fade time
-
-    // Sweep period: 8 seconds for full rotation (relaxed marine radar feel)
-    // Wall-clock based, independent of disc RPM
-    static constexpr timestamp_t SWEEP_PERIOD_US = 8000000ULL;
+    static constexpr int MAX_WORLD_TARGETS = 25;  // Zombie mode needs up to 25
+    static constexpr int MAX_BLIPS = 100;  // ~4 blips per target fade time
 
     // Trail decay time in microseconds (~5 seconds for P7 phosphor)
     static constexpr timestamp_t SWEEP_DECAY_TIME_US = 5000000ULL;
@@ -76,8 +91,12 @@ private:
     // === State ===
     timestamp_t lastRevolutionTime = 0;
     interval_t currentMicrosPerRev = 46000;  // ~1300 RPM default
+    timestamp_t lastUpdateTime = 0;  // For wall-clock delta in target movement
 
-    // Phosphor selection
+    // Preset mode
+    RadarMode currentMode = RadarMode::CLASSIC;
+
+    // Phosphor selection (set by preset)
     PhosphorType currentPhosphorType = PhosphorType::P7_BLUE_YELLOW;
 
     // World targets
@@ -139,6 +158,12 @@ private:
      */
     uint16_t nextRandom();
     float randomFloat();  // Returns 0.0 to 1.0
+
+    /**
+     * Apply current preset mode settings
+     * Sets phosphor type, target count, and reinitializes targets
+     */
+    void applyPreset();
 };
 
 #endif // RADAR_H

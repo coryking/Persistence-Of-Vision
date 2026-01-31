@@ -5,11 +5,34 @@
 #include <cmath>
 
 // ============================================================
+// Preset Configurations
+// ============================================================
+
+// Target speeds in units per second (wall-clock):
+// - Display is 2 units wide (-1 to +1)
+// - Aircraft: 2 units / 120 sec = 0.017 units/sec
+// - Classic: 2 units / 300 sec = 0.007 units/sec
+// - Marine: 2 units / 600 sec = 0.003 units/sec
+// - Zombie: 1 unit / 45 sec = 0.022 units/sec (edge to center)
+
+static const RadarPreset PRESETS[] = {
+    // Aircraft: 6 sec sweep, ~2 min crossing, 3-6 targets, green
+    { 6000000ULL, 0.017f, 3, 6, PhosphorType::P1_GREEN, "Aircraft" },
+    // Classic: 10 sec sweep, ~5 min crossing, 5-8 targets, P7
+    { 10000000ULL, 0.007f, 5, 8, PhosphorType::P7_BLUE_YELLOW, "Classic" },
+    // Marine: 15 sec sweep, ~10 min crossing, 6-10 targets, orange
+    { 15000000ULL, 0.003f, 6, 10, PhosphorType::P12_ORANGE, "Marine" },
+    // Zombie: 5 sec sweep, ~45 sec to center, 15-25 targets, long orange
+    { 5000000ULL, 0.022f, 15, 25, PhosphorType::P19_ORANGE_LONG, "Zombie" },
+};
+
+// ============================================================
 // Initialization
 // ============================================================
 
 void Radar::begin() {
     lastRevolutionTime = 0;
+    lastUpdateTime = 0;
     currentMicrosPerRev = 46000;  // ~1300 RPM default
 
     // Generate phosphor palettes using actual decay physics
@@ -25,14 +48,10 @@ void Radar::begin() {
         worldTargets[i].active = false;
     }
 
-    // Spawn initial targets
-    for (int i = 0; i < targetCount; i++) {
-        initWorldTarget(worldTargets[i]);
-        worldTargets[i].active = true;
-    }
+    // Apply default preset (Classic)
+    applyPreset();
 
     Serial.println("[Radar] Authentic PPI radar effect started");
-    Serial.printf("[Radar] Phosphor: P7, Targets: %d\n", targetCount);
 }
 
 // ============================================================
@@ -56,23 +75,30 @@ float Radar::randomFloat() {
 // ============================================================
 
 void Radar::initWorldTarget(WorldTarget& target) {
-    // Spawn at random position within unit circle
-    // Use rejection sampling for uniform distribution
-    float x, y;
-    do {
-        x = randomFloat() * 2.0f - 1.0f;  // -1 to 1
-        y = randomFloat() * 2.0f - 1.0f;
-    } while (x*x + y*y > 1.0f);  // Reject if outside unit circle
-
-    target.x = x;
-    target.y = y;
-
-    // Random velocity (slow drift)
-    // Velocity per sweep = position change per ~6 seconds
-    float speed = 0.02f + randomFloat() * 0.03f;  // 0.02 to 0.05 units per sweep
+    const RadarPreset& preset = PRESETS[static_cast<uint8_t>(currentMode)];
+    float speed = preset.targetSpeed * (0.5f + randomFloat());  // 50%-150% of base speed
     float angle = randomFloat() * 2.0f * M_PI;
-    target.vx = cosf(angle) * speed;
-    target.vy = sinf(angle) * speed;
+
+    if (currentMode == RadarMode::ZOMBIE) {
+        // Zombie: spawn at edge, move toward center
+        target.x = cosf(angle) * 0.95f;
+        target.y = sinf(angle) * 0.95f;
+        // Velocity toward center (inward)
+        target.vx = -cosf(angle) * speed;
+        target.vy = -sinf(angle) * speed;
+    } else {
+        // Normal: spawn anywhere, random direction
+        float x, y;
+        do {
+            x = randomFloat() * 2.0f - 1.0f;  // -1 to 1
+            y = randomFloat() * 2.0f - 1.0f;
+        } while (x*x + y*y > 1.0f);  // Reject if outside unit circle
+
+        target.x = x;
+        target.y = y;
+        target.vx = cosf(angle) * speed;
+        target.vy = sinf(angle) * speed;
+    }
     target.active = true;
 }
 
@@ -148,6 +174,8 @@ CRGB Radar::getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs, bool forSw
 void Radar::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) {
     (void)revolutionCount;
 
+    const RadarPreset& preset = PRESETS[static_cast<uint8_t>(currentMode)];
+
     // Update timing
     currentMicrosPerRev = usPerRev;
 
@@ -157,30 +185,14 @@ void Radar::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t r
 
     // Compute sweep angles from wall-clock time for crossing detection
     angle_t oldSweepAngle = static_cast<angle_t>(
-        ((timestamp - elapsed) % SWEEP_PERIOD_US) * ANGLE_FULL_CIRCLE / SWEEP_PERIOD_US
+        ((timestamp - elapsed) % preset.sweepPeriodUs) * ANGLE_FULL_CIRCLE / preset.sweepPeriodUs
     );
     angle_t newSweepAngle = static_cast<angle_t>(
-        (timestamp % SWEEP_PERIOD_US) * ANGLE_FULL_CIRCLE / SWEEP_PERIOD_US
+        (timestamp % preset.sweepPeriodUs) * ANGLE_FULL_CIRCLE / preset.sweepPeriodUs
     );
 
-    // === Update world targets ===
-    for (int i = 0; i < targetCount; i++) {
-        WorldTarget& target = worldTargets[i];
-        if (!target.active) continue;
-
-        // Move target
-        target.x += target.vx;
-        target.y += target.vy;
-
-        // Check if target exited unit circle
-        float r2 = target.x * target.x + target.y * target.y;
-        if (r2 > 1.0f) {
-            // Respawn at random edge position
-            initWorldTarget(target);
-        }
-    }
-
     // === Check for sweep crossing targets ===
+    // (Target movement is now in render() using wall-clock time)
     for (int i = 0; i < targetCount; i++) {
         WorldTarget& target = worldTargets[i];
         if (!target.active) continue;
@@ -219,10 +231,41 @@ void Radar::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t r
 
 void IRAM_ATTR Radar::render(RenderContext& ctx) {
     timestamp_t now = ctx.timeUs;
+    const RadarPreset& preset = PRESETS[static_cast<uint8_t>(currentMode)];
+
+    // === Wall-clock target movement ===
+    if (lastUpdateTime > 0) {
+        timestamp_t deltaUs = now - lastUpdateTime;
+        float deltaSec = deltaUs / 1000000.0f;
+
+        // Move targets by wall-clock time (independent of disc RPM)
+        for (int i = 0; i < targetCount; i++) {
+            WorldTarget& target = worldTargets[i];
+            if (!target.active) continue;
+
+            target.x += target.vx * deltaSec;
+            target.y += target.vy * deltaSec;
+
+            // Check for respawn condition
+            float r2 = target.x * target.x + target.y * target.y;
+            if (currentMode == RadarMode::ZOMBIE) {
+                // Zombie: respawn when reaching center
+                if (r2 < 0.05f) {  // Within ~22% of center radius
+                    initWorldTarget(target);
+                }
+            } else {
+                // Normal: respawn when exiting edge
+                if (r2 > 1.0f) {
+                    initWorldTarget(target);
+                }
+            }
+        }
+    }
+    lastUpdateTime = now;
 
     // Compute sweep angle from wall-clock time (perfectly smooth)
     angle_t sweepAngleUnits = static_cast<angle_t>(
-        (now % SWEEP_PERIOD_US) * ANGLE_FULL_CIRCLE / SWEEP_PERIOD_US
+        (now % preset.sweepPeriodUs) * ANGLE_FULL_CIRCLE / preset.sweepPeriodUs
     );
 
     // Render each arm
@@ -251,8 +294,8 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
             // Only render trail behind sweep (not ahead)
             if (distBehind > 0 && distBehind < ANGLE_FULL_CIRCLE) {
                 // Convert angular distance to time since sweep passed
-                // timeSinceSweep = (distBehind / ANGLE_FULL_CIRCLE) * SWEEP_PERIOD_US
-                uint64_t timeSinceSweepUs = (static_cast<uint64_t>(distBehind) * SWEEP_PERIOD_US) / ANGLE_FULL_CIRCLE;
+                // timeSinceSweep = (distBehind / ANGLE_FULL_CIRCLE) * sweepPeriodUs
+                uint64_t timeSinceSweepUs = (static_cast<uint64_t>(distBehind) * preset.sweepPeriodUs) / ANGLE_FULL_CIRCLE;
 
                 // Get phosphor color based on time since sweep (dim sweep palette)
                 if (timeSinceSweepUs < SWEEP_DECAY_TIME_US) {
@@ -313,22 +356,48 @@ void Radar::prevMode() {
 }
 
 void Radar::paramUp() {
-    // Increase target count
-    if (targetCount < MAX_WORLD_TARGETS) {
-        targetCount++;
-        // Activate the new target
-        initWorldTarget(worldTargets[targetCount - 1]);
-        worldTargets[targetCount - 1].active = true;
-        Serial.printf("[Radar] Targets: %d\n", targetCount);
-    }
+    // Cycle to next preset mode
+    uint8_t next = (static_cast<uint8_t>(currentMode) + 1) % static_cast<uint8_t>(RadarMode::COUNT);
+    currentMode = static_cast<RadarMode>(next);
+    applyPreset();
 }
 
 void Radar::paramDown() {
-    // Decrease target count
-    if (targetCount > 0) {
-        // Deactivate the last target
-        worldTargets[targetCount - 1].active = false;
-        targetCount--;
-        Serial.printf("[Radar] Targets: %d\n", targetCount);
+    // Cycle to previous preset mode
+    uint8_t prev = static_cast<uint8_t>(currentMode);
+    prev = (prev == 0) ? (static_cast<uint8_t>(RadarMode::COUNT) - 1) : (prev - 1);
+    currentMode = static_cast<RadarMode>(prev);
+    applyPreset();
+}
+
+// ============================================================
+// Preset Application
+// ============================================================
+
+void Radar::applyPreset() {
+    const RadarPreset& preset = PRESETS[static_cast<uint8_t>(currentMode)];
+
+    // Set phosphor type from preset
+    currentPhosphorType = preset.phosphor;
+
+    // Random target count within preset range
+    targetCount = preset.minTargets + (nextRandom() % (preset.maxTargets - preset.minTargets + 1));
+
+    // Reinitialize all targets with new velocities
+    for (int i = 0; i < MAX_WORLD_TARGETS; i++) {
+        if (i < targetCount) {
+            initWorldTarget(worldTargets[i]);
+            worldTargets[i].active = true;
+        } else {
+            worldTargets[i].active = false;
+        }
     }
+
+    // Clear all existing blips for clean transition
+    for (int i = 0; i < MAX_BLIPS; i++) {
+        blips[i].active = false;
+    }
+
+    Serial.printf("[Radar] Mode: %s (sweep %.1fs, %d targets)\n",
+        preset.name, preset.sweepPeriodUs / 1000000.0f, targetCount);
 }
