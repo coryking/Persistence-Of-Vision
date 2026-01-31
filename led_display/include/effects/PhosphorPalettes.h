@@ -6,12 +6,18 @@
 /**
  * Phosphor Palette Generation
  *
- * Generates CRGBPalette16 palettes using actual phosphor decay physics.
+ * Generates CRGBPalette256 palettes using actual phosphor decay physics.
  * See docs/effects/math-for-phosphor.md for the underlying math.
  *
  * Decay formulas:
  * - Exponential: I(t) = I₀ × exp(-t/τ)  (P1, P12)
  * - Inverse power law: I(t) = I₀ / (1 + t/τ)^n  (P7, P19)
+ *
+ * DEBUG MODE: Using distinct hues to verify decay physics:
+ *   P7  = Cyan (128)    - authentic: blue→yellow cascade
+ *   P12 = Magenta (192) - authentic: orange
+ *   P19 = Lime (96)     - authentic: orange
+ *   P1  = Red (0)       - authentic: green
  */
 
 namespace PhosphorPalettes {
@@ -28,7 +34,7 @@ namespace PhosphorPalettes {
  *   2 = P19_ORANGE_LONG
  *   3 = P1_GREEN
  */
-void generateAll(CRGBPalette16 blipPalettes[4], CRGBPalette16 sweepPalettes[4]);
+void generateAll(CRGBPalette256 blipPalettes[4], CRGBPalette256 sweepPalettes[4]);
 
 } // namespace PhosphorPalettes
 

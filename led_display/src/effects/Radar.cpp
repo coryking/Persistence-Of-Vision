@@ -133,7 +133,7 @@ CRGB Radar::getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs, bool forSw
     uint8_t paletteIndex = static_cast<uint8_t>((ageUs * 255ULL) / maxAgeUs);
 
     // Select palette: sweep uses dimmer palette, blips use full brightness
-    const CRGBPalette16& palette = forSweep
+    const CRGBPalette256& palette = forSweep
         ? sweepPalettes[static_cast<uint8_t>(currentPhosphorType)]
         : blipPalettes[static_cast<uint8_t>(currentPhosphorType)];
 
@@ -151,13 +151,20 @@ void Radar::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t r
 
     // Update timing
     currentMicrosPerRev = usPerRev;
-    lastRevolutionTime = timestamp;
 
     // Store old sweep angle for crossing detection
     angle_t oldSweepAngle = sweepAngleUnits;
 
-    // Advance sweep angle
-    sweepAngleUnits = (sweepAngleUnits + SWEEP_ANGLE_PER_REV) % ANGLE_FULL_CIRCLE;
+    // Calculate elapsed time since last revolution
+    timestamp_t elapsed = timestamp - lastRevolutionTime;
+    lastRevolutionTime = timestamp;
+
+    // Advance sweep based on wall-clock time, not revolutions
+    // This ensures consistent arc size regardless of disc RPM
+    angle_t angleAdvance = static_cast<angle_t>(
+        (static_cast<uint64_t>(elapsed) * ANGLE_FULL_CIRCLE) / SWEEP_PERIOD_US
+    );
+    sweepAngleUnits = (sweepAngleUnits + angleAdvance) % ANGLE_FULL_CIRCLE;
 
     // === Update world targets ===
     for (int i = 0; i < targetCount; i++) {
@@ -242,10 +249,8 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
             // Only render trail behind sweep (not ahead)
             if (distBehind > 0 && distBehind < ANGLE_FULL_CIRCLE) {
                 // Convert angular distance to time since sweep passed
-                // timeSinceSweep = (distBehind / ANGLE_FULL_CIRCLE) * sweepPeriod
-                // sweepPeriod = (ANGLE_FULL_CIRCLE / SWEEP_ANGLE_PER_REV) * microsPerRev
-                uint64_t sweepPeriodUs = (static_cast<uint64_t>(ANGLE_FULL_CIRCLE) * currentMicrosPerRev) / SWEEP_ANGLE_PER_REV;
-                uint64_t timeSinceSweepUs = (static_cast<uint64_t>(distBehind) * sweepPeriodUs) / ANGLE_FULL_CIRCLE;
+                // timeSinceSweep = (distBehind / ANGLE_FULL_CIRCLE) * SWEEP_PERIOD_US
+                uint64_t timeSinceSweepUs = (static_cast<uint64_t>(distBehind) * SWEEP_PERIOD_US) / ANGLE_FULL_CIRCLE;
 
                 // Get phosphor color based on time since sweep (dim sweep palette)
                 if (timeSinceSweepUs < SWEEP_DECAY_TIME_US) {
@@ -274,12 +279,8 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
                 }
             }
 
-            // === Layer 3: Sweep beam (brightest, on top) ===
-            angle_t sweepDist = angularDistanceAbsUnits(armAngle, sweepAngleUnits);
-            if (sweepDist <= ctx.slotSizeUnits) {
-                // Sweep beam - pure white, overwrites everything
-                color = SWEEP_COLOR;
-            }
+            // No separate sweep line - the phosphor trail at age=0 (palette index 0) IS the sweep.
+            // The leading edge of the phosphor trail is the brightest part, which is physically correct.
 
             arm.pixels[led] = color;
         }

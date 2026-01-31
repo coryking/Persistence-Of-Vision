@@ -62,17 +62,15 @@ private:
     static constexpr int MAX_WORLD_TARGETS = 5;
     static constexpr int MAX_BLIPS = 20;  // ~4 blips per target fade time
 
-    // Sweep: 28 angle units per revolution = ~130 revolutions per sweep = ~6 seconds at 1300 RPM
-    static constexpr angle_t SWEEP_ANGLE_PER_REV = 28;
+    // Sweep period: 3 seconds for full rotation (marine radar feel)
+    // Wall-clock based, independent of disc RPM
+    static constexpr timestamp_t SWEEP_PERIOD_US = 3000000ULL;
 
     // Trail decay time in microseconds (~5 seconds for P7 phosphor)
     static constexpr timestamp_t SWEEP_DECAY_TIME_US = 5000000ULL;
 
     // Blip lifetime (slightly longer than sweep decay for overlap)
     static constexpr timestamp_t MAX_BLIP_LIFETIME_US = 6000000ULL;
-
-    // Sweep beam color (blue-white per P7 physics)
-    static constexpr CRGB SWEEP_COLOR = CRGB(200, 200, 255);
 
     // === State ===
     angle_t sweepAngleUnits = 0;
@@ -93,8 +91,8 @@ private:
     uint16_t randomSeed = 12345;
 
     // === Palette Arrays (generated at runtime in begin()) ===
-    CRGBPalette16 blipPalettes[4];   // One per PhosphorType (full brightness)
-    CRGBPalette16 sweepPalettes[4];  // One per PhosphorType (dimmer)
+    CRGBPalette256 blipPalettes[4];   // One per PhosphorType (full brightness)
+    CRGBPalette256 sweepPalettes[4];  // One per PhosphorType (dimmer)
 
     // === Helper Methods ===
 
