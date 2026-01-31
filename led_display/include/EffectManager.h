@@ -159,8 +159,15 @@ public:
 
     /**
      * Get current brightness (0-10 scale)
+     * Returns max brightness (10) if current effect requires full brightness
      */
-    uint8_t getBrightness() const { return brightness; }
+    uint8_t getBrightness() const {
+        if (currentIndex < effectCount && effects[currentIndex] &&
+            effects[currentIndex]->requiresFullBrightness()) {
+            return 10;
+        }
+        return brightness;
+    }
 
     /**
      * Switch to specific effect by number (1-based, matches remote buttons)

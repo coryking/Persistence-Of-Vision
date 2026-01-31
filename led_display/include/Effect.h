@@ -74,6 +74,13 @@ public:
      * Default: no-op
      */
     virtual void paramDown() {}
+
+    /**
+     * Whether this effect requires full brightness (ignores brightness control)
+     * Override to return true for effects that need maximum LED output
+     * Default: false (normal brightness control)
+     */
+    virtual bool requiresFullBrightness() const { return false; }
 };
 
 #endif // EFFECT_H

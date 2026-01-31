@@ -56,15 +56,16 @@ public:
     void prevMode() override;   // Cycle phosphor type (reverse)
     void paramUp() override;    // Increase target count
     void paramDown() override;  // Decrease target count
+    bool requiresFullBrightness() const override { return true; }
 
 private:
     // === Configuration ===
     static constexpr int MAX_WORLD_TARGETS = 5;
     static constexpr int MAX_BLIPS = 20;  // ~4 blips per target fade time
 
-    // Sweep period: 3 seconds for full rotation (marine radar feel)
+    // Sweep period: 8 seconds for full rotation (relaxed marine radar feel)
     // Wall-clock based, independent of disc RPM
-    static constexpr timestamp_t SWEEP_PERIOD_US = 3000000ULL;
+    static constexpr timestamp_t SWEEP_PERIOD_US = 8000000ULL;
 
     // Trail decay time in microseconds (~5 seconds for P7 phosphor)
     static constexpr timestamp_t SWEEP_DECAY_TIME_US = 5000000ULL;
@@ -73,7 +74,6 @@ private:
     static constexpr timestamp_t MAX_BLIP_LIFETIME_US = 6000000ULL;
 
     // === State ===
-    angle_t sweepAngleUnits = 0;
     timestamp_t lastRevolutionTime = 0;
     interval_t currentMicrosPerRev = 46000;  // ~1300 RPM default
 

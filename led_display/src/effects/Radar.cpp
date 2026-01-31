@@ -9,7 +9,6 @@
 // ============================================================
 
 void Radar::begin() {
-    sweepAngleUnits = 0;
     lastRevolutionTime = 0;
     currentMicrosPerRev = 46000;  // ~1300 RPM default
 
@@ -152,19 +151,17 @@ void Radar::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t r
     // Update timing
     currentMicrosPerRev = usPerRev;
 
-    // Store old sweep angle for crossing detection
-    angle_t oldSweepAngle = sweepAngleUnits;
-
     // Calculate elapsed time since last revolution
     timestamp_t elapsed = timestamp - lastRevolutionTime;
     lastRevolutionTime = timestamp;
 
-    // Advance sweep based on wall-clock time, not revolutions
-    // This ensures consistent arc size regardless of disc RPM
-    angle_t angleAdvance = static_cast<angle_t>(
-        (static_cast<uint64_t>(elapsed) * ANGLE_FULL_CIRCLE) / SWEEP_PERIOD_US
+    // Compute sweep angles from wall-clock time for crossing detection
+    angle_t oldSweepAngle = static_cast<angle_t>(
+        ((timestamp - elapsed) % SWEEP_PERIOD_US) * ANGLE_FULL_CIRCLE / SWEEP_PERIOD_US
     );
-    sweepAngleUnits = (sweepAngleUnits + angleAdvance) % ANGLE_FULL_CIRCLE;
+    angle_t newSweepAngle = static_cast<angle_t>(
+        (timestamp % SWEEP_PERIOD_US) * ANGLE_FULL_CIRCLE / SWEEP_PERIOD_US
+    );
 
     // === Update world targets ===
     for (int i = 0; i < targetCount; i++) {
@@ -193,7 +190,7 @@ void Radar::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t r
         if (!worldToPolar(target, bearing, range)) continue;
 
         // Check if sweep crossed this target's bearing
-        if (sweepCrossedBearing(oldSweepAngle, sweepAngleUnits, bearing)) {
+        if (sweepCrossedBearing(oldSweepAngle, newSweepAngle, bearing)) {
             // Spawn a blip
             Blip* blip = findFreeBlip();
             if (blip) {
@@ -222,6 +219,11 @@ void Radar::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t r
 
 void IRAM_ATTR Radar::render(RenderContext& ctx) {
     timestamp_t now = ctx.timeUs;
+
+    // Compute sweep angle from wall-clock time (perfectly smooth)
+    angle_t sweepAngleUnits = static_cast<angle_t>(
+        (now % SWEEP_PERIOD_US) * ANGLE_FULL_CIRCLE / SWEEP_PERIOD_US
+    );
 
     // Render each arm
     for (int armIdx = 0; armIdx < HardwareConfig::NUM_ARMS; armIdx++) {
