@@ -44,7 +44,8 @@
 
 // ESP32-S3 hardware SPI for HD107s/SK9822/APA102 (DotStar)
 // 41 physical LEDs: 1 level shifter + 40 display LEDs
-NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(HardwareConfig::TOTAL_PHYSICAL_LEDS);
+// DotStarLbgrFeature: 'L' exposes 5-bit luminance byte for HD gamma decomposition
+NeoPixelBus<DotStarLbgrFeature, DotStarSpi40MhzMethod> strip(HardwareConfig::TOTAL_PHYSICAL_LEDS);
 
 // Revolution timing
 RevolutionTimer revTimer(WARMUP_REVOLUTIONS, ROLLING_AVERAGE_SIZE, ROTATION_TIMEOUT_US);
@@ -141,19 +142,19 @@ static int g_lastRenderedSlot = -1;
 void setupLedStrip() {
     // Initialize LED strip with custom SPI pins
     strip.Begin(HardwareConfig::SPI_CLK_PIN, -1, HardwareConfig::SPI_DATA_PIN, -1);
-    strip.ClearTo(RgbColor(0, 0, 0));
+    strip.ClearTo(RgbwColor(0, 0, 0, 0));
     strip.Show();
     Serial.println("Strip initialized");
 
     // Startup blink pattern - diagnostic for reset detection
     // If you see periodic blinks during operation, ESP32 is resetting
-    // Uses 5% brightness to avoid power issues on wireless USB power
+    // Uses 5% brightness via 5-bit field to avoid power issues on wireless USB power
     Serial.println("Startup blink sequence...");
-    constexpr uint8_t BOOT_BRIGHTNESS = 12;  // ~5% of 255
-    const RgbColor bootColors[3] = {
-        RgbColor(BOOT_BRIGHTNESS, 0, 0),  // Red
-        RgbColor(0, BOOT_BRIGHTNESS, 0),  // Green
-        RgbColor(0, 0, BOOT_BRIGHTNESS)   // Blue
+    constexpr uint8_t BOOT_BRIGHTNESS_5BIT = 2;  // Low 5-bit brightness (~6% of max)
+    const RgbwColor bootColors[3] = {
+        RgbwColor(255, 0, 0, BOOT_BRIGHTNESS_5BIT),    // Red
+        RgbwColor(0, 255, 0, BOOT_BRIGHTNESS_5BIT),    // Green
+        RgbwColor(0, 0, 255, BOOT_BRIGHTNESS_5BIT)     // Blue
     };
 
     for (int flash = 0; flash < 3; flash++) {
@@ -167,7 +168,7 @@ void setupLedStrip() {
         }
         strip.Show();
         delay(500);
-        strip.ClearTo(RgbColor(0, 0, 0));
+        strip.ClearTo(RgbwColor(0, 0, 0, 0));
         strip.Show();
         delay(500);
     }

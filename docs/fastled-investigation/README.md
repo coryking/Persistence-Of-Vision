@@ -48,6 +48,8 @@ See: esp32-spi-analysis.md
 |------|----------|
 | brightness-and-primitives.md | HD mode overview, CRGB structure, standalone gamma function |
 | hd-gamma-math.md | Algorithm deep dive, how 5-bit decomposition works |
+| 16-bit-primitives.md | FastLED 16-bit API reference (noise, math, easing, HSV16) |
+| 16-bit-pipeline-analysis.md | Options for 16-bit render pipeline with 8+5 output |
 | neopixelbus-brightness.md | DotStarLbgrFeature, W channel behavior, POV warning context |
 | fastled-neopixelbus-hybrid.md | Hybrid approach validation, implementation sketch |
 | esp32-spi-analysis.md | Bulk transfer fix, NeoPixelBus comparison, ESP32-S3 concerns |

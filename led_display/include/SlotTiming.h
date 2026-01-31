@@ -7,6 +7,7 @@
 #include "hardware_config.h"
 #include "esp_timer.h"
 #include <NeoPixelBus.h>
+#include "fl/five_bit_hd_gamma.h"
 
 // Forward declare (defined in main.cpp)
 class EffectManager;
@@ -94,7 +95,7 @@ inline void waitForTargetTime(timestamp_t targetTime) {
 template<typename T_STRIP>
 void copyPixelsToStrip(const RenderContext& ctx, T_STRIP& ledStrip) {
     // Level shifter at physical index 0 - always black
-    ledStrip.SetPixelColor(0, RgbColor(0, 0, 0));
+    ledStrip.SetPixelColor(0, RgbwColor(0, 0, 0, 0));
 
     // Get runtime brightness from EffectManager
     uint8_t brightness = effectManager.getBrightness();
@@ -109,10 +110,19 @@ void copyPixelsToStrip(const RenderContext& ctx, T_STRIP& ledStrip) {
             int physicalPos = reversed ? (count - 1 - p) : p;
 
             CRGB color = ctx.arms[a].pixels[p];
-            if (scale < 255) {
-                color.nscale8(scale);
-            }
-            ledStrip.SetPixelColor(start + physicalPos, RgbColor(color.r, color.g, color.b));
+
+            // HD gamma decomposition: splits color into 8-bit RGB + 5-bit brightness
+            // This gives 31 steps at low brightness instead of 1 step above black
+            CRGB output;
+            uint8_t brightness_5bit;
+            fl::five_bit_hd_gamma_bitshift(
+                color,
+                CRGB(255, 255, 255),  // no color temp correction
+                scale,                 // global brightness (0-255, already gamma-corrected)
+                &output,
+                &brightness_5bit
+            );
+            ledStrip.SetPixelColor(start + physicalPos, RgbwColor(output.r, output.g, output.b, brightness_5bit));
         }
     }
 }
@@ -122,7 +132,7 @@ void copyPixelsToStrip(const RenderContext& ctx, T_STRIP& ledStrip) {
  */
 template<typename T_STRIP>
 void handleNotRotating(T_STRIP& ledStrip) {
-    ledStrip.ClearTo(RgbColor(0, 0, 0));
+    ledStrip.ClearTo(RgbwColor(0, 0, 0, 0));
     ledStrip.Show();
     delay(10);
 }
