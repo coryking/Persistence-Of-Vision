@@ -314,6 +314,134 @@ void renderPixel(const RadarPixel& p, uint8_t& r, uint8_t& g, uint8_t& b) {
 
 ---
 
+## Radar Antenna Rotation Speeds
+
+Authentic rotation speeds vary significantly by application. This affects how long targets must persist between refreshes.
+
+### Marine Radar
+
+| Type | RPM | Seconds/Revolution | Notes |
+|------|-----|-------------------|-------|
+| Conventional vessels | **24 RPM** | 2.5 sec | Standard commercial shipping |
+| High-speed vessels | **44-48 RPM** | 1.25-1.4 sec | Fast ferries, patrol boats |
+| Adjustable range | 20-50 RPM | 1.2-3 sec | Modern variable-speed systems |
+
+### Air Traffic Control (Airport Surveillance Radar)
+
+| Type | RPM | Seconds/Revolution | Notes |
+|------|-----|-------------------|-------|
+| ASR-9, ASR-11 | **12.5 RPM** | 4.8 sec | Standard US airport radar |
+| General ASR range | 12-15 RPM | 4-5 sec | ICAO/EUROCONTROL standard |
+| Primary Surveillance | 5-12 RPM | 5-12 sec | Varies by range requirements |
+
+### En Route / Long Range
+
+| Type | RPM | Seconds/Revolution | Notes |
+|------|-----|-------------------|-------|
+| En route Mode S | **5 RPM** | 12 sec | Long-range air surveillance |
+| WWII-era systems | 4-6 RPM | 10-15 sec | Historical reference |
+
+### Choosing Rotation Speed for Simulation
+
+| Desired Feel | RPM | Period | Phosphor Persistence Needed |
+|--------------|-----|--------|----------------------------|
+| Marine / urgent | ~24 | 2.5 sec | Targets visible 3+ seconds |
+| ATC / deliberate | ~12 | 5 sec | Targets visible 6+ seconds |
+| Long-range / dramatic | ~6 | 10 sec | Targets visible 12+ seconds |
+| WWII / cinematic | ~4 | 15 sec | Targets visible 20+ seconds |
+
+**Key insight:** The slower ATC radar rotation is why classic air traffic control displays have those long phosphor trails - targets must remain visible for the full 5 seconds between refreshes. This is precisely why P7's 60+ second persistence was essential for these applications.
+
+### Rotation Speed vs Display Update Math
+
+For a POV display with angular resolution of 1°:
+
+```cpp
+// Time per degree at different RPMs
+float time_per_degree = 60.0f / (rpm * 360.0f);  // seconds
+
+// Examples:
+// 24 RPM: 60/(24*360) = 6.94ms per degree
+// 12 RPM: 60/(12*360) = 13.89ms per degree
+//  6 RPM: 60/(6*360)  = 27.78ms per degree
+```
+
+---
+
+## Radar Range and Target Speeds
+
+Understanding what radar actually tracks helps calibrate expectations for how fast things move on the display.
+
+### Typical Radar Ranges
+
+| Application | Typical Max Range | Common Operating Scales |
+|-------------|-------------------|-------------------------|
+| Marine radar (recreational) | 24-72 nm | 0.5, 1, 3, 6, 12 nm |
+| Marine radar (commercial) | 48-96 nm | 6, 12, 24, 48 nm |
+| ATC airport surveillance (ASR) | 60 nm | 5, 10, 20, 40, 60 nm |
+| En route ATC | 200+ nm | 60, 120, 200 nm |
+
+The "classic radar look" typically shows 6-24 nm range scales.
+
+### Ship Speeds (Marine Radar Targets)
+
+| Vessel Type | Typical Speed | Notes |
+|-------------|---------------|-------|
+| Bulk carriers | 12-15 knots | Slow, heavy cargo |
+| Oil tankers | 10-17 knots | Safest slow |
+| Container ships | 16-24 knots | Time-sensitive cargo |
+| Cruise ships | 20-25 knots | Passenger comfort |
+| Fast ferries | 30-40 knots | High-speed vessels |
+| Naval vessels | 25-35+ knots | Varies widely |
+
+### Aircraft Speeds (ATC Radar Targets)
+
+| Aircraft Type | Typical Speed | Context |
+|---------------|---------------|--------|
+| Small prop (approach) | 70-100 knots | Landing configuration |
+| Turboprop | 150-200 knots | Terminal area |
+| Jet (approach) | 130-170 knots | Final approach |
+| Jet (terminal area) | 210-250 knots | Vectors to final |
+| Jet (cruise) | 400-500 knots | En route |
+
+### How Fast Do Targets Actually Move on the Display?
+
+The angular velocity of a target on the display depends on its speed, range, and direction of travel. For a target moving perpendicular to the line of sight (worst case / fastest apparent motion):
+
+```
+Angular velocity ≈ speed (knots) / range (nm) degrees per minute
+```
+
+**Marine radar examples (12 nm range scale, 24 RPM antenna):**
+
+| Target | Speed | Angular Motion | Movement Per 2.5 sec Scan |
+|--------|-------|----------------|---------------------------|
+| Tanker | 15 kn | ~1.2°/min | ~0.05° |
+| Container ship | 20 kn | ~1.7°/min | ~0.07° |
+| Fast ferry | 35 kn | ~2.9°/min | ~0.12° |
+
+**ATC radar examples (40 nm range scale, 12 RPM antenna):**
+
+| Target | Speed | Angular Motion | Movement Per 5 sec Scan |
+|--------|-------|----------------|-------------------------|
+| Prop plane | 100 kn | ~2.5°/min | ~0.2° |
+| Jet on approach | 170 kn | ~4.3°/min | ~0.35° |
+| Jet cruising | 450 kn | ~11°/min | ~0.9° |
+
+### The Uncomfortable Truth
+
+**Targets move incredibly slowly in angular terms.** A container ship on a 12 nm radar display moves less than 0.1° between sweeps. Even a jet aircraft on an ATC scope barely moves 1° per scan.
+
+This is why:
+- Radar operators stare at screens for hours watching nearly-stationary blips
+- P7 phosphor's 60+ second persistence was necessary—targets had to remain visible through dozens of sweeps to show any perceptible motion
+- The "comet tail" effect from moving targets is extremely subtle in real life
+- Collision avoidance requires watching targets over many minutes to detect closing vectors
+
+**For artistic purposes:** Real radar is, frankly, boring to watch. The dramatic sweeping displays in movies with rapidly-moving blips are wildly exaggerated. For visual effect, target speeds are typically increased 10-50× over reality, or the simulated antenna rotation is slowed dramatically to compress time.
+
+---
+
 ## Common Mistakes to Avoid
 
 1. **Linear decay instead of exponential** - Creates unnatural "fading" look
