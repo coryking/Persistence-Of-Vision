@@ -2,61 +2,98 @@
 
 ## Purpose
 
-This investigation examined whether the POV display project should upgrade from its pinned FastLED commit (`ac595965af`, Nov 27, 2025) to current master (`8cd217f137`, Jan 31, 2026). The core questions were:
+This investigation examined FastLED's HD mode for improved dark-end dynamic range on HD107S LEDs, and whether the ESP32 SPI fix allows dropping NeoPixelBus.
 
-1. **Is issue #1609 (ESP32 SPI DMA chunking) fixed?** - Can we drop NeoPixelBus?
-2. **Can we improve dynamic range?** - There's a big perceptual gap between the darkest color and black on HD107S LEDs. The 5-bit per-LED brightness field could help.
-3. **What's new?** - Noise functions, effects, API changes since the pin.
+## Core Questions
+
+1. **Can we improve dark-end dynamic range?** The gap between RGB(1,0,0) and black is too large. The 5-bit per-LED brightness field could help.
+2. **Is the ESP32 SPI fix working?** FastLED has `FASTLED_ESP32_SPI_BULK_TRANSFER` but reports suggest issues on ESP32-S3.
+3. **Can we use FastLED effects with NeoPixelBus output?** Hybrid approach for best of both.
 
 ## Key Findings
 
-**Dynamic Range Solution Found:** FastLED has an "HD mode" controller (`HD107ControllerHD`) that uses gamma-optimized 5-bit brightness instead of hardcoding it to max. This gives ~8x finer control at the dark end. Just change `HD107` to `HD107ControllerHD` in `addLeds<>()`.
+### HD Mode for Better Dark End
 
-**SPI Fix Exists But Disabled:** Bulk DMA transfer is available via `#define FASTLED_ESP32_SPI_BULK_TRANSFER 1` but off by default. Worth testing - could eliminate need for NeoPixelBus.
+FastLED's `HD107ControllerHD` (or standalone `five_bit_hd_gamma_bitshift()`) uses the 5-bit brightness field intelligently:
+- Standard: brightness=31, RGB=1 = 1 step above black
+- HD mode: brightness=1, RGB=31 = 31 steps at similar perceived brightness
 
-**Noise API Unchanged:** All noise functions (`inoise8`, `inoise16`, `fill_noise8`, etc.) are identical between pinned and current. Safe to upgrade.
+See: brightness-and-primitives.md, hd-gamma-math.md
 
-**Breaking Changes:** `BulkClockless` API removed (unlikely to affect this project), namespace changed from `ftl/` to `fl/stl/`.
+### NeoPixelBus Per-LED Brightness
+
+`DotStarLbgrFeature` with `RgbwColor` exposes the 5-bit brightness field:
+- W channel expects 0-31 directly (NOT scaled from 0-255)
+- Matches FastLED's `five_bit_hd_gamma_bitshift()` output
+
+See: neopixelbus-brightness.md
+
+### Hybrid Approach Validated
+
+FastLED effects -> `five_bit_hd_gamma_bitshift()` -> NeoPixelBus `RgbwColor` output works:
+- API compatibility confirmed
+- Per-pixel overhead negligible (~36us for 144 LEDs)
+
+See: fastled-neopixelbus-hybrid.md
+
+### ESP32 SPI Bulk Transfer
+
+Fix exists (`FASTLED_ESP32_SPI_BULK_TRANSFER=1`) but needs validation on ESP32-S3. Jan 2025 reports suggest the code path may not be invoked correctly.
+
+See: esp32-spi-analysis.md
 
 ## Investigation Files
 
 | File | Contents |
 |------|----------|
-| [esp32-spi-analysis.md](esp32-spi-analysis.md) | ESP32 SPI driver code paths, bulk transfer fix, comparison to NeoPixelBus |
-| [brightness-and-primitives.md](brightness-and-primitives.md) | How FastLED exposes 5-bit brightness, HD mode controllers, CRGB limitations |
-| [noise-effects-api.md](noise-effects-api.md) | Noise function changes (none), new features (fonts, audio), breaking changes |
-| [neopixelbus-brightness.md](neopixelbus-brightness.md) | NeoPixelBus per-LED brightness via `DotStarLbgrFeature`, POV flicker warning |
+| brightness-and-primitives.md | HD mode overview, CRGB structure, standalone gamma function |
+| hd-gamma-math.md | Algorithm deep dive, how 5-bit decomposition works |
+| neopixelbus-brightness.md | DotStarLbgrFeature, W channel behavior, POV warning context |
+| fastled-neopixelbus-hybrid.md | Hybrid approach validation, implementation sketch |
+| esp32-spi-analysis.md | Bulk transfer fix, NeoPixelBus comparison, ESP32-S3 concerns |
+
+## Test Project Learning Goals
+
+A test project should empirically validate:
+
+### 1. Dark-End Improvement
+- Does HD gamma actually improve the RGB(1,0,0) to RGB(0,0,0) gulf?
+- Visual comparison: dark gradient 0-32 with and without HD mode
+- Does gamma 2.8 help or hurt at the extreme dark end?
+
+### 2. POV Flicker Check
+- NeoPixelBus warns about 5-bit brightness causing "more flicker" for POV
+- The 5-bit field is current limiting, not PWM - is this warning valid?
+- Empirical test: spin the display with varying brightness, look for artifacts
+
+### 3. ESP32-S3 SPI Validation
+- Does `FASTLED_ESP32_SPI_BULK_TRANSFER` actually work on ESP32-S3?
+- Logic analyzer: verify batched transactions occur
+- Compare timing to NeoPixelBus baseline
+
+### 4. Hybrid Approach Verification
+- FastLED effects -> gamma decomposition -> NeoPixelBus output
+- Confirm 5-bit brightness appears correctly on wire
+- Frame timing impact
 
 ## Hardware Context
 
-- **LEDs:** HD107S (APA102-compatible, SPI clocked, 8-bit RGB + 5-bit brightness)
+- **LEDs:** HD107S (APA102-compatible, 8-bit RGB + 5-bit brightness)
 - **MCU:** ESP32-S3 (Seeed XIAO)
-- **Application:** POV (persistence of vision) spinning LED display
-- **Current setup:** FastLED for effects + NeoPixelBus for SPI output (workaround for FastLED SPI issues)
+- **Application:** POV spinning LED display
 
 ## Repository References
 
 | Location | Description |
 |----------|-------------|
-| `~/projects/FastLED` | Local FastLED repo (upstream remote: `FastLED`, fork: `origin`) |
-| `~/projects/POV_Project/led_display/platformio.ini` | Pinned commit reference |
+| `~/projects/FastLED` | Local FastLED repo |
+| `~/projects/POV_Project/led_display/` | POV display firmware |
 | `~/projects/POV_Project/docs/datasheets/HD107S-LED-Datasheet.txt` | HD107S datasheet |
-| `~/projects/POV_Project/docs/datasheets/HD108-led.pdf` | HD108 (16-bit) datasheet |
 
 ## FastLED Key Files
 
 ```
-src/chipsets.h                              # HD107, APA102, HD108 definitions
-src/five_bit_hd_gamma.h                     # HD mode gamma algorithm
-src/platforms/esp/32/fastspi_esp32*.h       # ESP32 SPI drivers
-src/fl/noise.h                              # Noise functions
-src/fl/font/truetype.h                      # TrueType font support (new)
-src/fl/audio/                               # Audio analysis system (new)
+src/fl/five_bit_hd_gamma.h                      # HD gamma algorithm
+src/fl/chipsets/apa102.h                        # HD107ControllerHD
+src/platforms/esp/32/core/fastspi_esp32*.h      # ESP32 SPI drivers
 ```
-
-## Recommended Next Steps
-
-1. **Quick win:** Try `HD107ControllerHD` instead of `HD107` for better dark-end gradation
-2. **Test SPI fix:** Add `#define FASTLED_ESP32_SPI_BULK_TRANSFER 1` and benchmark
-3. **If both work:** Consider dropping NeoPixelBus dependency entirely
-4. **Hardware upgrade path:** HD108 LEDs offer 16-bit color (65536 levels vs 256)

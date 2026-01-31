@@ -2,15 +2,15 @@
 
 *Investigation Date: January 31, 2026*
 *FastLED Version: Current master (8cd217f137)*
-*Compared to: Pinned commit ac595965af (Nov 27, 2025)*
 
-## Issue #1609 Status: PARTIALLY FIXED
+## Issue #1609 Status: FIX EXISTS, NEEDS VALIDATION
 
-The ESP32 SPI per-byte DMA transaction problem (causing ~1.7μs gaps) has been addressed but the fix is **disabled by default**.
+The ESP32 SPI per-byte DMA transaction problem has a fix, but reports suggest it may not work correctly on ESP32-S3.
 
-### The Fix for HD107S (APA102-Compatible True SPI)
+## The Bulk Transfer Fix
 
-**Bulk Transfer Mode Available** (Commit 5870d54c50, Nov 13, 2024)
+**Introduced:** Commit 5870d54c50, November 13, 2024
+**First Release:** v3.9.4
 
 Enable with:
 ```cpp
@@ -18,62 +18,70 @@ Enable with:
 #include "FastLED.h"
 ```
 
-Performance improvement:
-- Before: ~900 transactions for 300 LEDs, 1.53ms overhead
-- After: ~5 transactions, 8.5μs overhead
+### What It Does
 
-Configuration options:
-```cpp
-#define FASTLED_ESP32_SPI_BULK_TRANSFER 1           // Enable bulk mode
-#define FASTLED_ESP32_SPI_BULK_TRANSFER_SIZE 64     // Pixels per batch (default)
-```
+**Default (disabled):** Each byte sent via individual `SPI.transfer()` calls
+- ~900 transactions for 300 LEDs
+- Each transaction grabs/releases SPI bus lock
+- Creates ~1.7us gaps between bytes
 
-### Code Paths
+**Bulk mode (enabled):** Batches pixels before sending
+- Accumulates into `CRGB[64]` buffer (stack allocated)
+- Sends via `SPI.writePixels()` when buffer fills
+- ~5 transactions for 300 LEDs
 
-Three distinct SPI implementations exist in FastLED:
-
-#### 1. Legacy ESP32SPIOutput (FOR YOUR HD107S)
-- Files: `fastspi_esp32_arduino.h` (~272 lines), `fastspi_esp32_idf.h` (~164 lines)
-- Now includes bulk transfer support
-- Works in both Arduino and ESP-IDF backends
-
-#### 2. Modern ChannelEngineSpi (NOT for HD107S - WS2812 only)
-- Files: `channel_engine_spi.h`, `channel_engine_spi.cpp.hpp`
-- ISR-based double-buffered staging (4KB buffers A/B)
-- Wave8 encoding with multi-lane support
-- **Not applicable to clocked SPI LEDs like HD107S**
-
-#### 3. Alternative Drivers
-- **PARLIO**: 8.0MHz, 1-16 parallel strips - ESP32-P4/C6/H2/C5
-- **LCD RGB**: 3.2MHz - ESP32-P4 only
-- **LCD I80**: ESP32-S3/P4 - up to 16 parallel strips
-
-### Key Files
-
-```
-src/platforms/esp/32/fastspi_esp32.h          # Dispatch router
-src/platforms/esp/32/fastspi_esp32_arduino.h  # Arduino backend (bulk transfer here)
-src/platforms/esp/32/fastspi_esp32_idf.h      # ESP-IDF backend
-src/platforms/esp/32/channel_engine_spi.*     # WS2812 only, not for HD107S
-```
-
-### Changes Since Pinned Commit
-
-1. Dispatch header refactor (`fastspi_esp32.h` is now a router)
-2. New ChannelEngine architecture (not relevant for HD107S)
-3. Peripheral abstraction layer added (`ispi_peripheral.h`)
-4. **Bulk transfer integration** - the key fix for you
-
-### Recommendation
-
-To test if bulk transfer fixes your SPI issues:
+### Key Detail: 64 PIXELS, Not 64 Bytes
 
 ```cpp
-#define FASTLED_ESP32_SPI_BULK_TRANSFER 1
-#include "FastLED.h"
-
-// Then use HD107 as normal
-FastLED.addLeds<HD107, DATA_PIN, CLOCK_PIN, RGB>(leds, NUM_LEDS);
+CRGB data_block[FASTLED_ESP32_SPI_BULK_TRANSFER_SIZE] = {0};  // Default 64
 ```
 
-If this works well, you could potentially drop NeoPixelBus entirely.
+64 CRGBs = 64 pixels = 192 bytes per batch.
+
+Configurable:
+```cpp
+#define FASTLED_ESP32_SPI_BULK_TRANSFER_SIZE 128  // Larger batches
+```
+
+## ESP32-S3 Compatibility Concern
+
+From GitHub issue #1609 (January 2025), a user reported:
+- Enabled the flag, confirmed `FASTLED_ESP32_SPI_BULK_TRANSFER_SIZE` was set
+- Still got same 7 FPS for 128 APA102s
+- The `writePixels` template appeared to never be called
+- Traced to FSPI/VSPI constant handling issues in preprocessor
+
+**This needs validation on ESP32-S3** with logic analyzer to confirm the fix is actually being used.
+
+## Why Disabled by Default
+
+1. **Stack RAM usage:** 192 bytes for default buffer
+2. **Buffering latency:** Small LED counts don't benefit
+3. **Conservative compatibility:** Avoid breaking edge cases
+4. **ESP32 variant differences:** FSPI/VSPI/SPI2 constant handling varies
+
+## Comparison: FastLED vs NeoPixelBus SPI
+
+| Aspect | NeoPixelBus DMA | FastLED Bulk (64px) | FastLED Default |
+|--------|-----------------|---------------------|-----------------|
+| Transaction Size | Entire frame | 64 pixels (192 bytes) | 1 pixel (3 bytes) |
+| Buffer Location | Heap (DMA-aligned) | Stack | None |
+| Transfer Method | `spi_device_queue_trans()` | `writePixels()` | `SPI.transfer()` |
+| Transactions (300 LEDs) | 1 | ~5 | ~900 |
+
+**NeoPixelBus sends the entire frame in one DMA transaction** - fundamentally more efficient than FastLED's chunked approach.
+
+## Key Files
+
+```
+src/platforms/esp/32/core/fastspi_esp32.h          # Dispatch + defines
+src/platforms/esp/32/core/fastspi_esp32_arduino.h  # Arduino backend, bulk transfer impl
+src/platforms/esp/32/core/fastspi_esp32_idf.h      # ESP-IDF backend
+```
+
+## Test Project Validation Goals
+
+1. Enable `FASTLED_ESP32_SPI_BULK_TRANSFER` on ESP32-S3
+2. Verify with logic analyzer that batched transfers actually occur
+3. Compare timing to NeoPixelBus baseline
+4. Determine if NeoPixelBus can be eliminated or remains necessary

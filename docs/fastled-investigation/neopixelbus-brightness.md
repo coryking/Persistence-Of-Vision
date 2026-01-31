@@ -2,137 +2,90 @@
 
 *Investigation Date: January 31, 2026*
 
-## Key Finding: YES - NeoPixelBus Exposes Per-LED Brightness
+## Key Finding: NeoPixelBus Exposes Per-LED 5-bit Brightness
 
-NeoPixelBus provides **full per-LED brightness control** for APA102/HD107S LEDs through different feature classes.
+NeoPixelBus provides per-LED brightness control for APA102/HD107S LEDs through the "L" (Luminance) feature classes.
 
-## Feature Options
+## Critical Detail: W Channel Input Range
 
-### Option A: DotStarBgrFeature (Your Current Setup)
-
-```cpp
-NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(ledCount);
-strip.SetPixelColor(0, RgbColor(255, 0, 0));  // Red, brightness ALWAYS 31
-```
-
-- Uses `RgbColor` (8-bit R, G, B)
-- Brightness: **Fixed at maximum (31/31)**
-- The 5-bit field is hardcoded to `0xFF` in `DotStarX4ByteFeature`
-
-### Option B: DotStarLbgrFeature (Per-LED Brightness!)
-
-```cpp
-NeoPixelBus<DotStarLbgrFeature, DotStarSpi40MhzMethod> strip(ledCount);
-strip.SetPixelColor(0, RgbwColor(255, 0, 0, 31));   // Red, brightness 31 (max)
-strip.SetPixelColor(1, RgbwColor(255, 0, 0, 15));   // Red, brightness 15 (half)
-strip.SetPixelColor(2, RgbwColor(255, 0, 0, 1));    // Red, brightness 1 (dim)
-```
-
-- Uses `RgbwColor` (8-bit R, G, B, W)
-- The **W field controls brightness** (0-255, clamped to 0-31)
-- Feature class: `DotStarL4ByteFeature`
-
-### Option C: DotStarLrgb64Feature (16-bit Precision)
-
-```cpp
-NeoPixelBus<DotStarLrgb64Feature, DotStarSpi40MhzMethod> strip(ledCount);
-strip.SetPixelColor(0, Rgbw64Color(65535, 0, 0, 31));  // Red, brightness 31
-```
-
-- Uses `Rgbw64Color` (16-bit R, G, B, W)
-- Higher precision for sophisticated effects
-- W field still clamped to 5-bit (0-31) for the hardware
-
-## How the 5-bit Brightness Encodes
+**The W channel expects 0-31 directly. It does NOT scale 0-255 down to 0-31.**
 
 From `DotStarL4ByteFeature::applyPixelColor()`:
 
 ```cpp
-*p++ = 0xE0 | (color.W < 31 ? color.W : 31); // upper three bits always 111
-*p++ = color.B;
-*p++ = color.G;
-*p++ = color.R;
+*p++ = 0xE0 | (color.W < 31 ? color.W : 31);
 ```
 
-- Takes W field from RgbwColor (0-255)
-- Clamps to 5-bit range (0-31)
-- Encodes as: `111xxxxx` where `xxxxx` = brightness bits
+This means:
+- Pass W=0 to W=31: used directly as brightness
+- Pass W=32 to W=255: clamped to 31 (max brightness)
+- There is NO mapping/scaling - just clamping
 
-## Frame Structure Comparison
+This matches FastLED's `five_bit_hd_gamma_bitshift()` output which produces 0-31.
 
-**Current (DotStarBgrFeature):**
+## Feature Options
+
+### DotStarBgrFeature (Brightness Hardcoded to Max)
+
+```cpp
+NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(ledCount);
+strip.SetPixelColor(0, RgbColor(255, 0, 0));  // brightness ALWAYS 31
 ```
-Byte 0: 11111111 (brightness = 31, always max)
+
+- Uses `RgbColor` (3 bytes)
+- 5-bit brightness field hardcoded to 31
+
+### DotStarLbgrFeature (Per-LED Brightness)
+
+```cpp
+NeoPixelBus<DotStarLbgrFeature, DotStarSpi40MhzMethod> strip(ledCount);
+strip.SetPixelColor(0, RgbwColor(255, 0, 0, 31));  // brightness 31 (max)
+strip.SetPixelColor(1, RgbwColor(255, 0, 0, 15));  // brightness 15
+strip.SetPixelColor(2, RgbwColor(255, 0, 0, 1));   // brightness 1 (dim)
+```
+
+- Uses `RgbwColor` (4 bytes: R, G, B, W)
+- W field = 5-bit brightness (0-31, clamped if higher)
+
+## Wire Protocol
+
+**DotStar/APA102 Frame Structure:**
+```
+Byte 0: 111bbbbb  (0xE0 | brightness, where bbbbb = 5-bit brightness 0-31)
 Byte 1: Blue
 Byte 2: Green
 Byte 3: Red
 ```
 
-**Per-LED (DotStarLbgrFeature):**
-```
-Byte 0: 111bbbbb (b = 5-bit brightness from W field, 0-31)
-Byte 1: Blue
-Byte 2: Green
-Byte 3: Red
-```
+The three high bits (111) are the frame marker. The five low bits are brightness.
+
+## POV Flicker Warning - Context
+
+NeoPixelBus examples include this warning:
+> "also note that it is not useful for POV displays as it will cause more flicker"
+
+**What this warning is about:**
+- The 5-bit brightness field is **current limiting**, not PWM
+- Changing brightness changes the LED's steady-state current draw
+- At POV rotation speeds, rapidly varying brightness across pixels could produce quantization artifacts (32 discrete levels vs smooth gradients)
+
+**What this warning is NOT about:**
+- It's not about PWM frequency - the 5-bit field doesn't use PWM
+- The RGB channels use high-frequency PWM (~26kHz), the 5-bit field does not
+
+**Bottom line:** This needs empirical testing on the actual spinning display to determine if it's a real concern or overly cautious.
 
 ## Comparison Table
 
-| Feature | Color Type | Brightness | Per-LED? |
-|---------|-----------|------------|----------|
-| DotStarBgrFeature | RgbColor | Fixed 31 | No |
-| DotStarLbgrFeature | RgbwColor | W field → 0-31 | **Yes** |
-| DotStarLrgb64Feature | Rgbw64Color | W field → 0-31 | **Yes** |
+| Feature | Color Type | W Channel | Brightness |
+|---------|-----------|-----------|------------|
+| DotStarBgrFeature | RgbColor | N/A | Fixed 31 |
+| DotStarLbgrFeature | RgbwColor | 0-31 direct | Per-LED |
+| DotStarLrgb64Feature | Rgbw64Color | 0-31 direct | Per-LED |
 
-## Migration Path for Your Project
+## Key Files (NeoPixelBus)
 
-```cpp
-// Change declaration from:
-NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(NUM_LEDS);
-
-// To:
-NeoPixelBus<DotStarLbgrFeature, DotStarSpi40MhzMethod> strip(NUM_LEDS);
-
-// Change color setting from:
-strip.SetPixelColor(i, RgbColor(r, g, b));
-
-// To:
-strip.SetPixelColor(i, RgbwColor(r, g, b, brightness)); // brightness 0-31
 ```
-
-## Important Warning for POV Displays
-
-From NeoPixelBus's own `Hd108Test.ino` example:
-
-> "also note that it is not useful for POV displays as it will cause more flicker"
-
-The per-LED brightness may introduce visual artifacts at high rotation speeds. **Test carefully** before using for your POV display.
-
-## NeoPixelBus vs FastLED Comparison
-
-| Feature | FastLED | NeoPixelBus |
-|---------|---------|-------------|
-| Per-LED Brightness | No (global only via setBrightness) | **Yes** (via W field) |
-| HD Mode Gamma | Yes (HD107ControllerHD) | No built-in |
-| Color Type | CRGB (3 bytes) | RgbwColor (4 bytes) |
-| Brightness Range | 0-255 → 0-31 (global) | 0-31 per LED |
-
-## Recommendations
-
-### For Better Dark-End Dynamic Range:
-
-**Option 1: FastLED HD Mode** (simpler)
-- Use `HD107ControllerHD`
-- Global brightness optimization, no per-LED control
-- Compatible with all FastLED effects
-
-**Option 2: NeoPixelBus Per-LED** (more control)
-- Use `DotStarLbgrFeature` with `RgbwColor`
-- True per-LED brightness control
-- Must manage brightness yourself
-- **Test for POV flicker issues**
-
-**Option 3: Hybrid Approach**
-- Use FastLED for effects/color math (CRGB arrays)
-- Convert to NeoPixelBus RgbwColor for output with computed brightness
-- Most flexible but most complex
+src/internal/features/DotStarL4ByteFeature.h   # applyPixelColor() implementation
+src/internal/colors/RgbwColor.h                # RgbwColor struct
+```
