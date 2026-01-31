@@ -1,102 +1,8 @@
 #include "effects/Radar.h"
+#include "effects/PhosphorPalettes.h"
 #include <FastLED.h>
 #include "polar_helpers.h"
 #include <cmath>
-
-// ============================================================
-// Phosphor Palettes - BLIP (full brightness for radar returns)
-// ============================================================
-
-// P7 Blip - WWII/Cold War standard
-// Inverse power law: very fast initial drop, long dim tail
-DEFINE_GRADIENT_PALETTE(phosphorP7_blip_gp) {
-    0,   200, 200, 255,   // Bright blue-white flash
-    4,   120, 180, 180,   // Rapid transition
-    16,   80, 160,  80,   // Yellow-green
-    48,   50, 120,  40,   // Dimming
-    128,  25,  60,  20,   // Dim green
-    255,   0,   0,   0    // Black
-};
-
-// P12 Blip - Orange, Medium persistence
-DEFINE_GRADIENT_PALETTE(phosphorP12_blip_gp) {
-    0,   255, 150,  50,   // Bright orange
-    16,  180, 100,  30,   // Quick drop
-    64,  100,  60,  15,   // Dimming
-    255,   0,   0,   0    // Black
-};
-
-// P19 Blip - Orange, Very long persistence
-DEFINE_GRADIENT_PALETTE(phosphorP19_blip_gp) {
-    0,   255, 160,  60,   // Bright orange
-    32,  180, 100,  35,   // Slow initial drop
-    128, 100,  50,  20,   // Long tail
-    255,   0,   0,   0    // Black
-};
-
-// P1 Blip - Green, Fast decay (oscilloscope)
-DEFINE_GRADIENT_PALETTE(phosphorP1_blip_gp) {
-    0,   100, 255, 100,   // Bright green
-    8,    60, 180,  60,   // Very fast drop
-    32,   30, 100,  30,   // Dim quickly
-    255,   0,   0,   0    // Black
-};
-
-// ============================================================
-// Phosphor Palettes - SWEEP (dimmer for ambient glow, ~35%)
-// ============================================================
-
-// P7 Sweep - dim ambient glow version
-DEFINE_GRADIENT_PALETTE(phosphorP7_sweep_gp) {
-    0,    70,  70,  90,   // Dim blue-white
-    4,    42,  63,  63,   // Rapid transition
-    16,   28,  56,  28,   // Yellow-green
-    48,   18,  42,  14,   // Dimming
-    128,   9,  21,   7,   // Very dim green
-    255,   0,   0,   0    // Black
-};
-
-// P12 Sweep - dim orange
-DEFINE_GRADIENT_PALETTE(phosphorP12_sweep_gp) {
-    0,    90,  52,  18,   // Dim orange
-    16,   63,  35,  10,   // Quick drop
-    64,   35,  21,   5,   // Dimming
-    255,   0,   0,   0    // Black
-};
-
-// P19 Sweep - dim orange long
-DEFINE_GRADIENT_PALETTE(phosphorP19_sweep_gp) {
-    0,    90,  56,  21,   // Dim orange
-    32,   63,  35,  12,   // Slow drop
-    128,  35,  18,   7,   // Long tail
-    255,   0,   0,   0    // Black
-};
-
-// P1 Sweep - dim green fast
-DEFINE_GRADIENT_PALETTE(phosphorP1_sweep_gp) {
-    0,    35,  90,  35,   // Dim green
-    8,    21,  63,  21,   // Very fast drop
-    32,   10,  35,  10,   // Dim quickly
-    255,   0,   0,   0    // Black
-};
-
-// ============================================================
-// Static Palette Arrays
-// ============================================================
-
-const CRGBPalette16 Radar::phosphorPalettes[4] = {
-    phosphorP7_blip_gp,
-    phosphorP12_blip_gp,
-    phosphorP19_blip_gp,
-    phosphorP1_blip_gp
-};
-
-const CRGBPalette16 Radar::sweepPalettes[4] = {
-    phosphorP7_sweep_gp,
-    phosphorP12_sweep_gp,
-    phosphorP19_sweep_gp,
-    phosphorP1_sweep_gp
-};
 
 // ============================================================
 // Initialization
@@ -106,6 +12,9 @@ void Radar::begin() {
     sweepAngleUnits = 0;
     lastRevolutionTime = 0;
     currentMicrosPerRev = 46000;  // ~1300 RPM default
+
+    // Generate phosphor palettes using actual decay physics
+    PhosphorPalettes::generateAll(blipPalettes, sweepPalettes);
 
     // Initialize all blips as inactive
     for (int i = 0; i < MAX_BLIPS; i++) {
@@ -226,7 +135,7 @@ CRGB Radar::getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs, bool forSw
     // Select palette: sweep uses dimmer palette, blips use full brightness
     const CRGBPalette16& palette = forSweep
         ? sweepPalettes[static_cast<uint8_t>(currentPhosphorType)]
-        : phosphorPalettes[static_cast<uint8_t>(currentPhosphorType)];
+        : blipPalettes[static_cast<uint8_t>(currentPhosphorType)];
 
     // LINEARBLEND_NOWRAP prevents wrapping from index 255 back to 0
     // (default LINEARBLEND would blend black→white at end of palette)

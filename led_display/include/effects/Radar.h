@@ -71,8 +71,8 @@ private:
     // Blip lifetime (slightly longer than sweep decay for overlap)
     static constexpr timestamp_t MAX_BLIP_LIFETIME_US = 6000000ULL;
 
-    // Sweep beam intensity (brighter than trail)
-    static constexpr CRGB SWEEP_COLOR = CRGB(255, 255, 255);
+    // Sweep beam color (blue-white per P7 physics)
+    static constexpr CRGB SWEEP_COLOR = CRGB(200, 200, 255);
 
     // === State ===
     angle_t sweepAngleUnits = 0;
@@ -92,9 +92,9 @@ private:
     // Random seed for target initialization
     uint16_t randomSeed = 12345;
 
-    // === Palette Arrays (defined in .cpp) ===
-    static const CRGBPalette16 phosphorPalettes[4];  // Blips (full brightness)
-    static const CRGBPalette16 sweepPalettes[4];     // Sweep trail (dimmer)
+    // === Palette Arrays (generated at runtime in begin()) ===
+    CRGBPalette16 blipPalettes[4];   // One per PhosphorType (full brightness)
+    CRGBPalette16 sweepPalettes[4];  // One per PhosphorType (dimmer)
 
     // === Helper Methods ===
 
