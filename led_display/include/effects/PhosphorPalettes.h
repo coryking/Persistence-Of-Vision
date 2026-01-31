@@ -8,16 +8,17 @@
  *
  * Generates CRGBPalette256 palettes using actual phosphor decay physics.
  * See docs/effects/math-for-phosphor.md for the underlying math.
+ * See docs/effects/authentic-ppi-radar-display-physics.md for color reference.
  *
  * Decay formulas:
  * - Exponential: I(t) = I₀ × exp(-t/τ)  (P1, P12)
  * - Inverse power law: I(t) = I₀ / (1 + t/τ)^n  (P7, P19)
  *
- * DEBUG MODE: Using distinct hues to verify decay physics:
- *   P7  = Cyan (128)    - authentic: blue→yellow cascade
- *   P12 = Magenta (192) - authentic: orange
- *   P19 = Lime (96)     - authentic: orange
- *   P1  = Red (0)       - authentic: green
+ * Phosphor colors (CHSV hue values):
+ *   P7  = Cascade: blue-white → yellow-green (CRGB blend)
+ *   P12 = Orange (590nm), hue 32
+ *   P19 = Orange (595nm), hue 30
+ *   P1  = Green (525nm), hue 96
  */
 
 namespace PhosphorPalettes {

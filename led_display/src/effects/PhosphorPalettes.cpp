@@ -5,22 +5,21 @@
  * Phosphor Decay Physics Implementation
  *
  * Based on docs/effects/math-for-phosphor.md
+ * Colors from docs/effects/authentic-ppi-radar-display-physics.md
  *
  * Two decay types:
  * 1. Exponential: I(t) = I₀ × exp(-t/τ)
  *    - Used by P1 (fast), P12 (medium)
- *    - Decays quickly then fades
  *
  * 2. Inverse power law: I(t) = I₀ / (1 + t/τ)^n
  *    - Used by P7, P19 (long persistence)
  *    - Fast initial drop, then holds dim glow much longer
- *    - Creates the "trails that never quite disappear" look
  *
- * DEBUG MODE: Using distinct hues to verify decay physics:
- *   P7  = Cyan (128)    - authentic: blue→yellow cascade
- *   P12 = Magenta (192) - authentic: orange
- *   P19 = Lime (96)     - authentic: orange
- *   P1  = Red (0)       - authentic: green
+ * Authentic phosphor colors (CHSV hue values):
+ *   P7  = Cascade: blue-white → yellow-green (uses CRGB blend)
+ *   P12 = Orange (590nm), hue 32
+ *   P19 = Orange (595nm), hue 30
+ *   P1  = Green (525nm), hue 96
  */
 
 namespace {
@@ -52,40 +51,52 @@ inline float inversePowerDecay(float t, float tau, float n) {
  * Physics: Blue-white flash layer excites yellow-green persistent layer
  * Decay: Inverse power law, I(t) = I₀ / (1 + t/τ)^n where n ≈ 1
  *
- * DEBUG: Cyan (hue=128) to distinguish from other phosphors
- * AUTHENTIC: Blue-white (160, sat=128) at t=0, yellow-green (64) thereafter
+ * From authentic-ppi-radar-display-physics.md:
+ *   Start: RGB(200, 200, 255) blue-white
+ *   Mid:   RGB(150, 200, 100) transitioning
+ *   Glow:  RGB(100, 180, 50)  yellow-green
+ *   Dim:   RGB(50, 100, 25)   fading yellow-green
  */
 void generateP7(CRGBPalette256& blip, CRGBPalette256& sweep) {
-    // DEBUG hue - cyan for easy identification
-    const uint8_t DEBUG_HUE = 128;  // Authentic: 160→64 (blue→yellow cascade)
-
     // P7 decay parameters (inverse power law)
     const float tau = 0.15f;  // Time constant
     const float n = 1.0f;     // Power exponent
 
+    // P7 cascade colors (gamma-corrected for LED display)
+    // Blue-white flash → yellow-green afterglow
+    const CRGB flashColor = CRGB(200, 200, 255);   // Blue-white initial flash
+    const CRGB glowColor = CRGB(100, 180, 50);     // Yellow-green afterglow
+
     for (int i = 0; i < 256; i++) {
         float t = indexToTime(i);
         float intensity = inversePowerDecay(t, tau, n);
+
+        // Color transition: flash→glow happens in first 10% of decay
+        // After that, it's pure yellow-green fading out
+        float colorBlend = fminf(t * 10.0f, 1.0f);  // 0→1 over first 10%
+
+        // Blend from flash to glow color
+        CRGB baseColor = blend(flashColor, glowColor, static_cast<uint8_t>(colorBlend * 255));
+
+        // Apply intensity decay
         uint8_t blipValue = static_cast<uint8_t>(intensity * BLIP_BRIGHTNESS);
         uint8_t sweepValue = static_cast<uint8_t>(intensity * SWEEP_BRIGHTNESS);
 
-        blip[i] = CHSV(DEBUG_HUE, 255, blipValue);
-        sweep[i] = CHSV(DEBUG_HUE, 255, sweepValue);
+        blip[i] = baseColor;
+        blip[i].nscale8(blipValue);
+        sweep[i] = baseColor;
+        sweep[i].nscale8(sweepValue);
     }
 }
 
 /**
  * P1 (Green Oscilloscope) - Fast exponential decay
  *
- * Physics: Single layer, pure green phosphor
+ * Physics: Single layer, pure green phosphor (525nm)
  * Decay: Fast exponential, τ ≈ 10ms equivalent
- *
- * DEBUG: Red (hue=0) to distinguish from other phosphors
- * AUTHENTIC: Green (hue=96)
  */
 void generateP1(CRGBPalette256& blip, CRGBPalette256& sweep) {
-    // DEBUG hue - red for easy identification
-    const uint8_t DEBUG_HUE = 0;  // Authentic: 96 (green)
+    const uint8_t HUE = 96;  // Green (525nm)
 
     // P1 decay: fast exponential
     const float tau = 0.08f;  // Very fast decay
@@ -96,23 +107,19 @@ void generateP1(CRGBPalette256& blip, CRGBPalette256& sweep) {
         uint8_t blipValue = static_cast<uint8_t>(intensity * BLIP_BRIGHTNESS);
         uint8_t sweepValue = static_cast<uint8_t>(intensity * SWEEP_BRIGHTNESS);
 
-        blip[i] = CHSV(DEBUG_HUE, 255, blipValue);
-        sweep[i] = CHSV(DEBUG_HUE, 255, sweepValue);
+        blip[i] = CHSV(HUE, 255, blipValue);
+        sweep[i] = CHSV(HUE, 255, sweepValue);
     }
 }
 
 /**
  * P12 (Orange Medium) - Medium persistence exponential
  *
- * Physics: Orange phosphor with 1-2 second persistence
+ * Physics: Orange phosphor (590nm) with 2-5 second persistence
  * Decay: Exponential, τ ≈ 1-2s equivalent
- *
- * DEBUG: Magenta (hue=192) to distinguish from other phosphors
- * AUTHENTIC: Orange (hue=32)
  */
 void generateP12(CRGBPalette256& blip, CRGBPalette256& sweep) {
-    // DEBUG hue - magenta for easy identification
-    const uint8_t DEBUG_HUE = 192;  // Authentic: 32 (orange)
+    const uint8_t HUE = 32;  // Orange (590nm)
 
     // P12 decay: medium exponential
     const float tau = 0.25f;  // Medium decay
@@ -123,23 +130,19 @@ void generateP12(CRGBPalette256& blip, CRGBPalette256& sweep) {
         uint8_t blipValue = static_cast<uint8_t>(intensity * BLIP_BRIGHTNESS);
         uint8_t sweepValue = static_cast<uint8_t>(intensity * SWEEP_BRIGHTNESS);
 
-        blip[i] = CHSV(DEBUG_HUE, 255, blipValue);
-        sweep[i] = CHSV(DEBUG_HUE, 255, sweepValue);
+        blip[i] = CHSV(HUE, 255, blipValue);
+        sweep[i] = CHSV(HUE, 255, sweepValue);
     }
 }
 
 /**
  * P19 (Orange Long) - Very long persistence
  *
- * Physics: Orange phosphor with very long persistence
+ * Physics: Orange phosphor (595nm) with very long persistence (>1 second)
  * Decay: Inverse power law (slower than P7)
- *
- * DEBUG: Lime/Yellow-green (hue=96) to distinguish from other phosphors
- * AUTHENTIC: Orange (hue=32)
  */
 void generateP19(CRGBPalette256& blip, CRGBPalette256& sweep) {
-    // DEBUG hue - lime/yellow-green for easy identification
-    const uint8_t DEBUG_HUE = 96;  // Authentic: 32 (orange)
+    const uint8_t HUE = 30;  // Orange (595nm) - slightly redder than P12
 
     // P19 decay: slow inverse power law
     const float tau = 0.25f;  // Slower time constant
@@ -151,8 +154,8 @@ void generateP19(CRGBPalette256& blip, CRGBPalette256& sweep) {
         uint8_t blipValue = static_cast<uint8_t>(intensity * BLIP_BRIGHTNESS);
         uint8_t sweepValue = static_cast<uint8_t>(intensity * SWEEP_BRIGHTNESS);
 
-        blip[i] = CHSV(DEBUG_HUE, 255, blipValue);
-        sweep[i] = CHSV(DEBUG_HUE, 255, sweepValue);
+        blip[i] = CHSV(HUE, 255, blipValue);
+        sweep[i] = CHSV(HUE, 255, sweepValue);
     }
 }
 
@@ -161,16 +164,16 @@ void generateP19(CRGBPalette256& blip, CRGBPalette256& sweep) {
 namespace PhosphorPalettes {
 
 void generateAll(CRGBPalette256 blipPalettes[4], CRGBPalette256 sweepPalettes[4]) {
-    // Index 0: P7_BLUE_YELLOW (DEBUG: Cyan)
+    // Index 0: P7 - Blue-white → yellow-green cascade (WWII radar)
     generateP7(blipPalettes[0], sweepPalettes[0]);
 
-    // Index 1: P12_ORANGE (DEBUG: Magenta)
+    // Index 1: P12 - Orange (590nm), medium persistence
     generateP12(blipPalettes[1], sweepPalettes[1]);
 
-    // Index 2: P19_ORANGE_LONG (DEBUG: Lime)
+    // Index 2: P19 - Orange (595nm), very long persistence
     generateP19(blipPalettes[2], sweepPalettes[2]);
 
-    // Index 3: P1_GREEN (DEBUG: Red)
+    // Index 3: P1 - Green (525nm), fast decay (oscilloscope)
     generateP1(blipPalettes[3], sweepPalettes[3]);
 }
 
