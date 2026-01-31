@@ -214,8 +214,8 @@ void setupImu() {
 }
 
 void registerEffects() {
-    effectManager.registerEffect(&noiseFieldEffect);
     effectManager.registerEffect(&radarEffect);
+    effectManager.registerEffect(&noiseFieldEffect);
     effectManager.registerEffect(&solidArmsEffect);
     effectManager.registerEffect(&rpmArcEffect);
     effectManager.registerEffect(&perArmBlobsEffect);

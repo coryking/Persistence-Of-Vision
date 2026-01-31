@@ -9,6 +9,13 @@
 #include <NeoPixelBus.h>
 #include "fl/five_bit_hd_gamma.h"
 
+// Timing instrumentation for gamma function (enabled with ENABLE_DETAILED_TIMING)
+#ifdef ENABLE_DETAILED_TIMING
+static int64_t gammaTimingTotal = 0;
+static int gammaCalls = 0;
+static int gammaFrameCount = 0;
+#endif
+
 // Forward declare (defined in main.cpp)
 class EffectManager;
 extern EffectManager effectManager;
@@ -115,6 +122,9 @@ void copyPixelsToStrip(const RenderContext& ctx, T_STRIP& ledStrip) {
             // This gives 31 steps at low brightness instead of 1 step above black
             CRGB output;
             uint8_t brightness_5bit;
+#ifdef ENABLE_DETAILED_TIMING
+            int64_t gammaStart = esp_timer_get_time();
+#endif
             fl::five_bit_hd_gamma_bitshift(
                 color,
                 CRGB(255, 255, 255),  // no color temp correction
@@ -122,9 +132,26 @@ void copyPixelsToStrip(const RenderContext& ctx, T_STRIP& ledStrip) {
                 &output,
                 &brightness_5bit
             );
+#ifdef ENABLE_DETAILED_TIMING
+            gammaTimingTotal += esp_timer_get_time() - gammaStart;
+            gammaCalls++;
+#endif
             ledStrip.SetPixelColor(start + physicalPos, RgbwColor(output.r, output.g, output.b, brightness_5bit));
         }
     }
+
+#ifdef ENABLE_DETAILED_TIMING
+    // Print periodic summary (every 1000 frames to minimize log spam)
+    gammaFrameCount++;
+    if (gammaFrameCount % 1000 == 0) {
+        float avgGammaUs = (gammaCalls > 0) ? (float)gammaTimingTotal / gammaCalls : 0;
+        Serial.printf("GAMMA_TIMING: avg_us=%.2f, total_calls=%d, frames=%d\n",
+                      avgGammaUs, gammaCalls, gammaFrameCount);
+        // Reset for next period
+        gammaTimingTotal = 0;
+        gammaCalls = 0;
+    }
+#endif
 }
 
 /**

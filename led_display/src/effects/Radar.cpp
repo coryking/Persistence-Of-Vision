@@ -3,6 +3,17 @@
 #include <FastLED.h>
 #include "polar_helpers.h"
 #include <cmath>
+#include "esp_timer.h"
+
+// Detailed timing instrumentation (enabled with ENABLE_DETAILED_TIMING)
+#ifdef ENABLE_DETAILED_TIMING
+static int64_t radarTimingTotal = 0;
+static int64_t radarTimingTargets = 0;
+static int64_t radarTimingSweep = 0;
+static int64_t radarTimingPhosphor = 0;
+static int64_t radarTimingBlips = 0;
+static int radarRenderCount = 0;
+#endif
 
 // ============================================================
 // Preset Configurations
@@ -230,9 +241,17 @@ void Radar::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t r
 // ============================================================
 
 void IRAM_ATTR Radar::render(RenderContext& ctx) {
+#ifdef ENABLE_DETAILED_TIMING
+    int64_t renderStart = esp_timer_get_time();
+    int64_t targetsTime = 0, sweepTime = 0, phosphorTime = 0, blipsTime = 0;
+#endif
+
     timestamp_t now = ctx.timeUs;
     const RadarPreset& preset = PRESETS[static_cast<uint8_t>(currentMode)];
 
+#ifdef ENABLE_DETAILED_TIMING
+    int64_t sectionStart = esp_timer_get_time();
+#endif
     // === Wall-clock target movement ===
     if (lastUpdateTime > 0) {
         timestamp_t deltaUs = now - lastUpdateTime;
@@ -262,11 +281,18 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
         }
     }
     lastUpdateTime = now;
+#ifdef ENABLE_DETAILED_TIMING
+    targetsTime = esp_timer_get_time() - sectionStart;
+    sectionStart = esp_timer_get_time();
+#endif
 
     // Compute sweep angle from wall-clock time (perfectly smooth)
     angle_t sweepAngleUnits = static_cast<angle_t>(
         (now % preset.sweepPeriodUs) * ANGLE_FULL_CIRCLE / preset.sweepPeriodUs
     );
+#ifdef ENABLE_DETAILED_TIMING
+    sweepTime = esp_timer_get_time() - sectionStart;
+#endif
 
     // Render each arm
     for (int armIdx = 0; armIdx < HardwareConfig::NUM_ARMS; armIdx++) {
@@ -299,11 +325,20 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
 
                 // Get phosphor color based on time since sweep (dim sweep palette)
                 if (timeSinceSweepUs < SWEEP_DECAY_TIME_US) {
+#ifdef ENABLE_DETAILED_TIMING
+                    int64_t phosphorStart = esp_timer_get_time();
+#endif
                     color = getPhosphorColor(timeSinceSweepUs, SWEEP_DECAY_TIME_US, true);
+#ifdef ENABLE_DETAILED_TIMING
+                    phosphorTime += esp_timer_get_time() - phosphorStart;
+#endif
                 }
             }
 
             // === Layer 2: Target blips (additive) ===
+#ifdef ENABLE_DETAILED_TIMING
+            int64_t blipStart = esp_timer_get_time();
+#endif
             for (int i = 0; i < MAX_BLIPS; i++) {
                 const Blip& blip = blips[i];
                 if (!blip.active) continue;
@@ -319,10 +354,19 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
                 // Blip matches - compute its color based on age (bright blip palette)
                 timestamp_t blipAge = now - blip.createdAt;
                 if (blipAge < MAX_BLIP_LIFETIME_US) {
+#ifdef ENABLE_DETAILED_TIMING
+                    int64_t phosphorStart2 = esp_timer_get_time();
+#endif
                     CRGB blipColor = getPhosphorColor(blipAge, MAX_BLIP_LIFETIME_US, false);
+#ifdef ENABLE_DETAILED_TIMING
+                    phosphorTime += esp_timer_get_time() - phosphorStart2;
+#endif
                     color += blipColor;  // Additive blend
                 }
             }
+#ifdef ENABLE_DETAILED_TIMING
+            blipsTime += esp_timer_get_time() - blipStart;
+#endif
 
             // No separate sweep line - the phosphor trail at age=0 (palette index 0) IS the sweep.
             // The leading edge of the phosphor trail is the brightest part, which is physically correct.
@@ -330,6 +374,36 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
             arm.pixels[led] = color;
         }
     }
+
+#ifdef ENABLE_DETAILED_TIMING
+    int64_t totalTime = esp_timer_get_time() - renderStart;
+
+    // Accumulate for periodic average
+    radarTimingTotal += totalTime;
+    radarTimingTargets += targetsTime;
+    radarTimingSweep += sweepTime;
+    radarTimingPhosphor += phosphorTime;
+    radarTimingBlips += blipsTime;
+    radarRenderCount++;
+
+    // Print periodic summary (every 1000 frames)
+    if (radarRenderCount % 1000 == 0) {
+        Serial.printf("RADAR_TIMING: render=%lld, targets=%lld, sweep=%lld, phosphor=%lld, blips=%lld (avg over %d frames)\n",
+                      radarTimingTotal / radarRenderCount,
+                      radarTimingTargets / radarRenderCount,
+                      radarTimingSweep / radarRenderCount,
+                      radarTimingPhosphor / radarRenderCount,
+                      radarTimingBlips / radarRenderCount,
+                      radarRenderCount);
+        // Reset for next period
+        radarTimingTotal = 0;
+        radarTimingTargets = 0;
+        radarTimingSweep = 0;
+        radarTimingPhosphor = 0;
+        radarTimingBlips = 0;
+        radarRenderCount = 0;
+    }
+#endif
 }
 
 // ============================================================
