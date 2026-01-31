@@ -64,7 +64,15 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 - Optimized build with `-O3 -ffast-math -finline-functions -funroll-loops`
 - USB CDC on boot enabled
 
-### lolin_s3_mini_debug (Debug)
+### seeed_xiao_esp32s3_profiling (Profiling)
+
+For performance analysis without physical hardware rotation.
+
+- All production optimizations (`-O3 -ffast-math`)
+- `TEST_MODE` - HallSimulator generates fake hall pulses (no physical rotation needed)
+- `ENABLE_TIMING_INSTRUMENTATION` - FrameProfiler outputs CSV timing data
+
+### seeed_xiao_esp32s3_debug (Debug)
 
 - Debug level logging (`CORE_DEBUG_LEVEL=5`)
 - Full debug symbols with DWARF-4
@@ -84,6 +92,32 @@ Note: PlatformIO's ESP32 platform requires `pip` to be available in the environm
 ## Key Build Flags
 
 - `ARDUINO_USB_CDC_ON_BOOT=1`: Enables USB serial on boot
+
+### Profiling & Test Flags
+
+| Flag | Purpose |
+|------|---------|
+| `TEST_MODE` | Enables HallSimulator - timer-based fake hall sensor pulses for desk testing |
+| `ENABLE_TIMING_INSTRUMENTATION` | Enables FrameProfiler CSV output (frame-level timing) |
+| `ENABLE_DETAILED_TIMING` | Effect-specific granular timing (e.g., per-LED timing in effects) |
+
+**Flag usage pattern:**
+- `TEST_MODE` - Use when you can't spin the display (desk development)
+- `ENABLE_TIMING_INSTRUMENTATION` - Frame-level profiling, outputs CSV with `total_us` per frame
+- `ENABLE_DETAILED_TIMING` - Add to effects for granular timing (see NoiseField.cpp, SolidArms.cpp for examples)
+
+### FrameProfiler CSV Format
+
+When `ENABLE_TIMING_INSTRUMENTATION` is enabled:
+
+```
+frame,effect,total_us,slot,angle_units,usec_per_rev,resolution_units,rev_count,angular_res,last_interval_us
+```
+
+Key columns:
+- `total_us` - Total frame render time (effect + gamma + strip.Show())
+- `usec_per_rev` - Revolution period (30000 = 2000 RPM)
+- `angular_res` - Angular resolution for this frame
 
 ## Debugging
 

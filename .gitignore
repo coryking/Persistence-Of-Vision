@@ -11,8 +11,10 @@
 __pycache__/
 *.pyc
 
-# Claude
-.claude/
+# Claude Code - ignore personal settings only
+.claude/settings.local.json
+.claude/*.local.*
+.claude/CLAUDE.local.md
 
 # Build artifacts
 compile_commands.json
@@ -27,15 +29,12 @@ compile_commands.json
 # Project-specific (in subdirectories)
 led_display/.pio/
 led_display/.venv/
-led_display/.claude/
 led_display/compile_commands.json
 motor_controller/.pio/
 motor_controller/.venv/
-motor_controller/.claude/
 motor_controller/compile_commands.json
 test_projects/*/.pio/
 test_projects/*/.venv/
-test_projects/*/.claude/
 test_projects/*/compile_commands.json
 
 # ESP-IDF build artifacts
