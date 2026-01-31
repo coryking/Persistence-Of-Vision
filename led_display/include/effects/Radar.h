@@ -125,6 +125,26 @@ private:
     CRGB getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs, bool forSweep) const;
 
     /**
+     * Pre-compute blip contributions into blipAccum buffer.
+     * Uses inverted loop: iterate active blips O(numActive), not O(LEDs × MAX_BLIPS).
+     * @param ctx Render context with arm angles and slot size
+     * @param now Current timestamp for age calculation
+     */
+    void renderBlipsToBuffer(const RenderContext& ctx, timestamp_t now);
+
+    /**
+     * Update world target positions based on wall-clock time.
+     * Handles respawn when targets exit bounds or reach center (zombie mode).
+     * @param now Current timestamp
+     * @param preset Current radar preset configuration
+     */
+    void updateWorldTargets(timestamp_t now, const RadarPreset& preset);
+
+    // === Blip accumulation buffer ===
+    // Pre-computed blip colors per LED, filled by renderBlipsToBuffer()
+    CRGB blipAccum[HardwareConfig::NUM_ARMS][HardwareConfig::LEDS_PER_ARM];
+
+    /**
      * Initialize or respawn a world target at random position/velocity
      */
     void initWorldTarget(WorldTarget& target);

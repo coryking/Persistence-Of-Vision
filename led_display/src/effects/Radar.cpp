@@ -179,6 +179,79 @@ CRGB Radar::getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs, bool forSw
 }
 
 // ============================================================
+// World Target Update
+// ============================================================
+
+void Radar::updateWorldTargets(timestamp_t now, const RadarPreset& preset) {
+    if (lastUpdateTime == 0) {
+        lastUpdateTime = now;
+        return;
+    }
+
+    timestamp_t deltaUs = now - lastUpdateTime;
+    float deltaSec = deltaUs / 1000000.0f;
+
+    // Move targets by wall-clock time (independent of disc RPM)
+    for (int i = 0; i < targetCount; i++) {
+        WorldTarget& target = worldTargets[i];
+        if (!target.active) continue;
+
+        target.x += target.vx * deltaSec;
+        target.y += target.vy * deltaSec;
+
+        // Check for respawn condition
+        float r2 = target.x * target.x + target.y * target.y;
+        if (currentMode == RadarMode::ZOMBIE) {
+            // Zombie: respawn when reaching center
+            if (r2 < 0.05f) {  // Within ~22% of center radius
+                initWorldTarget(target);
+            }
+        } else {
+            // Normal: respawn when exiting edge
+            if (r2 > 1.0f) {
+                initWorldTarget(target);
+            }
+        }
+    }
+
+    lastUpdateTime = now;
+}
+
+// ============================================================
+// Blip Pre-computation (Inverted Loop)
+// ============================================================
+
+void IRAM_ATTR Radar::renderBlipsToBuffer(const RenderContext& ctx, timestamp_t now) {
+    // Clear previous frame's contributions
+    ::memset(blipAccum, 0, sizeof(blipAccum));
+
+    for (int i = 0; i < MAX_BLIPS; i++) {
+        const Blip& blip = blips[i];
+        if (!blip.active) continue;
+
+        // Each virtualPixel maps to exactly one arm/LED:
+        // virtualPixel = armIndex + ledPos * NUM_ARMS (from armLedToVirtual)
+        // So: arm = virtualPixel % NUM_ARMS, led = virtualPixel / NUM_ARMS
+        uint8_t arm = blip.virtualPixel % HardwareConfig::NUM_ARMS;
+        uint8_t led = blip.virtualPixel / HardwareConfig::NUM_ARMS;
+
+        // Bounds check (defensive)
+        if (led >= HardwareConfig::ARM_LED_COUNT[arm]) continue;
+
+        // Check if this arm is currently looking at the blip's bearing
+        angle_t armAngle = ctx.arms[arm].angleUnits;
+        angle_t dist = angularDistanceAbsUnits(armAngle, blip.bearing);
+        if (dist > ctx.slotSizeUnits) continue;
+
+        // Compute phosphor color based on blip age
+        timestamp_t age = now - blip.createdAt;
+        if (age < MAX_BLIP_LIFETIME_US) {
+            blipAccum[arm][led] += getPhosphorColor(age, MAX_BLIP_LIFETIME_US, false);
+        }
+    }
+}
+
+// ============================================================
 // Revolution Handler
 // ============================================================
 
@@ -249,44 +322,17 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
     timestamp_t now = ctx.timeUs;
     const RadarPreset& preset = PRESETS[static_cast<uint8_t>(currentMode)];
 
+    // === Phase 1: Update world targets (wall-clock movement) ===
 #ifdef ENABLE_DETAILED_TIMING
     int64_t sectionStart = esp_timer_get_time();
 #endif
-    // === Wall-clock target movement ===
-    if (lastUpdateTime > 0) {
-        timestamp_t deltaUs = now - lastUpdateTime;
-        float deltaSec = deltaUs / 1000000.0f;
-
-        // Move targets by wall-clock time (independent of disc RPM)
-        for (int i = 0; i < targetCount; i++) {
-            WorldTarget& target = worldTargets[i];
-            if (!target.active) continue;
-
-            target.x += target.vx * deltaSec;
-            target.y += target.vy * deltaSec;
-
-            // Check for respawn condition
-            float r2 = target.x * target.x + target.y * target.y;
-            if (currentMode == RadarMode::ZOMBIE) {
-                // Zombie: respawn when reaching center
-                if (r2 < 0.05f) {  // Within ~22% of center radius
-                    initWorldTarget(target);
-                }
-            } else {
-                // Normal: respawn when exiting edge
-                if (r2 > 1.0f) {
-                    initWorldTarget(target);
-                }
-            }
-        }
-    }
-    lastUpdateTime = now;
+    updateWorldTargets(now, preset);
 #ifdef ENABLE_DETAILED_TIMING
     targetsTime = esp_timer_get_time() - sectionStart;
     sectionStart = esp_timer_get_time();
 #endif
 
-    // Compute sweep angle from wall-clock time (perfectly smooth)
+    // === Phase 2: Calculate sweep position ===
     angle_t sweepAngleUnits = static_cast<angle_t>(
         (now % preset.sweepPeriodUs) * ANGLE_FULL_CIRCLE / preset.sweepPeriodUs
     );
@@ -294,14 +340,21 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
     sweepTime = esp_timer_get_time() - sectionStart;
 #endif
 
-    // Render each arm
+    // === Phase 3: Pre-compute blip contributions (O(numActive) instead of O(LEDs × MAX_BLIPS)) ===
+#ifdef ENABLE_DETAILED_TIMING
+    sectionStart = esp_timer_get_time();
+#endif
+    renderBlipsToBuffer(ctx, now);
+#ifdef ENABLE_DETAILED_TIMING
+    blipsTime = esp_timer_get_time() - sectionStart;
+#endif
+
+    // === Phase 4: Render each LED ===
     for (int armIdx = 0; armIdx < HardwareConfig::NUM_ARMS; armIdx++) {
         auto& arm = ctx.arms[armIdx];
         angle_t armAngle = arm.angleUnits;
 
         for (int led = 0; led < HardwareConfig::ARM_LED_COUNT[armIdx]; led++) {
-            uint8_t vPixel = armLedToVirtual(armIdx, led);
-
             // Start with black
             CRGB color = CRGB::Black;
 
@@ -335,41 +388,8 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
                 }
             }
 
-            // === Layer 2: Target blips (additive) ===
-#ifdef ENABLE_DETAILED_TIMING
-            int64_t blipStart = esp_timer_get_time();
-#endif
-            for (int i = 0; i < MAX_BLIPS; i++) {
-                const Blip& blip = blips[i];
-                if (!blip.active) continue;
-
-                // Check if this LED is at the blip's position
-                // Blip occupies one virtual pixel at a specific bearing
-                if (blip.virtualPixel != vPixel) continue;
-
-                // Check angular proximity (within one slot width)
-                angle_t dist = angularDistanceAbsUnits(armAngle, blip.bearing);
-                if (dist > ctx.slotSizeUnits) continue;
-
-                // Blip matches - compute its color based on age (bright blip palette)
-                timestamp_t blipAge = now - blip.createdAt;
-                if (blipAge < MAX_BLIP_LIFETIME_US) {
-#ifdef ENABLE_DETAILED_TIMING
-                    int64_t phosphorStart2 = esp_timer_get_time();
-#endif
-                    CRGB blipColor = getPhosphorColor(blipAge, MAX_BLIP_LIFETIME_US, false);
-#ifdef ENABLE_DETAILED_TIMING
-                    phosphorTime += esp_timer_get_time() - phosphorStart2;
-#endif
-                    color += blipColor;  // Additive blend
-                }
-            }
-#ifdef ENABLE_DETAILED_TIMING
-            blipsTime += esp_timer_get_time() - blipStart;
-#endif
-
-            // No separate sweep line - the phosphor trail at age=0 (palette index 0) IS the sweep.
-            // The leading edge of the phosphor trail is the brightest part, which is physically correct.
+            // === Layer 2: Add pre-computed blip contribution (O(1) lookup) ===
+            color += blipAccum[armIdx][led];
 
             arm.pixels[led] = color;
         }
