@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include "geometry.h"         // For SlotTarget
+#include "RevolutionTimer.h"  // For TimingSnapshot
 
 /**
  * Dual-core frame timing profilers
@@ -15,16 +17,18 @@
  * When ENABLE_TIMING_INSTRUMENTATION is not defined, all methods compile to no-ops.
  */
 
-#if ENABLE_TIMING_INSTRUMENTATION
+#ifdef ENABLE_TIMING_INSTRUMENTATION
 
 /**
  * Render profiler - runs on Core 1 (Arduino loop)
  *
- * Tracks:
+ * Tracks timing and slot/revolution context:
  * - render_us: Time spent in effect render()
  * - queue_us: Time to hand off to output task
+ * - Slot info: slot number, angle, resolution
+ * - Revolution info: period, angular resolution, rev count
  *
- * Output format: RENDER,frame,render_us,queue_us
+ * Output format: RENDER,frame,effect,render_us,queue_us,slot,angle,usec_per_rev,slot_size,rev_count,angular_res
  */
 class RenderProfiler {
     int64_t t_start_ = 0;
@@ -34,8 +38,16 @@ class RenderProfiler {
     uint32_t sampleInterval_ = 100;
     bool headerPrinted_ = false;
 
+    // Slot/timing context (captured at markStart)
+    uint8_t effectIndex_ = 0;
+    const SlotTarget* target_ = nullptr;
+    const TimingSnapshot* timing_ = nullptr;
+    uint32_t revCount_ = 0;
+
 public:
-    void markStart(uint32_t frameCount);
+    void markStart(uint32_t frameCount, uint8_t effectIndex,
+                   const SlotTarget& target, const TimingSnapshot& timing,
+                   uint32_t revCount);
     void markRenderEnd();
     void markQueueEnd();
     void emit();
@@ -79,7 +91,8 @@ public:
 // Stub implementations - compile to zero overhead
 class RenderProfiler {
 public:
-    inline void markStart(uint32_t) {}
+    inline void markStart(uint32_t, uint8_t, const SlotTarget&,
+                          const TimingSnapshot&, uint32_t) {}
     inline void markRenderEnd() {}
     inline void markQueueEnd() {}
     inline void emit() {}

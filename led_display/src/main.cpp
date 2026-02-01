@@ -410,7 +410,8 @@ void loop() {
     revTimer.startRender();
 
     uint32_t thisFrame = globalFrameCount++;
-    g_renderProfiler.markStart(thisFrame);
+    g_renderProfiler.markStart(thisFrame, effectManager.getCurrentEffectIndex(),
+                                target, timing, revTimer.getRevolutionCount());
 
     // Populate render context with target angle (not current angle!)
     interval_t microsecondsPerRev = timing.lastActualInterval;

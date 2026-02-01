@@ -4,7 +4,7 @@
 RenderProfiler g_renderProfiler;
 OutputProfiler g_outputProfiler;
 
-#if ENABLE_TIMING_INSTRUMENTATION
+#ifdef ENABLE_TIMING_INSTRUMENTATION
 
 #include <Arduino.h>
 #include "esp_timer.h"
@@ -13,9 +13,15 @@ OutputProfiler g_outputProfiler;
 // RenderProfiler (Core 1 - Arduino loop)
 // ============================================================================
 
-void RenderProfiler::markStart(uint32_t frameCount) {
+void RenderProfiler::markStart(uint32_t frameCount, uint8_t effectIndex,
+                                const SlotTarget& target, const TimingSnapshot& timing,
+                                uint32_t revCount) {
     t_start_ = esp_timer_get_time();
     frameCount_ = frameCount;
+    effectIndex_ = effectIndex;
+    target_ = &target;
+    timing_ = &timing;
+    revCount_ = revCount;
 }
 
 void RenderProfiler::markRenderEnd() {
@@ -33,7 +39,7 @@ void RenderProfiler::emit() {
     }
 
     if (!headerPrinted_) {
-        Serial.println("# RENDER: frame,render_us,queue_us");
+        Serial.println("# RENDER: frame,effect,render_us,queue_us,slot,angle,usec_per_rev,slot_size,rev_count,angular_res");
         Serial.println("# OUTPUT: frame,copy_us,wait_us,show_us");
         headerPrinted_ = true;
     }
@@ -41,7 +47,17 @@ void RenderProfiler::emit() {
     int64_t renderUs = t_renderEnd_ - t_start_;
     int64_t queueUs = t_queueEnd_ - t_renderEnd_;
 
-    Serial.printf("RENDER,%u,%lld,%lld\n", frameCount_, renderUs, queueUs);
+    Serial.printf("RENDER,%u,%u,%lld,%lld,%d,%u,%llu,%u,%u,%f\n",
+                  frameCount_,
+                  effectIndex_,
+                  renderUs,
+                  queueUs,
+                  target_->slotNumber,
+                  target_->angleUnits,
+                  timing_->microsecondsPerRev,
+                  target_->slotSize,
+                  revCount_,
+                  timing_->angularResolution);
 }
 
 // ============================================================================
