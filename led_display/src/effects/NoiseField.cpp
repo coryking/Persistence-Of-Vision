@@ -3,6 +3,9 @@
 #include "fl/noise.h"  // noiseCylinderCRGB (new in master, post-3.10.3)
 #include "fl/map_range.h"
 #include "polar_helpers.h"
+#include "esp_log.h"
+
+static const char* TAG = "NOISE";
 
 // =============================================================================
 // Contrast transformation functions (all integer math)
@@ -118,7 +121,7 @@ void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
             arm.pixels[led] = color;
 #ifdef ENABLE_DETAILED_TIMING
             int64_t noiseEnd = esp_timer_get_time();
-            Serial.printf("NoiseField::render: frame: %lu, arm: %d, led: %d, virtualPos: %u, angle: %.4f, height: %.4f, timeOffset: %u, paletteIdx: %u, noise time: %lld us\n",
+            ESP_LOGD(TAG, "render: frame: %lu, arm: %d, led: %d, virtualPos: %u, angle: %.4f, height: %.4f, timeOffset: %u, paletteIdx: %u, noise time: %lld us",
                           ctx.frameCount, armIdx, led, virtualPos, angleRadians, height, noiseTimeOffsetMs, palIdx, noiseEnd - noiseStart);
 #endif
         }
@@ -136,7 +139,7 @@ void NoiseField::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint1
   radius = RADIUS_MIN + normalized * (RADIUS_MAX - RADIUS_MIN);
 
 #ifdef ENABLE_DETAILED_TIMING
-  Serial.printf("NoiseField::onRevolution: revCount: %u, timestamp: %llu us, paletteIdx: %u\n",
+  ESP_LOGD(TAG, "onRevolution: revCount: %u, timestamp: %llu us, paletteIdx: %u",
                 revolutionCount, timestamp, paletteIndex);
 #endif
 }
@@ -144,13 +147,13 @@ void NoiseField::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint1
 void NoiseField::nextMode() {
     contrastMode = (contrastMode + 1) % CONTRAST_MODE_COUNT;
     const char* modeNames[] = {"Normal", "S-curve", "Turbulence", "Quantize", "Expanded", "Compressed"};
-    Serial.printf("[NoiseField] Contrast mode -> %s (%d)\n", modeNames[contrastMode], contrastMode);
+    ESP_LOGI(TAG, "Contrast mode -> %s (%d)", modeNames[contrastMode], contrastMode);
 }
 
 void NoiseField::prevMode() {
     contrastMode = (contrastMode + CONTRAST_MODE_COUNT - 1) % CONTRAST_MODE_COUNT;
     const char* modeNames[] = {"Normal", "S-curve", "Turbulence", "Quantize", "Expanded", "Compressed"};
-    Serial.printf("[NoiseField] Contrast mode -> %s (%d)\n", modeNames[contrastMode], contrastMode);
+    ESP_LOGI(TAG, "Contrast mode -> %s (%d)", modeNames[contrastMode], contrastMode);
 }
 
 void NoiseField::paramUp() {
@@ -162,7 +165,7 @@ void NoiseField::paramUp() {
         "FireIce", "Synthwave",                     // Dual-hue
         "EmberSubtle", "NeonAbyss"                  // Variations
     };
-    Serial.printf("[NoiseField] Palette -> %s (%d)\n", paletteNames[paletteIndex], paletteIndex);
+    ESP_LOGI(TAG, "Palette -> %s (%d)", paletteNames[paletteIndex], paletteIndex);
 }
 
 void NoiseField::paramDown() {
@@ -174,5 +177,5 @@ void NoiseField::paramDown() {
         "FireIce", "Synthwave",                     // Dual-hue
         "EmberSubtle", "NeonAbyss"                  // Variations
     };
-    Serial.printf("[NoiseField] Palette -> %s (%d)\n", paletteNames[paletteIndex], paletteIndex);
+    ESP_LOGI(TAG, "Palette -> %s (%d)", paletteNames[paletteIndex], paletteIndex);
 }

@@ -5,7 +5,10 @@
 #include "RotorDiagnosticStats.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "esp_log.h"
 #include <atomic>
+
+#define EFFECT_MGR_TAG "EFFECT"
 
 /**
  * Command types for cross-core communication
@@ -80,7 +83,7 @@ public:
         // Create command queue (size 10 - handles burst button presses)
         commandQueue = xQueueCreate(10, sizeof(EffectCommand));
         if (!commandQueue) {
-            Serial.println("[EffectManager] ERROR: Failed to create command queue!");
+            ESP_LOGE(EFFECT_MGR_TAG, "Failed to create command queue!");
         }
 
         // Start first effect
@@ -116,25 +119,25 @@ public:
                 case EffectCommandType::EFFECT_MODE_NEXT:
                     if (currentIndex < effectCount && effects[currentIndex]) {
                         effects[currentIndex]->nextMode();
-                        Serial.println("[EffectManager] Mode -> next");
+                        ESP_LOGI(EFFECT_MGR_TAG, "Mode -> next");
                     }
                     break;
                 case EffectCommandType::EFFECT_MODE_PREV:
                     if (currentIndex < effectCount && effects[currentIndex]) {
                         effects[currentIndex]->prevMode();
-                        Serial.println("[EffectManager] Mode -> prev");
+                        ESP_LOGI(EFFECT_MGR_TAG, "Mode -> prev");
                     }
                     break;
                 case EffectCommandType::EFFECT_PARAM_UP:
                     if (currentIndex < effectCount && effects[currentIndex]) {
                         effects[currentIndex]->paramUp();
-                        Serial.println("[EffectManager] Param -> up");
+                        ESP_LOGI(EFFECT_MGR_TAG, "Param -> up");
                     }
                     break;
                 case EffectCommandType::EFFECT_PARAM_DOWN:
                     if (currentIndex < effectCount && effects[currentIndex]) {
                         effects[currentIndex]->paramDown();
-                        Serial.println("[EffectManager] Param -> down");
+                        ESP_LOGI(EFFECT_MGR_TAG, "Param -> down");
                     }
                     break;
                 case EffectCommandType::DISPLAY_POWER:
@@ -182,7 +185,7 @@ public:
      */
     void changeEffect(uint8_t effectNumber) {
         if (effectNumber < 1 || effectNumber > effectCount) {
-            Serial.printf("[EffectManager] Invalid effect %d (have %d effects)\n", effectNumber, effectCount);
+            ESP_LOGW(EFFECT_MGR_TAG, "Invalid effect %d (have %d effects)", effectNumber, effectCount);
             return;
         }
 
@@ -205,7 +208,7 @@ public:
         // Update diagnostic stats with new effect number
         RotorDiagnosticStats::instance().setEffectNumber(effectNumber);
 
-        Serial.printf("[EffectManager] Effect -> %d\n", effectNumber);
+        ESP_LOGI(EFFECT_MGR_TAG, "Effect -> %d", effectNumber);
     }
 
     /**
@@ -215,7 +218,7 @@ public:
         if (level > 10) level = 10;
         brightness = level;
         RotorDiagnosticStats::instance().setBrightness(brightness);
-        Serial.printf("[EffectManager] Brightness -> %d\n", brightness);
+        ESP_LOGI(EFFECT_MGR_TAG, "Brightness -> %d", brightness);
     }
 
     /**
@@ -225,7 +228,7 @@ public:
         if (brightness < 10) {
             brightness++;
             RotorDiagnosticStats::instance().setBrightness(brightness);
-            Serial.printf("[EffectManager] Brightness UP -> %d\n", brightness);
+            ESP_LOGI(EFFECT_MGR_TAG, "Brightness UP -> %d", brightness);
         }
     }
 
@@ -236,7 +239,7 @@ public:
         if (brightness > 0) {
             brightness--;
             RotorDiagnosticStats::instance().setBrightness(brightness);
-            Serial.printf("[EffectManager] Brightness DOWN -> %d\n", brightness);
+            ESP_LOGI(EFFECT_MGR_TAG, "Brightness DOWN -> %d", brightness);
         }
     }
 
@@ -260,7 +263,7 @@ public:
      */
     void setDisplayEnabled(bool enabled) {
         displayEnabled.store(enabled);
-        Serial.printf("[EffectManager] Display power -> %s\n", enabled ? "ON" : "OFF");
+        ESP_LOGI(EFFECT_MGR_TAG, "Display power -> %s", enabled ? "ON" : "OFF");
     }
 
     /**

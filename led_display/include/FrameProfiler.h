@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include "freertos/FreeRTOS.h"
 #include "geometry.h"         // For SlotTarget
 #include "RevolutionTimer.h"  // For TimingSnapshot
 

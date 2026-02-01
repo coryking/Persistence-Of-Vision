@@ -4,7 +4,9 @@
 
 #include <esp_timer.h>
 #include <esp_now.h>
-#include <Arduino.h>
+#include <esp_log.h>
+
+static const char* TAG = "ROTOR";
 
 // Singleton instance
 RotorDiagnosticStats& RotorDiagnosticStats::instance() {
@@ -33,18 +35,18 @@ void RotorDiagnosticStats::start(uint32_t intervalMs) {
     );
 
     if (_timer == nullptr) {
-        Serial.println("[RotorStats] ERROR: Failed to create timer");
+        ESP_LOGE(TAG, "Failed to create timer");
         return;
     }
 
     if (xTimerStart(_timer, 0) != pdPASS) {
-        Serial.println("[RotorStats] ERROR: Failed to start timer");
+        ESP_LOGE(TAG, "Failed to start timer");
         xTimerDelete(_timer, 0);
         _timer = nullptr;
         return;
     }
 
-    Serial.printf("[RotorStats] Started (interval=%ums)\n", intervalMs);
+    ESP_LOGI(TAG, "Started (interval=%ums)", intervalMs);
 }
 
 void RotorDiagnosticStats::stop() {
@@ -56,7 +58,7 @@ void RotorDiagnosticStats::stop() {
     xTimerDelete(_timer, 0);
     _timer = nullptr;
 
-    Serial.println("[RotorStats] Stopped");
+    ESP_LOGI(TAG, "Stopped");
 }
 
 void RotorDiagnosticStats::reset() {
@@ -80,7 +82,7 @@ void RotorDiagnosticStats::reset() {
 
     portEXIT_CRITICAL(&_spinlock);
 
-    Serial.println("[RotorStats] Reset");
+    ESP_LOGI(TAG, "Reset");
 }
 
 void RotorDiagnosticStats::recordHallEvent() {
@@ -158,9 +160,9 @@ void RotorDiagnosticStats::setHallAvgUs(period_t avgUs) {
 
 void RotorDiagnosticStats::print() const {
     portENTER_CRITICAL(&_spinlock);
-    Serial.printf("[RotorStats] seq=%lu hall=%lu outliers(fast/slow/ratio)=%lu/%lu/%lu "
+    ESP_LOGI(TAG, "seq=%lu hall=%lu outliers(fast/slow/ratio)=%lu/%lu/%lu "
                   "lastOutlier=%luus(reason=%u) espnow=%lu/%lu render=%u skip=%u notRot=%u "
-                  "effect=%u bright=%u\n",
+                  "effect=%u bright=%u",
                   _reportSequence, _hallEventsTotal,
                   _outliersTooFast, _outliersTooSlow, _outliersRatioLow,
                   _lastOutlierInterval_us, _lastOutlierReason,
@@ -227,6 +229,6 @@ void RotorDiagnosticStats::sendViaEspNow() {
 
     if (result != ESP_OK) {
         // Only log failures - success is the norm
-        Serial.printf("[RotorStats] Send failed: %s\n", esp_err_to_name(result));
+        ESP_LOGW(TAG, "Send failed: %s", esp_err_to_name(result));
     }
 }

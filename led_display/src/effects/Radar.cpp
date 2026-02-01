@@ -4,6 +4,9 @@
 #include "polar_helpers.h"
 #include <cmath>
 #include "esp_timer.h"
+#include "esp_log.h"
+
+static const char* TAG = "RADAR";
 
 // Detailed timing instrumentation (enabled with ENABLE_DETAILED_TIMING)
 #ifdef ENABLE_DETAILED_TIMING
@@ -62,7 +65,7 @@ void Radar::begin() {
     // Apply default preset (Classic)
     applyPreset();
 
-    Serial.println("[Radar] Authentic PPI radar effect started");
+    ESP_LOGI(TAG, "Authentic PPI radar effect started");
 }
 
 // ============================================================
@@ -408,7 +411,7 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
 
     // Print periodic summary (every 1000 frames)
     if (radarRenderCount % 1000 == 0) {
-        Serial.printf("RADAR_TIMING: render=%lld, targets=%lld, sweep=%lld, phosphor=%lld, blips=%lld (avg over %d frames)\n",
+        ESP_LOGD(TAG, "TIMING: render=%lld, targets=%lld, sweep=%lld, phosphor=%lld, blips=%lld (avg over %d frames)",
                       radarTimingTotal / radarRenderCount,
                       radarTimingTargets / radarRenderCount,
                       radarTimingSweep / radarRenderCount,
@@ -436,7 +439,7 @@ void Radar::nextMode() {
     currentPhosphorType = static_cast<PhosphorType>(next);
 
     const char* names[] = {"P7 (Blue-Yellow)", "P12 (Orange)", "P19 (Orange Long)", "P1 (Green)"};
-    Serial.printf("[Radar] Phosphor: %s\n", names[next]);
+    ESP_LOGI(TAG, "Phosphor: %s", names[next]);
 }
 
 void Radar::prevMode() {
@@ -446,7 +449,7 @@ void Radar::prevMode() {
     currentPhosphorType = static_cast<PhosphorType>(prev);
 
     const char* names[] = {"P7 (Blue-Yellow)", "P12 (Orange)", "P19 (Orange Long)", "P1 (Green)"};
-    Serial.printf("[Radar] Phosphor: %s\n", names[prev]);
+    ESP_LOGI(TAG, "Phosphor: %s", names[prev]);
 }
 
 void Radar::paramUp() {
@@ -492,6 +495,6 @@ void Radar::applyPreset() {
         blips[i].active = false;
     }
 
-    Serial.printf("[Radar] Mode: %s (sweep %.1fs, %d targets)\n",
+    ESP_LOGI(TAG, "Mode: %s (sweep %.1fs, %d targets)",
         preset.name, preset.sweepPeriodUs / 1000000.0f, targetCount);
 }

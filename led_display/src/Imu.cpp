@@ -1,10 +1,12 @@
 #include "Imu.h"
 #include "hardware_config.h"
 
-#include <Arduino.h>
 #include <SPI.h>
 #include <esp_timer.h>
+#include <esp_log.h>
 #include <driver/gpio.h>
+
+static const char* TAG = "IMU";
 
 // Global instance
 Imu imu;
@@ -45,15 +47,15 @@ static void IRAM_ATTR imuDataReadyISR() {
 }
 
 bool Imu::begin() {
-    Serial.println("[IMU] Initializing MPU-9250 via SPI at 20MHz...");
+    ESP_LOGI(TAG, "Initializing MPU-9250 via SPI at 20MHz...");
 
     // Create signal queue (just signals sample ready, no timestamp)
     g_imuTimestampQueue = xQueueCreate(IMU_QUEUE_SIZE, sizeof(uint8_t));
     if (!g_imuTimestampQueue) {
-        Serial.println("[IMU] Failed to create signal queue!");
+        ESP_LOGE(TAG, "Failed to create signal queue!");
         return false;
     }
-    Serial.printf("[IMU] Signal queue created: %zu slots (100ms at 8kHz)\n", IMU_QUEUE_SIZE);
+    ESP_LOGI(TAG, "Signal queue created: %zu slots (100ms at 8kHz)", IMU_QUEUE_SIZE);
 
     // Configure NCS pin as output for SPI chip select
     pinMode(HardwareConfig::IMU_NCS_PIN, OUTPUT);
@@ -81,19 +83,19 @@ bool Imu::begin() {
     m_imu->setSPIClockSpeed(IMU_SPI_CLOCK);
 
     if (!m_imu->init()) {
-        Serial.println("[IMU] Library init failed!");
+        ESP_LOGE(TAG, "Library init failed!");
         return false;
     }
 
     // Auto-offsets calibration (keeps device still briefly)
-    Serial.println("[IMU] Calibrating offsets (keep still)...");
+    ESP_LOGI(TAG, "Calibrating offsets (keep still)...");
     delay(1000);
     m_imu->autoOffsets();
 
     // Store calibration offsets for use in fast readRaw()
     m_accOffset = m_imu->getAccOffsets();
     m_gyrOffset = m_imu->getGyrOffsets();
-    Serial.printf("[IMU] Calibration offsets - Accel: (%.1f, %.1f, %.1f) Gyro: (%.1f, %.1f, %.1f)\n",
+    ESP_LOGI(TAG, "Calibration offsets - Accel: (%.1f, %.1f, %.1f) Gyro: (%.1f, %.1f, %.1f)",
                   m_accOffset.x, m_accOffset.y, m_accOffset.z,
                   m_gyrOffset.x, m_gyrOffset.y, m_gyrOffset.z);
 
@@ -131,13 +133,13 @@ bool Imu::begin() {
     // Read initial values as sanity check (also clears any pending interrupt)
     xyzFloat accelG = m_imu->getGValues();
     xyzFloat gyroDps = m_imu->getGyrValues();
-    Serial.printf("[IMU] Initial accel: X=%.2f Y=%.2f Z=%.2f g\n",
+    ESP_LOGI(TAG, "Initial accel: X=%.2f Y=%.2f Z=%.2f g",
                   accelG.x, accelG.y, accelG.z);
-    Serial.printf("[IMU] Initial gyro: X=%.1f Y=%.1f Z=%.1f dps\n",
+    ESP_LOGI(TAG, "Initial gyro: X=%.1f Y=%.1f Z=%.1f dps",
                   gyroDps.x, gyroDps.y, gyroDps.z);
 
     m_ready = true;
-    Serial.println("[IMU] Ready (8kHz, ±16g accel, ±2000°/s gyro, SPI 20MHz, DATA_READY on INT)");
+    ESP_LOGI(TAG, "Ready (8kHz, ±16g accel, ±2000°/s gyro, SPI 20MHz, DATA_READY on INT)");
     return true;
 }
 

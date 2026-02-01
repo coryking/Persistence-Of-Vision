@@ -1,13 +1,15 @@
 #include "HallSimulator.h"
 
 #ifdef TEST_MODE
-#include <Arduino.h>
 #include <cmath>
 #include "esp_timer.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "HallEffectDriver.h"  // For HallEffectEvent type
 #include "types.h"
+
+static const char* TAG = "HALLSIM";
 
 namespace {
     esp_timer_handle_t s_hallTimer = nullptr;
@@ -50,13 +52,13 @@ namespace HallSimulator {
 
 QueueHandle_t begin(float targetRpm, bool enableVariableRpm) {
 #ifdef TEST_MODE
-    Serial.println("HallSimulator: Initializing timer-based simulation");
+    ESP_LOGI(TAG, "Initializing timer-based simulation");
 
     // Create event queue (size 1, same as HallEffectDriver)
     s_hallQueue = xQueueCreate(1, sizeof(HallEffectEvent));
     if (s_hallQueue == nullptr) {
-        Serial.println("ERROR: Failed to create hall simulation queue");
-        while (1) { delay(1000); }
+        ESP_LOGE(TAG, "Failed to create hall simulation queue");
+        while (1) { vTaskDelay(pdMS_TO_TICKS(1000)); }
     }
 
     // Create main hall timer
@@ -70,20 +72,20 @@ QueueHandle_t begin(float targetRpm, bool enableVariableRpm) {
 
     esp_err_t err = esp_timer_create(&hallTimerArgs, &s_hallTimer);
     if (err != ESP_OK) {
-        Serial.printf("ERROR: Failed to create hall timer: %d\n", err);
-        while (1) { delay(1000); }
+        ESP_LOGE(TAG, "Failed to create hall timer: %d", err);
+        while (1) { vTaskDelay(pdMS_TO_TICKS(1000)); }
     }
 
     // Calculate interval from target RPM
     uint64_t intervalUs = static_cast<uint64_t>(60000000.0 / targetRpm);
-    Serial.printf("HallSimulator: Starting at %.1f RPM (interval: %llu us)\n",
+    ESP_LOGI(TAG, "Starting at %.1f RPM (interval: %llu us)",
                   targetRpm, intervalUs);
 
     // Start periodic timer
     err = esp_timer_start_periodic(s_hallTimer, intervalUs);
     if (err != ESP_OK) {
-        Serial.printf("ERROR: Failed to start hall timer: %d\n", err);
-        while (1) { delay(1000); }
+        ESP_LOGE(TAG, "Failed to start hall timer: %d", err);
+        while (1) { vTaskDelay(pdMS_TO_TICKS(1000)); }
     }
 
 #if TEST_VARY_RPM
@@ -99,23 +101,23 @@ QueueHandle_t begin(float targetRpm, bool enableVariableRpm) {
 
         err = esp_timer_create(&rpmUpdaterArgs, &s_rpmUpdaterTimer);
         if (err != ESP_OK) {
-            Serial.printf("ERROR: Failed to create RPM updater timer: %d\n", err);
-            while (1) { delay(1000); }
+            ESP_LOGE(TAG, "Failed to create RPM updater timer: %d", err);
+            while (1) { vTaskDelay(pdMS_TO_TICKS(1000)); }
         }
 
         // Start updater timer (100ms period)
         err = esp_timer_start_periodic(s_rpmUpdaterTimer, 100000);
         if (err != ESP_OK) {
-            Serial.printf("ERROR: Failed to start RPM updater timer: %d\n", err);
-            while (1) { delay(1000); }
+            ESP_LOGE(TAG, "Failed to start RPM updater timer: %d", err);
+            while (1) { vTaskDelay(pdMS_TO_TICKS(1000)); }
         }
-        Serial.println("HallSimulator: Variable RPM enabled");
+        ESP_LOGI(TAG, "Variable RPM enabled");
     }
 #else
     (void)enableVariableRpm;
 #endif // TEST_VARY_RPM
 
-    Serial.println("HallSimulator: Initialized");
+    ESP_LOGI(TAG, "Initialized");
     return s_hallQueue;
 #else
     (void)targetRpm;

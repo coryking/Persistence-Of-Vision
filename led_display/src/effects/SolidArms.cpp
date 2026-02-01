@@ -2,7 +2,8 @@
 #include "polar_helpers.h"
 
 #ifdef ENABLE_DETAILED_TIMING
-#include <Arduino.h>
+#include "esp_log.h"
+static const char* TAG = "SOLIDARMS";
 static uint8_t prevPatterns[3] = {255, 255, 255};
 static uint32_t boundaryHitCount[3] = {0, 0, 0};
 static uint32_t patternChangeCount[3] = {0, 0, 0};
@@ -51,12 +52,12 @@ void SolidArms::render(RenderContext& ctx) {
             // Log pattern transitions (not flickering - just normal progression)
             if ((prevPatterns[a] == 15 && pattern == 16) ||
                 (prevPatterns[a] == 16 && pattern == 15)) {
-                Serial.printf("PATTERN_288: arm%d frame=%u angle=%u pat=%d->%d dist=%u\n",
+                ESP_LOGD(TAG, "PATTERN_288: arm%d frame=%u angle=%u pat=%d->%d dist=%u",
                               a, ctx.frameCount, arm.angleUnits, prevPatterns[a], pattern, distToBoundary);
             }
             // Log any other pattern boundary transitions
             else if (nearBoundary) {
-                Serial.printf("PATTERN_TRANSITION: arm%d frame=%u angle=%u pat=%d->%d dist=%u\n",
+                ESP_LOGD(TAG, "PATTERN_TRANSITION: arm%d frame=%u angle=%u pat=%d->%d dist=%u",
                               a, ctx.frameCount, arm.angleUnits, prevPatterns[a], pattern, distToBoundary);
             }
         }
@@ -65,7 +66,7 @@ void SolidArms::render(RenderContext& ctx) {
 
         // Periodic summary every 10000 frames
         if (a == 0 && ctx.frameCount % 10000 == 0) {
-            Serial.printf("BOUNDARY_STATS@%u: hits=[%u,%u,%u] changes=[%u,%u,%u]\n",
+            ESP_LOGD(TAG, "BOUNDARY_STATS@%u: hits=[%u,%u,%u] changes=[%u,%u,%u]",
                           ctx.frameCount,
                           boundaryHitCount[0], boundaryHitCount[1], boundaryHitCount[2],
                           patternChangeCount[0], patternChangeCount[1], patternChangeCount[2]);

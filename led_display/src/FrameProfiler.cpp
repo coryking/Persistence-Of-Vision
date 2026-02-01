@@ -6,8 +6,11 @@ OutputProfiler g_outputProfiler;
 
 #ifdef ENABLE_TIMING_INSTRUMENTATION
 
-#include <Arduino.h>
 #include "esp_timer.h"
+#include "esp_log.h"
+
+static const char* TAG_RENDER = "RENDER";
+static const char* TAG_OUTPUT = "OUTPUT";
 
 // ============================================================================
 // RenderProfiler (Core 1 - Arduino loop)
@@ -33,31 +36,31 @@ void RenderProfiler::markQueueEnd() {
 }
 
 void RenderProfiler::emit() {
-    // Only print every Nth frame to reduce Serial interference
+    // Only print every Nth frame to reduce log volume
     if (frameCount_ % sampleInterval_ != 0) {
         return;
-    }
-
-    if (!headerPrinted_) {
-        Serial.println("# RENDER: frame,effect,render_us,queue_us,slot,angle,usec_per_rev,slot_size,rev_count,angular_res");
-        Serial.println("# OUTPUT: frame,copy_us,wait_us,show_us");
-        headerPrinted_ = true;
     }
 
     int64_t renderUs = t_renderEnd_ - t_start_;
     int64_t queueUs = t_queueEnd_ - t_renderEnd_;
 
-    Serial.printf("RENDER,%u,%u,%lld,%lld,%d,%u,%llu,%u,%u,%f\n",
-                  frameCount_,
-                  effectIndex_,
-                  renderUs,
-                  queueUs,
-                  target_->slotNumber,
-                  target_->angleUnits,
-                  timing_->microsecondsPerRev,
-                  target_->slotSize,
-                  revCount_,
-                  timing_->angularResolution);
+    if (!headerPrinted_) {
+        ESP_LOGD(TAG_RENDER, "# RENDER: frame,effect,render_us,queue_us,slot,angle,usec_per_rev,slot_size,rev_count,angular_res");
+        ESP_LOGD(TAG_OUTPUT, "# OUTPUT: frame,copy_us,wait_us,show_us");
+        headerPrinted_ = true;
+    }
+
+    ESP_LOGD(TAG_RENDER, "%u,%u,%lld,%lld,%d,%u,%llu,%u,%u,%f",
+              frameCount_,
+              effectIndex_,
+              renderUs,
+              queueUs,
+              target_->slotNumber,
+              target_->angleUnits,
+              timing_->microsecondsPerRev,
+              target_->slotSize,
+              revCount_,
+              timing_->angularResolution);
 }
 
 // ============================================================================
@@ -82,7 +85,7 @@ void OutputProfiler::markShowEnd() {
 }
 
 void OutputProfiler::emit() {
-    // Only print every Nth frame to reduce Serial interference
+    // Only print every Nth frame to reduce log volume
     if (frameCount_ % sampleInterval_ != 0) {
         return;
     }
@@ -91,7 +94,7 @@ void OutputProfiler::emit() {
     int64_t waitUs = t_waitEnd_ - t_copyEnd_;
     int64_t showUs = t_showEnd_ - t_waitEnd_;
 
-    Serial.printf("OUTPUT,%u,%lld,%lld,%lld\n", frameCount_, copyUs, waitUs, showUs);
+    ESP_LOGD(TAG_OUTPUT, "%u,%lld,%lld,%lld", frameCount_, copyUs, waitUs, showUs);
 }
 
 #endif

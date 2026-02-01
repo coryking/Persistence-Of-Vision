@@ -8,8 +8,11 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <esp_timer.h>
+#include <esp_log.h>
 
 #include "espnow_config.h"
+
+static const char* TAG = "ESPNOW";
 
 // Forward declare global (defined in main.cpp)
 extern EffectManager effectManager;
@@ -34,7 +37,7 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
         }
         case MSG_SET_EFFECT: {
             if (len < sizeof(SetEffectMsg)) {
-                Serial.println("[ESPNOW] SetEffect msg too short");
+                ESP_LOGW(TAG, "SetEffect msg too short");
                 return;
             }
             const SetEffectMsg* msg = reinterpret_cast<const SetEffectMsg*>(data);
@@ -65,12 +68,12 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
         case MSG_RESET_ROTOR_STATS: {
             // Reset diagnostic stats counters
             RotorDiagnosticStats::instance().reset();
-            Serial.println("[ESPNOW] Rotor stats reset");
+            ESP_LOGI(TAG, "Rotor stats reset");
             break;
         }
         case MSG_DISPLAY_POWER: {
             if (len < sizeof(DisplayPowerMsg)) {
-                Serial.println("[ESPNOW] DisplayPower msg too short");
+                ESP_LOGW(TAG, "DisplayPower msg too short");
                 return;
             }
             const DisplayPowerMsg* msg = reinterpret_cast<const DisplayPowerMsg*>(data);
@@ -79,7 +82,7 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
             break;
         }
         default:
-            Serial.printf("[ESPNOW] Unknown message type: %u\n", msgType);
+            ESP_LOGW(TAG, "Unknown message type: %u", msgType);
             break;
     }
 }
@@ -88,7 +91,7 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
 // Note: ESP-IDF 5.x uses wifi_tx_info_t instead of mac address
 static void onDataSent(const wifi_tx_info_t* tx_info, esp_now_send_status_t status) {
     if (status != ESP_NOW_SEND_SUCCESS) {
-        Serial.println("[ESPNOW] No ACK from peer");
+        ESP_LOGW(TAG, "No ACK from peer");
     }
 }
 
@@ -113,13 +116,13 @@ static bool espnowSend(const uint8_t* data, size_t len, const char* msgName) {
         // ESP_ERR_ESPNOW_NO_MEM - internal TX buffer full
         // ESP_ERR_ESPNOW_NOT_FOUND - peer not registered
         // ESP_ERR_ESPNOW_IF - WiFi interface mismatch
-        Serial.printf("[ESPNOW] %s queue failed: %s\n", msgName, esp_err_to_name(result));
+        ESP_LOGW(TAG, "%s queue failed: %s", msgName, esp_err_to_name(result));
     }
     return success;
 }
 
 void setupESPNow() {
-    Serial.println("[ESPNOW] Initializing...");
+    ESP_LOGI(TAG, "Initializing...");
 
     // Initialize WiFi in station mode (replaces WiFi.mode(WIFI_OFF))
     WiFi.mode(WIFI_STA);
@@ -134,14 +137,14 @@ void setupESPNow() {
 
     // Initialize ESP-NOW
     if (esp_now_init() != ESP_OK) {
-        Serial.println("[ESPNOW] Init failed!");
+        ESP_LOGE(TAG, "Init failed!");
         return;
     }
 
     // Verify ESP-NOW version (need v2 for 1470 byte payloads)
     uint32_t version;
     if (esp_now_get_version(&version) == ESP_OK) {
-        Serial.printf("[ESPNOW] Version: %lu (need 2 for v2.0 large payloads)\n", version);
+        ESP_LOGI(TAG, "Version: %lu (need 2 for v2.0 large payloads)", version);
     }
 
     // Register callbacks
@@ -155,7 +158,7 @@ void setupESPNow() {
     peer.encrypt = false;
 
     if (esp_now_add_peer(&peer) != ESP_OK) {
-        Serial.println("[ESPNOW] Failed to add motor controller peer!");
+        ESP_LOGE(TAG, "Failed to add motor controller peer!");
         return;
     }
 
@@ -169,13 +172,13 @@ void setupESPNow() {
         .dcm = false
     };
     if (esp_now_set_peer_rate_config(MOTOR_CONTROLLER_MAC, &rateConfig) == ESP_OK) {
-        Serial.println("[ESPNOW] PHY rate set to 54 Mbps (802.11g)");
+        ESP_LOGI(TAG, "PHY rate set to 54 Mbps (802.11g)");
     } else {
-        Serial.println("[ESPNOW] Warning: PHY rate config failed, using default 1 Mbps");
+        ESP_LOGW(TAG, "PHY rate config failed, using default 1 Mbps");
     }
 
-    Serial.printf("[ESPNOW] My MAC: %s\n", WiFi.macAddress().c_str());
-    Serial.printf("[ESPNOW] Target (motor controller) MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+    ESP_LOGI(TAG, "My MAC: %s", WiFi.macAddress().c_str());
+    ESP_LOGI(TAG, "Target (motor controller) MAC: %02X:%02X:%02X:%02X:%02X:%02X",
         MOTOR_CONTROLLER_MAC[0], MOTOR_CONTROLLER_MAC[1], MOTOR_CONTROLLER_MAC[2],
         MOTOR_CONTROLLER_MAC[3], MOTOR_CONTROLLER_MAC[4], MOTOR_CONTROLLER_MAC[5]);
 }

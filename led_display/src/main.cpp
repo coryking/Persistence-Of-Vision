@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include "esp_timer.h"
+#include "esp_log.h"
 #include <NeoPixelBus.h>
 #include <NeoPixelBusLg.h>
 #include "driver/gpio.h"
@@ -31,6 +32,8 @@
 #include "HallSimulator.h"
 #include "FrameProfiler.h"
 #include "RotorDiagnosticStats.h"
+
+static const char* TAG = "MAIN";
 
 // Phase offsets defined in types.h:
 // OUTER_ARM_PHASE = 2400 units = 240° (arm[0])
@@ -136,7 +139,7 @@ void hallProcessingTask(void* pvParameters) {
             effectManager.onRevolution(revTimer.getMicrosecondsPerRevolution(), event.triggerTimestamp, revolutionCount++);
 
             if (revTimer.isWarmupComplete() && revTimer.getRevolutionCount() == WARMUP_REVOLUTIONS) {
-                Serial.println("Warm-up complete! Display active.");
+                ESP_LOGI(TAG, "Warm-up complete! Display active.");
             }
         }
     }
@@ -200,12 +203,12 @@ void setupLedStrip() {
     strip.Begin(HardwareConfig::SPI_CLK_PIN, -1, HardwareConfig::SPI_DATA_PIN, -1);
     strip.ClearTo(RgbwColor(0, 0, 0, 0));
     strip.Show();
-    Serial.println("Strip initialized");
+    ESP_LOGI(TAG, "Strip initialized");
 
     // Startup blink pattern - diagnostic for reset detection
     // If you see periodic blinks during operation, ESP32 is resetting
     // Uses 5% brightness via 5-bit field to avoid power issues on wireless USB power
-    Serial.println("Startup blink sequence...");
+    ESP_LOGI(TAG, "Startup blink sequence...");
     constexpr uint8_t BOOT_BRIGHTNESS_5BIT = 2;  // Low 5-bit brightness (~6% of max)
     const RgbwColor bootColors[3] = {
         RgbwColor(255, 0, 0, BOOT_BRIGHTNESS_5BIT),    // Red
@@ -228,7 +231,7 @@ void setupLedStrip() {
         strip.Show();
         delay(500);
     }
-    Serial.println("Startup blink complete");
+    ESP_LOGI(TAG, "Startup blink complete");
 }
 
 void setupHallSensor() {
@@ -238,7 +241,7 @@ void setupHallSensor() {
         // Real hardware
         hallDriver.start();
         g_hallEventQueue = hallDriver.getEventQueue();
-        Serial.println("Hall effect sensor initialized");
+        ESP_LOGI(TAG, "Hall effect sensor initialized");
     }
 }
 
@@ -253,17 +256,17 @@ void startHallProcessingTask() {
     );
 
     if (taskCreated != pdPASS) {
-        Serial.println("ERROR: Failed to create hall processing task");
+        ESP_LOGE(TAG, "Failed to create hall processing task");
         while (1) { delay(1000); }
     }
-    Serial.println("Hall processing task started");
+    ESP_LOGI(TAG, "Hall processing task started");
 }
 
 void startOutputTask() {
     // Create frame handoff queue (depth 1 - render blocks if output is behind)
     g_frameQueue = xQueueCreate(1, sizeof(FrameCommand));
     if (!g_frameQueue) {
-        Serial.println("ERROR: Failed to create frame queue");
+        ESP_LOGE(TAG, "Failed to create frame queue");
         while (1) { delay(1000); }
     }
 
@@ -271,7 +274,7 @@ void startOutputTask() {
     g_bufferFree[0] = xSemaphoreCreateBinary();
     g_bufferFree[1] = xSemaphoreCreateBinary();
     if (!g_bufferFree[0] || !g_bufferFree[1]) {
-        Serial.println("ERROR: Failed to create buffer semaphores");
+        ESP_LOGE(TAG, "Failed to create buffer semaphores");
         while (1) { delay(1000); }
     }
 
@@ -291,19 +294,19 @@ void startOutputTask() {
     );
 
     if (taskCreated != pdPASS) {
-        Serial.println("ERROR: Failed to create output task");
+        ESP_LOGE(TAG, "Failed to create output task");
         while (1) { delay(1000); }
     }
-    Serial.println("Output task started on Core 0");
+    ESP_LOGI(TAG, "Output task started on Core 0");
 }
 
 void setupImu() {
     if (imu.begin()) {
-        Serial.println("IMU initialized");
+        ESP_LOGI(TAG, "IMU initialized");
         // Initialize telemetry task (waits for CalibrationEffect to start it)
         telemetryTaskInit();
     } else {
-        Serial.println("WARNING: IMU init failed - calibration unavailable");
+        ESP_LOGW(TAG, "IMU init failed - calibration unavailable");
     }
 }
 
@@ -319,7 +322,7 @@ void registerEffects() {
     effectManager.registerEffect(&momentumFlywheelEffect);
     effectManager.registerEffect(&calibrationEffect);  // Effect 10 for rotor balancing
 
-    Serial.printf("Registered %d effects\n", effectManager.getEffectCount());
+    ESP_LOGI(TAG, "Registered %d effects", effectManager.getEffectCount());
 }
 
 // ============================================================================
@@ -333,12 +336,12 @@ void setup() {
     // Disable Bluetooth to reduce jitter (WiFi needed for ESP-NOW)
     btStop();
 
-    Serial.println("POV Display Initializing...");
+    ESP_LOGI(TAG, "POV Display Initializing...");
 
     setupLedStrip();
     setupHallSensor();
     startHallProcessingTask();
-    startOutputTask();  // Dual-core render pipeline
+    startOutputTask();    // Dual-core render pipeline
     setupImu();
     registerEffects();
 
@@ -353,8 +356,8 @@ void setup() {
     RotorDiagnosticStats::instance().setBrightness(effectManager.getBrightness());
     RotorDiagnosticStats::instance().start(500);
 
-    Serial.printf("Starting with effect 1\n");
-    Serial.println("\n=== POV Display Ready ===");
+    ESP_LOGI(TAG, "Starting with effect 1");
+    ESP_LOGI(TAG, "=== POV Display Ready ===");
 }
 
 void loop() {

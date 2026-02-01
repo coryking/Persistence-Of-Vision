@@ -1,14 +1,16 @@
 #include "effects/CalibrationEffect.h"
 #include "TelemetryTask.h"
 #include "hardware_config.h"
-#include <Arduino.h>
+#include <esp_log.h>
 #include <FastLED.h>
+
+static const char* TAG = "CAL";
 
 // Global calibration flag
 volatile bool g_calibrationActive = false;
 
 void CalibrationEffect::begin() {
-    Serial.println("[CAL] Calibration mode ACTIVE - telemetry task streaming accel data");
+    ESP_LOGI(TAG, "Calibration mode ACTIVE - telemetry task streaming accel data");
 
     m_hue = 0;
 
@@ -19,7 +21,7 @@ void CalibrationEffect::begin() {
     telemetryTaskStart();
 
     // Print start marker (motor controller will echo this)
-    Serial.println("# CAL_START");
+    ESP_LOGI(TAG, "# CAL_START");
 }
 
 void CalibrationEffect::end() {
@@ -29,8 +31,8 @@ void CalibrationEffect::end() {
     // Disable hall event streaming
     g_calibrationActive = false;
 
-    Serial.println("# CAL_STOP");
-    Serial.println("[CAL] Calibration mode ended");
+    ESP_LOGI(TAG, "# CAL_STOP");
+    ESP_LOGI(TAG, "Calibration mode ended");
 }
 
 void CalibrationEffect::render(RenderContext& ctx) {

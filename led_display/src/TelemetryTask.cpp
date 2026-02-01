@@ -4,10 +4,12 @@
 #include "messages.h"
 #include "types.h"
 
-#include <Arduino.h>
 #include <esp_timer.h>
+#include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+
+static const char* TAG = "TELEM";
 
 // Task configuration
 static constexpr size_t TELEMETRY_TASK_STACK = 4096;
@@ -81,7 +83,7 @@ static void telemetryTaskFunc(void* pvParameters) {
         // Wait for enable signal
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        Serial.println("[TELEM] Telemetry task started");
+        ESP_LOGI(TAG, "Telemetry task started");
 
         // Reset batch state
         s_msg.sample_count = 0;
@@ -121,7 +123,7 @@ static void telemetryTaskFunc(void* pvParameters) {
             sendBatch();
         }
 
-        Serial.printf("[TELEM] Telemetry task stopped (%u samples sent)\n", s_sequenceNum);
+        ESP_LOGI(TAG, "Telemetry task stopped (%u samples sent)", s_sequenceNum);
     }
 }
 
@@ -141,16 +143,16 @@ void telemetryTaskInit() {
     );
 
     if (result != pdPASS) {
-        Serial.println("[TELEM] Failed to create telemetry task!");
+        ESP_LOGE(TAG, "Failed to create telemetry task!");
         return;
     }
 
-    Serial.println("[TELEM] Telemetry task initialized (waiting for start)");
+    ESP_LOGI(TAG, "Telemetry task initialized (waiting for start)");
 }
 
 void telemetryTaskStart() {
     if (!s_taskHandle) {
-        Serial.println("[TELEM] Task not initialized!");
+        ESP_LOGE(TAG, "Task not initialized!");
         return;
     }
 

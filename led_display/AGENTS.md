@@ -124,6 +124,24 @@ The ultimate goal is a spinning LED display with three arms arranged 120 degrees
 - No input validation for internal functions
 - No backwards compatibility layers
 
+**Logging: Use ESP_LOG, NOT Serial.print:**
+
+The codebase uses ESP-IDF's `ESP_LOG*` macros for all logging. These are thread-safe (via internal mutex) and support log level filtering. **Never use `Serial.print/printf/println` for new code.**
+
+```cpp
+#include "esp_log.h"
+static const char* TAG = "COMPONENT";  // Tag for filtering
+
+ESP_LOGI(TAG, "Normal message: %d", value);    // Info (startup, state changes)
+ESP_LOGW(TAG, "Warning: %s", reason);          // Warning (recoverable issues)
+ESP_LOGE(TAG, "Error: %s", error);             // Error (failures)
+ESP_LOGD(TAG, "Debug: %d", detail);            // Debug (verbose, filtered out in release)
+```
+
+Tag conventions: `"MAIN"`, `"HALL"`, `"ESPNOW"`, `"RENDER"`, `"OUTPUT"`, `"IMU"`, etc.
+
+The debug env uses `-DCORE_DEBUG_LEVEL=5` which enables all log levels. In release builds, `ESP_LOGD` compiles to no-ops.
+
 **Don't silently "fix" everything:**
 
 - Some apparent bugs might be artistic features
