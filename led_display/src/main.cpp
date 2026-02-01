@@ -68,8 +68,18 @@ CalibrationEffect calibrationEffect;
 // Effect manager
 EffectManager effectManager;
 
-// Render context (reused each frame)
-RenderContext renderCtx;
+// Double-buffered render contexts for dual-core pipeline
+static RenderContext g_renderCtx[2];
+static uint8_t g_writeBuffer = 0;
+
+// Frame handoff from render (Core 1) to output (Core 0)
+struct FrameCommand {
+    uint8_t bufferIndex;
+    timestamp_t targetTime;
+    uint32_t frameCount;
+};
+static QueueHandle_t g_frameQueue = nullptr;
+static SemaphoreHandle_t g_bufferFree[2] = {nullptr, nullptr};
 
 // Global frame counter (shared via RenderContext)
 uint32_t globalFrameCount = 0;
@@ -134,6 +144,52 @@ void hallProcessingTask(void* pvParameters) {
 
 // Track which slot was last rendered (persists across loop iterations)
 static int g_lastRenderedSlot = -1;
+
+/**
+ * Output task - runs on Core 0
+ *
+ * Handles the timing-critical output path:
+ * 1. copyPixelsToStrip() - copy from RenderContext to LED strip
+ * 2. waitForTargetTime() - busy-wait for precise angular position
+ * 3. strip.Show() - fire DMA transfer
+ *
+ * This runs in parallel with rendering on Core 1, roughly halving
+ * the effective frame time.
+ */
+void outputTask(void* pvParameters) {
+    (void)pvParameters;
+    FrameCommand cmd;
+
+    while (true) {
+        // Wait for a frame to be ready (with timeout to avoid wedging)
+        if (xQueueReceive(g_frameQueue, &cmd, pdMS_TO_TICKS(100)) == pdPASS) {
+            RenderContext& ctx = g_renderCtx[cmd.bufferIndex];
+
+            g_outputProfiler.markStart(cmd.frameCount);
+
+            // Copy rendered pixels to LED strip buffer
+            copyPixelsToStrip(ctx, strip);
+            g_outputProfiler.markCopyEnd();
+
+            // Busy-wait until the disc reaches target angular position
+            waitForTargetTime(cmd.targetTime);
+            g_outputProfiler.markWaitEnd();
+
+            // Fire DMA transfer at precise moment
+            strip.Show();
+            g_outputProfiler.markShowEnd();
+
+            // Record successful render in diagnostics
+            RotorDiagnosticStats::instance().recordRenderEvent(true, false);
+
+            // Release buffer back to render task
+            xSemaphoreGive(g_bufferFree[cmd.bufferIndex]);
+
+            // Emit profiler output (respects sample interval)
+            g_outputProfiler.emit();
+        }
+    }
+}
 
 // ============================================================================
 // Setup Helper Functions
@@ -203,6 +259,44 @@ void startHallProcessingTask() {
     Serial.println("Hall processing task started");
 }
 
+void startOutputTask() {
+    // Create frame handoff queue (depth 1 - render blocks if output is behind)
+    g_frameQueue = xQueueCreate(1, sizeof(FrameCommand));
+    if (!g_frameQueue) {
+        Serial.println("ERROR: Failed to create frame queue");
+        while (1) { delay(1000); }
+    }
+
+    // Create buffer semaphores (binary - one per buffer)
+    g_bufferFree[0] = xSemaphoreCreateBinary();
+    g_bufferFree[1] = xSemaphoreCreateBinary();
+    if (!g_bufferFree[0] || !g_bufferFree[1]) {
+        Serial.println("ERROR: Failed to create buffer semaphores");
+        while (1) { delay(1000); }
+    }
+
+    // Pre-give both semaphores so first renders don't block
+    xSemaphoreGive(g_bufferFree[0]);
+    xSemaphoreGive(g_bufferFree[1]);
+
+    // Start output task on Core 0, priority 2 (below hall sensor at 3)
+    BaseType_t taskCreated = xTaskCreatePinnedToCore(
+        outputTask,
+        "output",
+        4096,
+        nullptr,
+        2,
+        nullptr,
+        0  // Core 0
+    );
+
+    if (taskCreated != pdPASS) {
+        Serial.println("ERROR: Failed to create output task");
+        while (1) { delay(1000); }
+    }
+    Serial.println("Output task started on Core 0");
+}
+
 void setupImu() {
     if (imu.begin()) {
         Serial.println("IMU initialized");
@@ -244,6 +338,7 @@ void setup() {
     setupLedStrip();
     setupHallSensor();
     startHallProcessingTask();
+    startOutputTask();  // Dual-core render pipeline
     setupImu();
     registerEffects();
 
@@ -270,14 +365,17 @@ void loop() {
     if (!effectManager.isDisplayEnabled()) {
         handleNotRotating(strip);
         g_lastRenderedSlot = -1;  // Reset so we start fresh when powered back on
-        g_frameProfiler.reset();
+        g_renderProfiler.reset();
+        g_outputProfiler.reset();
         return;
     }
 
-    // ========== PRECISION TIMING MODEL ==========
-    // We render for a FUTURE angular position, then wait until the disc
-    // reaches that position before firing Show(). This ensures the angle
-    // told to the renderer matches where LEDs actually illuminate.
+    // ========== DUAL-CORE RENDER PIPELINE ==========
+    // Core 1 (this loop): Calculate slot, render effect to buffer
+    // Core 0 (output task): Copy to strip, wait for angle, Show()
+    //
+    // Double-buffering lets both cores work in parallel:
+    // While Core 0 outputs frame N, Core 1 renders frame N+1
 
     // 1. Get atomic snapshot of timing values
     TimingSnapshot timing = revTimer.getTimingSnapshot();
@@ -287,7 +385,8 @@ void loop() {
         RotorDiagnosticStats::instance().recordRenderEvent(false, true);  // notRotating=true
         handleNotRotating(strip);
         g_lastRenderedSlot = -1;  // Reset on stop so we start fresh
-        g_frameProfiler.reset();
+        g_renderProfiler.reset();
+        g_outputProfiler.reset();
         return;
     }
 
@@ -303,57 +402,47 @@ void loop() {
         return;
     }
 
-    // 5. Render for TARGET angle (future position)
+    // 5. Wait for our buffer to be free (usually instant due to double-buffering)
+    RenderContext& ctx = g_renderCtx[g_writeBuffer];
+    xSemaphoreTake(g_bufferFree[g_writeBuffer], portMAX_DELAY);
+
+    // 6. Render for TARGET angle (future position)
     revTimer.startRender();
 
-    g_frameProfiler.markFrameStart(
-        globalFrameCount++,
-        effectManager.getCurrentEffectIndex(),
-        target,
-        timing,
-        revTimer.getRevolutionCount()
-    );
+    uint32_t thisFrame = globalFrameCount++;
+    g_renderProfiler.markStart(thisFrame);
 
     // Populate render context with target angle (not current angle!)
     interval_t microsecondsPerRev = timing.lastActualInterval;
     if (microsecondsPerRev == 0) microsecondsPerRev = timing.microsecondsPerRev;
 
-    renderCtx.frameCount = globalFrameCount - 1;  // Already incremented above
-    renderCtx.timeUs = static_cast<uint32_t>(now);
-    renderCtx.microsPerRev = microsecondsPerRev;
-    renderCtx.slotSizeUnits = target.slotSize;
+    ctx.frameCount = thisFrame;
+    ctx.timeUs = static_cast<uint32_t>(now);
+    ctx.microsPerRev = microsecondsPerRev;
+    ctx.slotSizeUnits = target.slotSize;
 
     // Set arm angles from target - arms[0]=outer, arms[1]=middle(hall), arms[2]=inside
-    renderCtx.arms[0].angleUnits = (target.angleUnits + OUTER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
-    renderCtx.arms[1].angleUnits = target.angleUnits;
-    renderCtx.arms[2].angleUnits = (target.angleUnits + INSIDE_ARM_PHASE) % ANGLE_FULL_CIRCLE;
+    ctx.arms[0].angleUnits = (target.angleUnits + OUTER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
+    ctx.arms[1].angleUnits = target.angleUnits;
+    ctx.arms[2].angleUnits = (target.angleUnits + INSIDE_ARM_PHASE) % ANGLE_FULL_CIRCLE;
 
     // Render current effect
     Effect* current = effectManager.current();
     if (current) {
-        current->render(renderCtx);
+        current->render(ctx);
     }
-    g_frameProfiler.markRenderEnd();
-
-    // Copy arm buffers to LED strip (NeoPixelBus double-buffers, so this is safe)
-    copyPixelsToStrip(renderCtx, strip);
-    g_frameProfiler.markCopyEnd();
+    g_renderProfiler.markRenderEnd();
 
     revTimer.endRender();
 
-    // 6. Wait for precise moment (busy-wait)
-    waitForTargetTime(target.targetTime);
-    g_frameProfiler.markWaitEnd();
+    // 7. Hand off to output task
+    FrameCommand cmd = {g_writeBuffer, target.targetTime, thisFrame};
+    xQueueSend(g_frameQueue, &cmd, 0);  // Non-blocking (queue depth 1)
+    g_renderProfiler.markQueueEnd();
 
-    // 7. Fire at exact angular position (async DMA - blocks only if previous Show() not done)
-    strip.Show();
-    g_frameProfiler.markShowEnd();
+    // 8. Emit profiler output and flip buffer
+    g_renderProfiler.emit();
 
-    RotorDiagnosticStats::instance().recordRenderEvent(true, false);  // rendered
-
-    // 8. Update state for next iteration
+    g_writeBuffer = 1 - g_writeBuffer;
     g_lastRenderedSlot = target.slotNumber;
-
-    // Emit CSV timing data (measures its own Serial overhead for next frame)
-    g_frameProfiler.emit();
 }
