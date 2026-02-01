@@ -158,6 +158,11 @@ public:
     uint8_t getEffectCount() const { return effectCount; }
 
     /**
+     * Get current effect index (0-based)
+     */
+    uint8_t getCurrentEffectIndex() const { return currentIndex; }
+
+    /**
      * Get current brightness (0-10 scale)
      * Returns max brightness (10) if current effect requires full brightness
      */

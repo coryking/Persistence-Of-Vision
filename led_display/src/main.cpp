@@ -270,6 +270,7 @@ void loop() {
     if (!effectManager.isDisplayEnabled()) {
         handleNotRotating(strip);
         g_lastRenderedSlot = -1;  // Reset so we start fresh when powered back on
+        g_frameProfiler.reset();
         return;
     }
 
@@ -286,6 +287,7 @@ void loop() {
         RotorDiagnosticStats::instance().recordRenderEvent(false, true);  // notRotating=true
         handleNotRotating(strip);
         g_lastRenderedSlot = -1;  // Reset on stop so we start fresh
+        g_frameProfiler.reset();
         return;
     }
 
@@ -303,19 +305,20 @@ void loop() {
 
     // 5. Render for TARGET angle (future position)
     revTimer.startRender();
-    auto frameHandle = FrameProfiler::frameStart();
 
-    // Timing variables (only used when ENABLE_TIMING_INSTRUMENTATION is defined)
-    int64_t renderUs = 0, copyUs = 0, showUs = 0, waitUs = 0;
-#if ENABLE_TIMING_INSTRUMENTATION
-    int64_t t0 = esp_timer_get_time();
-#endif
+    g_frameProfiler.markFrameStart(
+        globalFrameCount++,
+        effectManager.getCurrentEffectIndex(),
+        target,
+        timing,
+        revTimer.getRevolutionCount()
+    );
 
     // Populate render context with target angle (not current angle!)
     interval_t microsecondsPerRev = timing.lastActualInterval;
     if (microsecondsPerRev == 0) microsecondsPerRev = timing.microsecondsPerRev;
 
-    renderCtx.frameCount = globalFrameCount++;
+    renderCtx.frameCount = globalFrameCount - 1;  // Already incremented above
     renderCtx.timeUs = static_cast<uint32_t>(now);
     renderCtx.microsPerRev = microsecondsPerRev;
     renderCtx.slotSizeUnits = target.slotSize;
@@ -330,55 +333,27 @@ void loop() {
     if (current) {
         current->render(renderCtx);
     }
-
-#if ENABLE_TIMING_INSTRUMENTATION
-    int64_t t1 = esp_timer_get_time();
-    renderUs = t1 - t0;
-#endif
+    g_frameProfiler.markRenderEnd();
 
     // Copy arm buffers to LED strip (NeoPixelBus double-buffers, so this is safe)
     copyPixelsToStrip(renderCtx, strip);
-
-#if ENABLE_TIMING_INSTRUMENTATION
-    int64_t t2 = esp_timer_get_time();
-    copyUs = t2 - t1;
-#endif
+    g_frameProfiler.markCopyEnd();
 
     revTimer.endRender();
 
     // 6. Wait for precise moment (busy-wait)
     waitForTargetTime(target.targetTime);
-
-#if ENABLE_TIMING_INSTRUMENTATION
-    int64_t t3 = esp_timer_get_time();
-    waitUs = t3 - t2;
-#endif
+    g_frameProfiler.markWaitEnd();
 
     // 7. Fire at exact angular position (async DMA - blocks only if previous Show() not done)
     strip.Show();
-
-#if ENABLE_TIMING_INSTRUMENTATION
-    int64_t t4 = esp_timer_get_time();
-    showUs = t4 - t3;  // >0 means DMA was still busy from previous frame
-#endif
+    g_frameProfiler.markShowEnd();
 
     RotorDiagnosticStats::instance().recordRenderEvent(true, false);  // rendered
 
     // 8. Update state for next iteration
     g_lastRenderedSlot = target.slotNumber;
 
-    FrameProfiler::frameEnd(frameHandle,
-                            renderCtx.frameCount,
-                            0,  // effect index not tracked in new architecture
-                            target.slotNumber,
-                            target.angleUnits,
-                            microsecondsPerRev,
-                            target.slotSize,
-                            revTimer.getRevolutionCount(),
-                            timing.angularResolution,
-                            timing.lastActualInterval,
-                            renderUs,
-                            copyUs,
-                            showUs,
-                            waitUs);
+    // Emit CSV timing data (measures its own Serial overhead for next frame)
+    g_frameProfiler.emit();
 }
