@@ -12,7 +12,7 @@
 namespace HallSimulator {
 
 // Configuration defaults
-constexpr float DEFAULT_TEST_RPM = 360.0f;
+constexpr float DEFAULT_TEST_RPM = 1600.0f;  // Match typical operating speed
 constexpr bool DEFAULT_VARY_RPM = false;
 
 /**

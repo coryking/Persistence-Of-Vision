@@ -305,6 +305,12 @@ void loop() {
     revTimer.startRender();
     auto frameHandle = FrameProfiler::frameStart();
 
+    // Timing variables (only used when ENABLE_TIMING_INSTRUMENTATION is defined)
+    int64_t renderUs = 0, copyUs = 0, showUs = 0, waitUs = 0;
+#if ENABLE_TIMING_INSTRUMENTATION
+    int64_t t0 = esp_timer_get_time();
+#endif
+
     // Populate render context with target angle (not current angle!)
     interval_t microsecondsPerRev = timing.lastActualInterval;
     if (microsecondsPerRev == 0) microsecondsPerRev = timing.microsecondsPerRev;
@@ -325,16 +331,37 @@ void loop() {
         current->render(renderCtx);
     }
 
+#if ENABLE_TIMING_INSTRUMENTATION
+    int64_t t1 = esp_timer_get_time();
+    renderUs = t1 - t0;
+#endif
+
     // Copy arm buffers to LED strip (NeoPixelBus double-buffers, so this is safe)
     copyPixelsToStrip(renderCtx, strip);
+
+#if ENABLE_TIMING_INSTRUMENTATION
+    int64_t t2 = esp_timer_get_time();
+    copyUs = t2 - t1;
+#endif
 
     revTimer.endRender();
 
     // 6. Wait for precise moment (busy-wait)
     waitForTargetTime(target.targetTime);
 
-    // 7. Fire at exact angular position
+#if ENABLE_TIMING_INSTRUMENTATION
+    int64_t t3 = esp_timer_get_time();
+    waitUs = t3 - t2;
+#endif
+
+    // 7. Fire at exact angular position (async DMA - blocks only if previous Show() not done)
     strip.Show();
+
+#if ENABLE_TIMING_INSTRUMENTATION
+    int64_t t4 = esp_timer_get_time();
+    showUs = t4 - t3;  // >0 means DMA was still busy from previous frame
+#endif
+
     RotorDiagnosticStats::instance().recordRenderEvent(true, false);  // rendered
 
     // 8. Update state for next iteration
@@ -349,5 +376,9 @@ void loop() {
                             target.slotSize,
                             revTimer.getRevolutionCount(),
                             timing.angularResolution,
-                            timing.lastActualInterval);
+                            timing.lastActualInterval,
+                            renderUs,
+                            copyUs,
+                            showUs,
+                            waitUs);
 }

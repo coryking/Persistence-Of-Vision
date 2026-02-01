@@ -52,6 +52,10 @@ inline int64_t frameStart() {
  * @param revCount Revolution count
  * @param angularRes Angular resolution
  * @param lastInterval Last actual interval in microseconds
+ * @param renderUs Time spent in effect render (microseconds)
+ * @param copyUs Time spent in copyPixelsToStrip (microseconds)
+ * @param showUs Time spent in strip.Show() - 0 if DMA not blocking (microseconds)
+ * @param waitUs Time spent in busy-wait (microseconds)
  */
 void frameEnd(int64_t startHandle,
               uint32_t frameCount,
@@ -62,6 +66,10 @@ void frameEnd(int64_t startHandle,
               uint16_t slotSize,
               uint32_t revCount,
               float angularRes,
-              uint64_t lastInterval);
+              uint64_t lastInterval,
+              int64_t renderUs,
+              int64_t copyUs,
+              int64_t showUs,
+              int64_t waitUs);
 
 } // namespace FrameProfiler
