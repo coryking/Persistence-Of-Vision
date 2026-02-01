@@ -128,7 +128,7 @@ bool Imu::begin() {
     gpio_num_t intPin = static_cast<gpio_num_t>(HardwareConfig::IMU_INT_PIN);
     gpio_set_direction(intPin, GPIO_MODE_INPUT);
     gpio_set_intr_type(intPin, GPIO_INTR_POSEDGE);
-    gpio_isr_handler_add(intPin, imuIsrWrapper, nullptr);
+    // NOTE: ISR not attached here - call enable() to start receiving interrupts
 
     // Read initial values as sanity check (also clears any pending interrupt)
     xyzFloat accelG = m_imu->getGValues();
@@ -139,7 +139,13 @@ bool Imu::begin() {
                   gyroDps.x, gyroDps.y, gyroDps.z);
 
     m_ready = true;
-    ESP_LOGI(TAG, "Ready (8kHz, ±16g accel, ±2000°/s gyro, SPI 20MHz, DATA_READY on INT)");
+    m_imuEnabled = false;
+
+    // Put sensor to sleep until enable() is called - saves power and stops interrupt generation
+    m_imu->disableInterrupt(MPU9250_DATA_READY);
+    m_imu->sleep(true);
+
+    ESP_LOGI(TAG, "Ready (8kHz, ±16g accel, ±2000°/s gyro, SPI 20MHz) - disabled until enable() called");
     return true;
 }
 
@@ -197,7 +203,45 @@ bool Imu::sampleReady() {
 }
 
 bool Imu::waitForSample(TickType_t timeout) {
-    if (!g_imuTimestampQueue) return false;
+    if (!m_imuEnabled || !g_imuTimestampQueue) return false;
     uint8_t signal;
     return xQueueReceive(g_imuTimestampQueue, &signal, timeout) == pdTRUE;
+}
+
+void Imu::enable() {
+    if (!m_ready || m_imuEnabled) return;
+
+    // Wake sensor from sleep
+    m_imu->sleep(false);
+    vTaskDelay(pdMS_TO_TICKS(10));  // Settling time after wake
+
+    // Enable sensor DATA_READY interrupt
+    m_imu->enableInterrupt(MPU9250_DATA_READY);
+
+    // Clear any stale signals from queue
+    xQueueReset(g_imuTimestampQueue);
+
+    // Attach GPIO ISR to start receiving interrupts
+    gpio_isr_handler_add(
+        static_cast<gpio_num_t>(HardwareConfig::IMU_INT_PIN),
+        imuIsrWrapper, nullptr);
+
+    m_imuEnabled = true;
+    ESP_LOGI(TAG, "IMU enabled (8kHz interrupts active)");
+}
+
+void Imu::disable() {
+    if (!m_ready || !m_imuEnabled) return;
+
+    // Detach GPIO ISR first (stops interrupt delivery)
+    gpio_isr_handler_remove(static_cast<gpio_num_t>(HardwareConfig::IMU_INT_PIN));
+
+    // Disable interrupt at sensor level
+    m_imu->disableInterrupt(MPU9250_DATA_READY);
+
+    // Put sensor to sleep (lowest power)
+    m_imu->sleep(true);
+
+    m_imuEnabled = false;
+    ESP_LOGI(TAG, "IMU disabled (sleeping)");
 }

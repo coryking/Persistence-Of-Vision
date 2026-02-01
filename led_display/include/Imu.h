@@ -60,9 +60,27 @@ public:
      */
     bool isReady() const { return m_ready; }
 
+    /**
+     * Enable IMU: wake sensor from sleep, attach DATA_READY ISR
+     * Call this before sampling data. No-op if already enabled.
+     */
+    void enable();
+
+    /**
+     * Disable IMU: detach ISR, disable interrupt, put sensor to sleep
+     * Stops 8kHz interrupt overhead when not using the sensor.
+     */
+    void disable();
+
+    /**
+     * Check if IMU interrupts are enabled
+     */
+    bool isEnabled() const { return m_imuEnabled; }
+
 private:
     MPU9250_WE* m_imu = nullptr;
     bool m_ready = false;
+    bool m_imuEnabled = false;  // True when ISR is attached and sensor is awake
 
     // Calibration offsets from autoOffsets() (applied in readRaw for fast calibrated reads)
     // Offsets are captured at 2G/250dps, must be divided by range factor when applying

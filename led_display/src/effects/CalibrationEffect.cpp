@@ -1,6 +1,7 @@
 #include "effects/CalibrationEffect.h"
 #include "TelemetryTask.h"
 #include "hardware_config.h"
+#include "Imu.h"
 #include <esp_log.h>
 #include <FastLED.h>
 
@@ -17,6 +18,9 @@ void CalibrationEffect::begin() {
     // Enable hall event streaming
     g_calibrationActive = true;
 
+    // Wake IMU and attach ISR (starts 8kHz interrupts)
+    imu.enable();
+
     // Start the telemetry task (handles all accel sampling)
     telemetryTaskStart();
 
@@ -30,6 +34,9 @@ void CalibrationEffect::end() {
 
     // Disable hall event streaming
     g_calibrationActive = false;
+
+    // Sleep IMU and detach ISR (stops 8kHz interrupt overhead)
+    imu.disable();
 
     ESP_LOGI(TAG, "# CAL_STOP");
     ESP_LOGI(TAG, "Calibration mode ended");
