@@ -73,7 +73,6 @@ EffectManager effectManager;
 
 // Double-buffered render contexts for dual-core pipeline
 static RenderContext g_renderCtx[2];
-static uint8_t g_writeBuffer = 0;
 
 // Frame handoff from render (Core 1) to output (Core 0)
 struct FrameCommand {
@@ -81,8 +80,12 @@ struct FrameCommand {
     timestamp_t targetTime;
     uint32_t frameCount;
 };
-static QueueHandle_t g_frameQueue = nullptr;
-static SemaphoreHandle_t g_bufferFree[2] = {nullptr, nullptr};
+
+// Two-queue buffer pool pattern (standard FreeRTOS producer-consumer)
+// g_freeBufferQueue: Render takes buffer indices from here
+// g_readyFrameQueue: Render sends rendered frames here, Output consumes
+static QueueHandle_t g_freeBufferQueue = nullptr;   // Contains buffer indices (uint8_t)
+static QueueHandle_t g_readyFrameQueue = nullptr;   // Contains FrameCommands
 
 // Global frame counter (shared via RenderContext)
 uint32_t globalFrameCount = 0;
@@ -164,29 +167,56 @@ void outputTask(void* pvParameters) {
     FrameCommand cmd;
 
     while (true) {
+        // Track time waiting for a rendered frame (symmetric to acquire_us)
+        int64_t receiveStart = esp_timer_get_time();
+
         // Wait for a frame to be ready (with timeout to avoid wedging)
-        if (xQueueReceive(g_frameQueue, &cmd, pdMS_TO_TICKS(100)) == pdPASS) {
+        if (xQueueReceive(g_readyFrameQueue, &cmd, pdMS_TO_TICKS(100)) ==
+            pdPASS) {
+            int64_t receiveEnd = esp_timer_get_time();
+            uint32_t receiveUs = static_cast<uint32_t>(receiveEnd - receiveStart);
+
+            // Get queue depths for diagnostics
+            UBaseType_t freeQueueDepth = uxQueueMessagesWaiting(g_freeBufferQueue);
+            UBaseType_t readyQueueDepth = uxQueueMessagesWaiting(g_readyFrameQueue);
+
             RenderContext& ctx = g_renderCtx[cmd.bufferIndex];
 
-            g_outputProfiler.markStart(cmd.frameCount);
+            // Track copy+show time independently of profiler (for resolution calc)
+            int64_t copyStart = esp_timer_get_time();
+
+            g_outputProfiler.markStart(cmd.frameCount, receiveUs,
+                                        static_cast<uint8_t>(freeQueueDepth),
+                                        static_cast<uint8_t>(readyQueueDepth));
 
             // Copy rendered pixels to LED strip buffer
             copyPixelsToStrip(ctx, strip);
             g_outputProfiler.markCopyEnd();
 
+            int64_t copyEnd = esp_timer_get_time();
+
             // Busy-wait until the disc reaches target angular position
             waitForTargetTime(cmd.targetTime);
             g_outputProfiler.markWaitEnd();
+
+            int64_t showStart = esp_timer_get_time();
 
             // Fire DMA transfer at precise moment
             strip.Show();
             g_outputProfiler.markShowEnd();
 
+            int64_t showEnd = esp_timer_get_time();
+
             // Record successful render in diagnostics
             RotorDiagnosticStats::instance().recordRenderEvent(true, false);
 
-            // Release buffer back to render task
-            xSemaphoreGive(g_bufferFree[cmd.bufferIndex]);
+            // Return buffer to free pool (blocks if Render is stalled - shouldn't happen)
+            xQueueSend(g_freeBufferQueue, &cmd.bufferIndex, portMAX_DELAY);
+
+            // Track output time (copy + show, NOT wait) for resolution calc
+            // Works in all builds, not just profiler builds
+            uint32_t outputTime = static_cast<uint32_t>((copyEnd - copyStart) + (showEnd - showStart));
+            revTimer.recordOutputTime(outputTime);
 
             // Emit profiler output (respects sample interval)
             g_outputProfiler.emit();
@@ -263,24 +293,21 @@ void startHallProcessingTask() {
 }
 
 void startOutputTask() {
-    // Create frame handoff queue (depth 1 - render blocks if output is behind)
-    g_frameQueue = xQueueCreate(1, sizeof(FrameCommand));
-    if (!g_frameQueue) {
-        ESP_LOGE(TAG, "Failed to create frame queue");
+    // Two-queue buffer pool pattern:
+    // - g_freeBufferQueue: Render takes buffer indices from here
+    // - g_readyFrameQueue: Render sends rendered frames, Output consumes
+    g_freeBufferQueue = xQueueCreate(2, sizeof(uint8_t));        // Buffer indices
+    g_readyFrameQueue = xQueueCreate(2, sizeof(FrameCommand));   // Depth 2 allows pipelining
+
+    if (!g_freeBufferQueue || !g_readyFrameQueue) {
+        ESP_LOGE(TAG, "Failed to create buffer queues");
         while (1) { delay(1000); }
     }
 
-    // Create buffer semaphores (binary - one per buffer)
-    g_bufferFree[0] = xSemaphoreCreateBinary();
-    g_bufferFree[1] = xSemaphoreCreateBinary();
-    if (!g_bufferFree[0] || !g_bufferFree[1]) {
-        ESP_LOGE(TAG, "Failed to create buffer semaphores");
-        while (1) { delay(1000); }
-    }
-
-    // Pre-give both semaphores so first renders don't block
-    xSemaphoreGive(g_bufferFree[0]);
-    xSemaphoreGive(g_bufferFree[1]);
+    // Pre-populate free queue with both buffer indices
+    uint8_t buf0 = 0, buf1 = 1;
+    xQueueSend(g_freeBufferQueue, &buf0, 0);
+    xQueueSend(g_freeBufferQueue, &buf1, 0);
 
     // Start output task on Core 0, priority 2 (below hall sensor at 3)
     BaseType_t taskCreated = xTaskCreatePinnedToCore(
@@ -337,6 +364,14 @@ void setup() {
     btStop();
 
     ESP_LOGI(TAG, "POV Display Initializing...");
+#ifdef ENABLE_TIMING_INSTRUMENTATION
+    ESP_LOGI(TAG, "Timing instrumentation enabled (FrameProfiler CSV active)");
+    // Ensure profiler tags are not filtered out by global log settings.
+    esp_log_level_set("RENDER", ESP_LOG_WARN);
+    esp_log_level_set("OUTPUT", ESP_LOG_WARN);
+#else
+    ESP_LOGW(TAG, "Timing instrumentation disabled (FrameProfiler CSV inactive)");
+#endif
 
     setupLedStrip();
     setupHallSensor();
@@ -405,16 +440,31 @@ void loop() {
         return;
     }
 
-    // 5. Wait for our buffer to be free (usually instant due to double-buffering)
-    RenderContext& ctx = g_renderCtx[g_writeBuffer];
-    xSemaphoreTake(g_bufferFree[g_writeBuffer], portMAX_DELAY);
+    // 5. Get a free buffer (blocks if both in use - proper backpressure)
+    int64_t acquireStart = esp_timer_get_time();
+    uint8_t writeBuffer;
+    if (xQueueReceive(g_freeBufferQueue, &writeBuffer, pdMS_TO_TICKS(100)) != pdPASS) {
+        // Timeout - pipeline is stalled, skip this slot
+        g_lastRenderedSlot = target.slotNumber;
+        return;
+    }
+    int64_t acquireEnd = esp_timer_get_time();
+    uint32_t acquireUs = static_cast<uint32_t>(acquireEnd - acquireStart);
+
+    // Get queue depths for diagnostics
+    UBaseType_t freeQueueDepth = uxQueueMessagesWaiting(g_freeBufferQueue);
+    UBaseType_t readyQueueDepth = uxQueueMessagesWaiting(g_readyFrameQueue);
+
+    RenderContext& ctx = g_renderCtx[writeBuffer];
 
     // 6. Render for TARGET angle (future position)
     revTimer.startRender();
 
     uint32_t thisFrame = globalFrameCount++;
     g_renderProfiler.markStart(thisFrame, effectManager.getCurrentEffectIndex(),
-                                target, timing, revTimer.getRevolutionCount());
+                                target, timing, revTimer.getRevolutionCount(),
+                                acquireUs, static_cast<uint8_t>(freeQueueDepth),
+                                static_cast<uint8_t>(readyQueueDepth));
 
     // Populate render context with target angle (not current angle!)
     interval_t microsecondsPerRev = timing.lastActualInterval;
@@ -439,14 +489,12 @@ void loop() {
 
     revTimer.endRender();
 
-    // 7. Hand off to output task
-    FrameCommand cmd = {g_writeBuffer, target.targetTime, thisFrame};
-    xQueueSend(g_frameQueue, &cmd, 0);  // Non-blocking (queue depth 1)
+    // 7. Hand off to output task (blocks if queue full - proper backpressure)
+    FrameCommand cmd = {writeBuffer, target.targetTime, thisFrame};
+    xQueueSend(g_readyFrameQueue, &cmd, portMAX_DELAY);
     g_renderProfiler.markQueueEnd();
 
-    // 8. Emit profiler output and flip buffer
+    // 8. Emit profiler output (no buffer flip needed - writeBuffer is local)
     g_renderProfiler.emit();
-
-    g_writeBuffer = 1 - g_writeBuffer;
     g_lastRenderedSlot = target.slotNumber;
 }

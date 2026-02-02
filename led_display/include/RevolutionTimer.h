@@ -118,6 +118,21 @@ public:
     }
 
     /**
+     * Record output time from the output task (Core 0)
+     * @param outputTimeUs Time for copy + show (excluding wait)
+     */
+    void recordOutputTime(uint32_t outputTimeUs) {
+        _outputTimeAvg.add(outputTimeUs);
+    }
+
+    /**
+     * Get average output time in microseconds
+     */
+    uint32_t getAverageOutputTime() const {
+        return static_cast<uint32_t>(_outputTimeAvg.average());
+    }
+
+    /**
      * Add a new timestamp from hall sensor trigger
      * Call this from ISR or immediately after
      * @param timestamp Current time in microseconds (from esp_timer_get_time())
@@ -238,11 +253,15 @@ private:
     }
 
     /**
-     * Calculate optimal angular resolution based on RPM and render performance
+     * Calculate optimal angular resolution based on RPM and pipeline performance
      *
      * Returns the smallest valid resolution that we can sustain given:
      * - Current rotation speed (microseconds per degree)
-     * - Measured render time (with safety margin)
+     * - Parallel pipeline throughput: max(render_time, output_time)
+     *
+     * In the dual-core pipeline, Core 1 renders while Core 0 outputs.
+     * Throughput is limited by the slower stage (pipeline bottleneck).
+     * Wait time is absorbed by parallelism (Core 1 renders during wait).
      */
     float _calculateOptimalResolution() const {
         if (smoothedInterval == 0) {
@@ -252,11 +271,18 @@ private:
         // How much time do we have per degree?
         float microsecondsPerDegree = static_cast<float>(smoothedInterval) / 360.0f;
 
-        // How much time does a render take (with safety margin)?
-        float renderTimeWithMargin = static_cast<float>(_renderTimeAvg.average()) * RENDER_TIME_SAFETY_MARGIN;
+        // Parallel pipeline throughput = max(render, output)
+        float renderTime = static_cast<float>(_renderTimeAvg.average()) * RENDER_TIME_SAFETY_MARGIN;
+        float outputTime = static_cast<float>(_outputTimeAvg.average()) * RENDER_TIME_SAFETY_MARGIN;
 
-        // Minimum slot size = render time / time per degree
-        float minResolution = renderTimeWithMargin / microsecondsPerDegree;
+        // Use the slower of render or output (pipeline bottleneck)
+        // If no output time recorded yet, fall back to render-only
+        float effectiveTime = (outputTime > 0)
+            ? ((renderTime > outputTime) ? renderTime : outputTime)
+            : renderTime;
+
+        // Minimum slot size = effective time / time per degree
+        float minResolution = effectiveTime / microsecondsPerDegree;
 
         // Find smallest valid resolution >= minResolution
         for (size_t i = 0; i < NUM_VALID_RESOLUTIONS; i++) {
@@ -392,6 +418,7 @@ private:
     // Render timing for adaptive angular resolution
     timestamp_t _renderStartTime;                    // When current render started
     RollingAverage<uint32_t, 16> _renderTimeAvg;     // Rolling average of render times
+    RollingAverage<uint32_t, 16> _outputTimeAvg;     // Rolling average of output times (copy+show, not wait)
     float _currentAngularResolution;                 // Current degrees per slot (updated once per rev)
 
     // Spinlock for atomic access between main loop and hall processing task

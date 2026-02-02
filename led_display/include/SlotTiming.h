@@ -6,6 +6,8 @@
 #include "RenderContext.h"
 #include "hardware_config.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <NeoPixelBus.h>
 #include "fl/five_bit_hd_gamma.h"
 
@@ -140,7 +142,7 @@ template<typename T_STRIP>
 void handleNotRotating(T_STRIP& ledStrip) {
     ledStrip.ClearTo(RgbwColor(0, 0, 0, 0));
     ledStrip.Show();
-    delay(10);
+    vTaskDelay(pdMS_TO_TICKS(10));  // FreeRTOS delay, not Arduino delay()
 }
 
 #endif // SLOT_TIMING_H
