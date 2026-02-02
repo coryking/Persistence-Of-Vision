@@ -365,12 +365,10 @@ void setup() {
 
     ESP_LOGI(TAG, "POV Display Initializing...");
 #ifdef ENABLE_TIMING_INSTRUMENTATION
-    ESP_LOGI(TAG, "Timing instrumentation enabled (FrameProfiler CSV active)");
-    // Ensure profiler tags are not filtered out by global log settings.
-    esp_log_level_set("RENDER", ESP_LOG_WARN);
-    esp_log_level_set("OUTPUT", ESP_LOG_WARN);
+    ESP_LOGI(TAG, "Timing instrumentation enabled (FrameProfiler analytics active)");
+    initProfilerAnalytics();
 #else
-    ESP_LOGW(TAG, "Timing instrumentation disabled (FrameProfiler CSV inactive)");
+    ESP_LOGW(TAG, "Timing instrumentation disabled (FrameProfiler analytics inactive)");
 #endif
 
     setupLedStrip();

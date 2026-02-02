@@ -20,6 +20,82 @@
 
 #ifdef ENABLE_TIMING_INSTRUMENTATION
 
+// ============================================================================
+// Queue-Based Analytics Data Structures
+// ============================================================================
+
+enum class ProfilerSource : uint8_t { RENDER_CORE, OUTPUT_CORE };
+
+struct RenderSample {
+    uint32_t frameCount;
+    uint8_t effectIndex;
+    uint32_t acquireUs;
+    uint32_t renderUs;
+    uint32_t queueUs;
+    uint8_t freeQueueDepth;
+    uint8_t readyQueueDepth;
+    float angularResolution;
+    uint32_t microsecondsPerRev;
+};
+
+struct OutputSample {
+    uint32_t frameCount;
+    uint32_t receiveUs;
+    uint32_t copyUs;
+    uint32_t waitUs;
+    uint32_t showUs;
+};
+
+struct ProfilerSample {
+    ProfilerSource source;
+    union {
+        RenderSample render;
+        OutputSample output;
+    };
+};
+
+struct MetricStats {
+    uint32_t min = UINT32_MAX;
+    uint32_t max = 0;
+    uint64_t sum = 0;
+    uint32_t count = 0;
+
+    void record(uint32_t value) {
+        if (value < min) min = value;
+        if (value > max) max = value;
+        sum += value;
+        count++;
+    }
+
+    uint32_t avg() const {
+        return count > 0 ? static_cast<uint32_t>(sum / count) : 0;
+    }
+
+    void reset() {
+        min = UINT32_MAX;
+        max = 0;
+        sum = 0;
+        count = 0;
+    }
+};
+
+struct RenderAggregator {
+    MetricStats acquire, render, queue;
+    MetricStats freeQ, readyQ;
+    uint8_t lastEffect = 0;
+    float lastAngularResolution = 3.0f;
+    uint32_t lastMicrosecondsPerRev = 0;
+    uint32_t sampleCount = 0;
+};
+
+struct OutputAggregator {
+    MetricStats receive, copy, wait, show;
+    uint32_t sampleCount = 0;
+};
+
+// Initialize analytics system (call once in setup)
+void initProfilerAnalytics();
+
 /**
  * Render profiler - runs on Core 1 (Arduino loop)
  *
@@ -31,21 +107,17 @@
  * - Revolution info: period, angular resolution, rev count
  * - Queue depths: freeQ, readyQ (pipeline health indicators)
  *
- * Output format: RENDER,frame,effect,acquire_us,render_us,queue_us,freeQ,readyQ,slot,angle,usec_per_rev,slot_size,rev_count,angular_res
+ * New approach: Sends ProfilerSample to analytics queue instead of ESP_LOG
  */
 class RenderProfiler {
     int64_t t_start_ = 0;
     int64_t t_renderEnd_ = 0;
     int64_t t_queueEnd_ = 0;
     uint32_t frameCount_ = 0;
-    uint32_t sampleInterval_ = 100;
-    bool headerPrinted_ = false;
 
     // Slot/timing context (captured at markStart)
     uint8_t effectIndex_ = 0;
-    const SlotTarget* target_ = nullptr;
     const TimingSnapshot* timing_ = nullptr;
-    uint32_t revCount_ = 0;
 
     // Pipeline metrics (captured at markStart)
     uint32_t acquireUs_ = 0;
@@ -62,8 +134,7 @@ public:
     void markQueueEnd();
     void emit();
 
-    void setSampleInterval(uint32_t interval) { sampleInterval_ = interval > 0 ? interval : 1; }
-    void reset() { headerPrinted_ = false; }
+    void reset() {}
 };
 
 /**
@@ -76,7 +147,7 @@ public:
  * - show_us: Time for SPI transfer (strip.Show())
  * - Queue depths: freeQ, readyQ (pipeline health indicators)
  *
- * Output format: OUTPUT,frame,receive_us,copy_us,wait_us,show_us,freeQ,readyQ
+ * New approach: Sends ProfilerSample to analytics queue instead of ESP_LOG
  */
 class OutputProfiler {
     int64_t t_start_ = 0;
@@ -84,8 +155,6 @@ class OutputProfiler {
     int64_t t_waitEnd_ = 0;
     int64_t t_showEnd_ = 0;
     uint32_t frameCount_ = 0;
-    uint32_t sampleInterval_ = 100;
-    bool headerPrinted_ = false;
 
     // Pipeline metrics (captured at markStart)
     uint32_t receiveUs_ = 0;
@@ -101,8 +170,7 @@ class OutputProfiler {
     void markShowEnd();
     void emit();
 
-    void setSampleInterval(uint32_t interval) { sampleInterval_ = interval > 0 ? interval : 1; }
-    void reset() { headerPrinted_ = false; }
+    void reset() {}
 };
 
 #else
@@ -119,7 +187,6 @@ public:
     inline void markRenderEnd() {}
     inline void markQueueEnd() {}
     inline void emit() {}
-    inline void setSampleInterval(uint32_t) {}
     inline void reset() {}
 };
 
@@ -133,9 +200,11 @@ public:
     inline void markWaitEnd() {}
     inline void markShowEnd() {}
     inline void emit() {}
-    inline void setSampleInterval(uint32_t) {}
     inline void reset() {}
 };
+
+// No-op when profiling disabled
+inline void initProfilerAnalytics() {}
 
 #endif
 
