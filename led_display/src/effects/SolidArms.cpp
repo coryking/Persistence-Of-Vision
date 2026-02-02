@@ -1,7 +1,12 @@
 #include "effects/SolidArms.h"
 #include "polar_helpers.h"
 
-#ifdef ENABLE_DETAILED_TIMING
+// Mutual exclusion guard: pipeline profiler vs effect-specific timing
+#if defined(ENABLE_EFFECT_TIMING) && defined(ENABLE_TIMING_INSTRUMENTATION)
+#error "ENABLE_EFFECT_TIMING and ENABLE_TIMING_INSTRUMENTATION are mutually exclusive"
+#endif
+
+#ifdef ENABLE_EFFECT_TIMING
 #include "esp_log.h"
 static const char* TAG = "SOLIDARMS";
 static uint8_t prevPatterns[3] = {255, 255, 255};
@@ -35,7 +40,7 @@ void SolidArms::render(RenderContext& ctx) {
         uint8_t pattern = arm.angleUnits / ANGLE_PER_PATTERN;
         if (pattern > 19) pattern = 19;
 
-#ifdef ENABLE_DETAILED_TIMING
+#ifdef ENABLE_EFFECT_TIMING
         // Detect boundary proximity
         angle_t distToBoundary;
         bool nearBoundary = isNearBoundary(arm.angleUnits, &distToBoundary);

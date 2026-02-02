@@ -2,6 +2,41 @@
 
 This document describes the queue-based profiler analytics system, output format, metrics, and how to interpret pipeline health.
 
+## Profiling Modes
+
+Two mutually exclusive profiling modes are available:
+
+### Pipeline Profiler (`ENABLE_TIMING_INSTRUMENTATION`)
+
+Queue-based analytics for production frame timing. Shows min/avg/max over 100 samples.
+
+```bash
+uv run pio run -e seeed_xiao_esp32s3_profiling
+```
+
+Output:
+```
+[RENDER] n=100 effect=1 acquire_us=0/2/15 render_us=45/78/156 queue_us=1/3/12 freeQ=0/1/2 readyQ=0/0/1
+[OUTPUT] n=100 receive_us=1/8/45 copy_us=12/18/32 wait_us=45/187/312 show_us=52/54/58
+```
+
+### Effect Timing (`ENABLE_EFFECT_TIMING`)
+
+Effect-specific internal breakdown via ESP_LOG. Each effect manages its own averaging.
+
+```bash
+uv run pio run -e seeed_xiao_esp32s3_effect_timing
+```
+
+Output (Radar):
+```
+[RADAR] TIMING: render=78, targets=3, sweep=1, phosphor=32, blips=6 (avg over 1000 frames)
+```
+
+### Why Mutually Exclusive?
+
+Both modes output to serial. The pipeline profiler uses a queue-based system to prevent interleaving; effect timing uses direct ESP_LOG. Running both simultaneously causes garbled output. Choose the mode appropriate for what you're investigating.
+
 ## Dual-Core Pipeline Overview
 
 The POV display uses a dual-core render pipeline:

@@ -7,6 +7,11 @@
 
 static const char* TAG = "NOISE";
 
+// Mutual exclusion guard: pipeline profiler vs effect-specific timing
+#if defined(ENABLE_EFFECT_TIMING) && defined(ENABLE_TIMING_INSTRUMENTATION)
+#error "ENABLE_EFFECT_TIMING and ENABLE_TIMING_INSTRUMENTATION are mutually exclusive"
+#endif
+
 // =============================================================================
 // Contrast transformation functions (all integer math)
 // =============================================================================
@@ -95,7 +100,7 @@ void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
         float angleRadians = angleUnitsToRadians(arm.angleUnits);
 
         for (int led = 0; led < HardwareConfig::LEDS_PER_ARM; led++) {
-#ifdef ENABLE_DETAILED_TIMING
+#ifdef ENABLE_EFFECT_TIMING
             int64_t noiseStart = esp_timer_get_time();
 #endif
             // Use virtual position to respect radial stagger
@@ -119,7 +124,7 @@ void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
             // Map to color via palette with linear blending (16-bit precision)
             CRGB color = ColorFromPaletteExtended(palette, palIdx, 255, LINEARBLEND);
             arm.pixels[led] = color;
-#ifdef ENABLE_DETAILED_TIMING
+#ifdef ENABLE_EFFECT_TIMING
             int64_t noiseEnd = esp_timer_get_time();
             ESP_LOGD(TAG, "render: frame: %lu, arm: %d, led: %d, virtualPos: %u, angle: %.4f, height: %.4f, timeOffset: %u, paletteIdx: %u, noise time: %lld us",
                           ctx.frameCount, armIdx, led, virtualPos, angleRadians, height, noiseTimeOffsetMs, palIdx, noiseEnd - noiseStart);
@@ -138,7 +143,7 @@ void NoiseField::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint1
   float normalized = (sinVal + 32768) / 65536.0f;  // 0.0 to 1.0
   radius = RADIUS_MIN + normalized * (RADIUS_MAX - RADIUS_MIN);
 
-#ifdef ENABLE_DETAILED_TIMING
+#ifdef ENABLE_EFFECT_TIMING
   ESP_LOGD(TAG, "onRevolution: revCount: %u, timestamp: %llu us, paletteIdx: %u",
                 revolutionCount, timestamp, paletteIndex);
 #endif

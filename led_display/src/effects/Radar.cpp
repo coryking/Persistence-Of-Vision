@@ -8,8 +8,13 @@
 
 static const char* TAG = "RADAR";
 
-// Detailed timing instrumentation (enabled with ENABLE_DETAILED_TIMING)
-#ifdef ENABLE_DETAILED_TIMING
+// Mutual exclusion guard: pipeline profiler vs effect-specific timing
+#if defined(ENABLE_EFFECT_TIMING) && defined(ENABLE_TIMING_INSTRUMENTATION)
+#error "ENABLE_EFFECT_TIMING and ENABLE_TIMING_INSTRUMENTATION are mutually exclusive"
+#endif
+
+// Effect-specific timing instrumentation (enabled with ENABLE_EFFECT_TIMING)
+#ifdef ENABLE_EFFECT_TIMING
 static int64_t radarTimingTotal = 0;
 static int64_t radarTimingTargets = 0;
 static int64_t radarTimingSweep = 0;
@@ -317,7 +322,7 @@ void Radar::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t r
 // ============================================================
 
 void IRAM_ATTR Radar::render(RenderContext& ctx) {
-#ifdef ENABLE_DETAILED_TIMING
+#ifdef ENABLE_EFFECT_TIMING
     int64_t renderStart = esp_timer_get_time();
     int64_t targetsTime = 0, sweepTime = 0, phosphorTime = 0, blipsTime = 0;
 #endif
@@ -326,11 +331,11 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
     const RadarPreset& preset = PRESETS[static_cast<uint8_t>(currentMode)];
 
     // === Phase 1: Update world targets (wall-clock movement) ===
-#ifdef ENABLE_DETAILED_TIMING
+#ifdef ENABLE_EFFECT_TIMING
     int64_t sectionStart = esp_timer_get_time();
 #endif
     updateWorldTargets(now, preset);
-#ifdef ENABLE_DETAILED_TIMING
+#ifdef ENABLE_EFFECT_TIMING
     targetsTime = esp_timer_get_time() - sectionStart;
     sectionStart = esp_timer_get_time();
 #endif
@@ -339,16 +344,16 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
     angle_t sweepAngleUnits = static_cast<angle_t>(
         (now % preset.sweepPeriodUs) * ANGLE_FULL_CIRCLE / preset.sweepPeriodUs
     );
-#ifdef ENABLE_DETAILED_TIMING
+#ifdef ENABLE_EFFECT_TIMING
     sweepTime = esp_timer_get_time() - sectionStart;
 #endif
 
     // === Phase 3: Pre-compute blip contributions (O(numActive) instead of O(LEDs × MAX_BLIPS)) ===
-#ifdef ENABLE_DETAILED_TIMING
+#ifdef ENABLE_EFFECT_TIMING
     sectionStart = esp_timer_get_time();
 #endif
     renderBlipsToBuffer(ctx, now);
-#ifdef ENABLE_DETAILED_TIMING
+#ifdef ENABLE_EFFECT_TIMING
     blipsTime = esp_timer_get_time() - sectionStart;
 #endif
 
@@ -381,11 +386,11 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
 
                 // Get phosphor color based on time since sweep (dim sweep palette)
                 if (timeSinceSweepUs < SWEEP_DECAY_TIME_US) {
-#ifdef ENABLE_DETAILED_TIMING
+#ifdef ENABLE_EFFECT_TIMING
                     int64_t phosphorStart = esp_timer_get_time();
 #endif
                     color = getPhosphorColor(timeSinceSweepUs, SWEEP_DECAY_TIME_US, true);
-#ifdef ENABLE_DETAILED_TIMING
+#ifdef ENABLE_EFFECT_TIMING
                     phosphorTime += esp_timer_get_time() - phosphorStart;
 #endif
                 }
@@ -398,7 +403,7 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
         }
     }
 
-#ifdef ENABLE_DETAILED_TIMING
+#ifdef ENABLE_EFFECT_TIMING
     int64_t totalTime = esp_timer_get_time() - renderStart;
 
     // Accumulate for periodic average
