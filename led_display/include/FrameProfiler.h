@@ -4,6 +4,11 @@
 #include "freertos/FreeRTOS.h"
 #include "geometry.h"         // For SlotTarget
 #include "RevolutionTimer.h"  // For TimingSnapshot
+#include "esp_log.h"
+
+// Logging tags (used by both enabled and stub implementations)
+static const char* TAG_RENDER = "RENDER";
+static const char* TAG_OUTPUT = "OUTPUT";
 
 /**
  * Dual-core frame timing profilers

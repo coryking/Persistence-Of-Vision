@@ -1,5 +1,6 @@
 #include "FrameProfiler.h"
 #include "Arduino.h"
+
 // Global instances (exist in both enabled/disabled builds)
 RenderProfiler g_renderProfiler;
 OutputProfiler g_outputProfiler;
@@ -12,8 +13,7 @@ OutputProfiler g_outputProfiler;
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
-static const char* TAG_RENDER = "RENDER";
-static const char* TAG_OUTPUT = "OUTPUT";
+static const char* TAG_RESOLUTION = "RESOLUTION_CHANGE";
 
 // Analytics queue and task
 static QueueHandle_t g_analyticsQueue = nullptr;
@@ -23,8 +23,10 @@ static QueueHandle_t g_analyticsQueue = nullptr;
 // ============================================================================
 
 static void printRenderStats(const RenderAggregator& agg) {
-    Serial.printf("[RENDER] n=%u effect=%u acquire_us=%u/%u/%u render_us=%u/%u/%u "
-                  "queue_us=%u/%u/%u freeQ=%u/%u/%u readyQ=%u/%u/%u\n",
+    // Use ESP_LOGI instead of Serial.printf to share mutex with ESP_LOG* calls
+    // from other components (ESP-NOW, etc.) - prevents character interleaving
+    ESP_LOGI(TAG_RENDER, "n=%u effect=%u acquire_us=%u/%u/%u render_us=%u/%u/%u "
+                  "queue_us=%u/%u/%u freeQ=%u/%u/%u readyQ=%u/%u/%u",
         agg.sampleCount, agg.lastEffect,
         agg.acquire.min, agg.acquire.avg(), agg.acquire.max,
         agg.render.min, agg.render.avg(), agg.render.max,
@@ -34,8 +36,8 @@ static void printRenderStats(const RenderAggregator& agg) {
 }
 
 static void printOutputStats(const OutputAggregator& agg) {
-    Serial.printf("[OUTPUT] n=%u receive_us=%u/%u/%u copy_us=%u/%u/%u "
-                  "wait_us=%u/%u/%u show_us=%u/%u/%u\n",
+    ESP_LOGI(TAG_OUTPUT, "n=%u receive_us=%u/%u/%u copy_us=%u/%u/%u "
+                  "wait_us=%u/%u/%u show_us=%u/%u/%u",
         agg.sampleCount,
         agg.receive.min, agg.receive.avg(), agg.receive.max,
         agg.copy.min, agg.copy.avg(), agg.copy.max,
@@ -63,8 +65,8 @@ static void analyticsTask(void* param) {
                     }
 
                     // Print resolution change event
-                    Serial.printf("[RESOLUTION_CHANGE] from=%.1f to=%.1f "
-                                  "render_avg=%u output_avg=%u usec_per_rev=%u\n",
+                    ESP_LOGI(TAG_RESOLUTION, "from=%.1f to=%.1f "
+                                  "render_avg=%u output_avg=%u usec_per_rev=%u",
                         renderAgg.lastAngularResolution,
                         sample.render.angularResolution,
                         renderAgg.render.avg(),

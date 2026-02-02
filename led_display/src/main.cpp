@@ -220,6 +220,11 @@ void outputTask(void* pvParameters) {
 
             // Emit profiler output (respects sample interval)
             g_outputProfiler.emit();
+
+            // Yield to prevent task watchdog when processing frames back-to-back.
+            // Without this, fast render can flood output with frames, and the
+            // tight loop (copy→busywait→DMA→repeat) never yields to feed watchdog.
+            taskYIELD();
         }
     }
 }
@@ -310,10 +315,11 @@ void startOutputTask() {
     xQueueSend(g_freeBufferQueue, &buf1, 0);
 
     // Start output task on Core 0, priority 2 (below hall sensor at 3)
+    // Stack size 8192: profiler emit() adds ~28 bytes + NeoPixelBus DMA setup
     BaseType_t taskCreated = xTaskCreatePinnedToCore(
         outputTask,
         "output",
-        4096,
+        8192,
         nullptr,
         2,
         nullptr,
@@ -435,6 +441,10 @@ void loop() {
         // We're behind - skip this slot and try the next one
         RotorDiagnosticStats::instance().recordRenderEvent(false, false);  // skip
         g_lastRenderedSlot = target.slotNumber;
+        // Yield to prevent watchdog timeout if we keep skipping slots.
+        // taskYIELD() alone isn't enough - IDLE task needs actual CPU time.
+        // vTaskDelay(0) puts us at end of ready queue, letting IDLE run.
+        vTaskDelay(0);
         return;
     }
 

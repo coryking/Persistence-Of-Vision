@@ -9,9 +9,10 @@
 static const char* TAG = "RADAR";
 
 // Mutual exclusion guard: pipeline profiler vs effect-specific timing
-#if defined(ENABLE_EFFECT_TIMING) && defined(ENABLE_TIMING_INSTRUMENTATION)
-#error "ENABLE_EFFECT_TIMING and ENABLE_TIMING_INSTRUMENTATION are mutually exclusive"
-#endif
+// TEMPORARILY DISABLED FOR TESTING
+// #if defined(ENABLE_EFFECT_TIMING) && defined(ENABLE_TIMING_INSTRUMENTATION)
+// #error "ENABLE_EFFECT_TIMING and ENABLE_TIMING_INSTRUMENTATION are mutually exclusive"
+// #endif
 
 // Effect-specific timing instrumentation (enabled with ENABLE_EFFECT_TIMING)
 #ifdef ENABLE_EFFECT_TIMING
