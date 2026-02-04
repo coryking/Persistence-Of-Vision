@@ -16,7 +16,8 @@
 #include "ESPNowComm.h"
 #include "effects/NoiseField.h"
 #include "effects/Radar.h"
-#include "effects/SolidArms.h"
+// #include "effects/SolidArms.h"  // Replaced by ProjectionTest
+#include "effects/ProjectionTest.h"
 #include "effects/RpmArc.h"
 #include "effects/PerArmBlobs.h"
 #include "effects/VirtualBlobs.h"
@@ -63,7 +64,8 @@ HallEffectDriver hallDriver(HardwareConfig::HALL_PIN);
 // Effect instances
 NoiseField noiseFieldEffect;
 Radar radarEffect;
-SolidArms solidArmsEffect;
+// SolidArms solidArmsEffect;  // Replaced by ProjectionTest
+ProjectionTest projectionTestEffect;
 RpmArc rpmArcEffect;
 PerArmBlobs perArmBlobsEffect;
 VirtualBlobs virtualBlobsEffect;
@@ -218,7 +220,7 @@ void setupImu() {
 void registerEffects() {
     effectManager.registerEffect(&radarEffect);
     effectManager.registerEffect(&noiseFieldEffect);
-    effectManager.registerEffect(&solidArmsEffect);
+    effectManager.registerEffect(&projectionTestEffect);  // Effect 3 - was solidArmsEffect
     effectManager.registerEffect(&rpmArcEffect);
     effectManager.registerEffect(&perArmBlobsEffect);
     effectManager.registerEffect(&virtualBlobsEffect);
