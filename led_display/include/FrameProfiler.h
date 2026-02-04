@@ -34,18 +34,16 @@ enum class ProfilerSource : uint8_t { RENDER_CORE, OUTPUT_CORE };
 struct RenderSample {
     uint32_t frameCount;
     uint8_t effectIndex;
-    uint32_t acquireUs;
+    uint32_t waitForWriteBufferUs;
     uint32_t renderUs;
     uint32_t queueUs;
-    uint8_t freeQueueDepth;
-    uint8_t readyQueueDepth;
     float angularResolution;
     uint32_t microsecondsPerRev;
 };
 
 struct OutputSample {
     uint32_t frameCount;
-    uint32_t receiveUs;
+    uint32_t waitForReadBufferUs;
     uint32_t copyUs;
     uint32_t waitUs;
     uint32_t showUs;
@@ -85,8 +83,7 @@ struct MetricStats {
 };
 
 struct RenderAggregator {
-    MetricStats acquire, render, queue;
-    MetricStats freeQ, readyQ;
+    MetricStats waitForWriteBuffer, render, queue;
     uint8_t lastEffect = 0;
     float lastAngularResolution = 3.0f;
     uint32_t lastMicrosecondsPerRev = 0;
@@ -94,7 +91,7 @@ struct RenderAggregator {
 };
 
 struct OutputAggregator {
-    MetricStats receive, copy, wait, show;
+    MetricStats waitForReadBuffer, copy, wait, show;
     uint32_t sampleCount = 0;
 };
 
@@ -102,17 +99,16 @@ struct OutputAggregator {
 void initProfilerAnalytics();
 
 /**
- * Render profiler - runs on Core 1 (Arduino loop)
+ * Render profiler - runs on Core 1 (RenderTask)
  *
  * Tracks timing and slot/revolution context:
- * - acquire_us: Time blocked waiting for free buffer (Output slow indicator)
+ * - waitForWriteBufferUs: Time blocked waiting for write buffer (Output slow indicator)
  * - render_us: Time spent in effect render()
- * - queue_us: Time to hand off to output task
+ * - queue_us: Time to hand off to BufferManager
  * - Slot info: slot number, angle, resolution
  * - Revolution info: period, angular resolution, rev count
- * - Queue depths: freeQ, readyQ (pipeline health indicators)
  *
- * New approach: Sends ProfilerSample to analytics queue instead of ESP_LOG
+ * Sends ProfilerSample to analytics queue instead of ESP_LOG
  */
 class RenderProfiler {
     int64_t t_start_ = 0;
@@ -125,16 +121,13 @@ class RenderProfiler {
     const TimingSnapshot* timing_ = nullptr;
 
     // Pipeline metrics (captured at markStart)
-    uint32_t acquireUs_ = 0;
-    uint8_t freeQueueDepth_ = 0;
-    uint8_t readyQueueDepth_ = 0;
+    uint32_t waitForWriteBufferUs_ = 0;
 
 public:
     RenderProfiler();
     void markStart(uint32_t frameCount, uint8_t effectIndex,
                    const SlotTarget& target, const TimingSnapshot& timing,
-                   uint32_t revCount, uint32_t acquireUs,
-                   uint8_t freeQueueDepth, uint8_t readyQueueDepth);
+                   uint32_t revCount, uint32_t waitForWriteBufferUs);
     void markRenderEnd();
     void markQueueEnd();
     void emit();
@@ -143,16 +136,15 @@ public:
 };
 
 /**
- * Output profiler - runs on Core 0 (output task)
+ * Output profiler - runs on Core 0 (OutputTask)
  *
  * Tracks:
- * - receive_us: Time blocked waiting for rendered frame (Render slow indicator)
+ * - waitForReadBufferUs: Time blocked waiting for rendered frame (Render slow indicator)
  * - copy_us: Time to copy pixels to strip
  * - wait_us: Time spent busy-waiting for target angle
  * - show_us: Time for SPI transfer (strip.Show())
- * - Queue depths: freeQ, readyQ (pipeline health indicators)
  *
- * New approach: Sends ProfilerSample to analytics queue instead of ESP_LOG
+ * Sends ProfilerSample to analytics queue instead of ESP_LOG
  */
 class OutputProfiler {
     int64_t t_start_ = 0;
@@ -162,14 +154,11 @@ class OutputProfiler {
     uint32_t frameCount_ = 0;
 
     // Pipeline metrics (captured at markStart)
-    uint32_t receiveUs_ = 0;
-    uint8_t freeQueueDepth_ = 0;
-    uint8_t readyQueueDepth_ = 0;
+    uint32_t waitForReadBufferUs_ = 0;
 
    public:
     OutputProfiler();
-    void markStart(uint32_t frameCount, uint32_t receiveUs,
-                   uint8_t freeQueueDepth, uint8_t readyQueueDepth);
+    void markStart(uint32_t frameCount, uint32_t waitForReadBufferUs);
     void markCopyEnd();
     void markWaitEnd();
     void markShowEnd();
@@ -187,8 +176,7 @@ public:
         ESP_LOGI(TAG_RENDER, "Profiler disabled. Using Dummy Profiler");
     }
     inline void markStart(uint32_t, uint8_t, const SlotTarget&,
-                          const TimingSnapshot&, uint32_t, uint32_t,
-                          uint8_t, uint8_t) {}
+                          const TimingSnapshot&, uint32_t, uint32_t) {}
     inline void markRenderEnd() {}
     inline void markQueueEnd() {}
     inline void emit() {}
@@ -200,7 +188,7 @@ public:
     inline OutputProfiler() {
         ESP_LOGI(TAG_OUTPUT, "Profiler disabled. Using Dummy Profiler");
     }
-    inline void markStart(uint32_t, uint32_t, uint8_t, uint8_t) {}
+    inline void markStart(uint32_t, uint32_t) {}
     inline void markCopyEnd() {}
     inline void markWaitEnd() {}
     inline void markShowEnd() {}

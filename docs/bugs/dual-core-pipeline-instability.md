@@ -1,8 +1,10 @@
 # Dual-Core Render Pipeline Instability
 
+**STATUS: RESOLVED** - Replaced queue-based architecture with BufferManager (binary semaphores). See `docs/led_display/RENDER_OUTPUT_ARCHITECTURE.md` for the new design.
+
 ## Problem Summary
 
-The dual-core render pipeline experiences crashes, task watchdog timeouts, and garbled serial output.
+The dual-core render pipeline experienced crashes, task watchdog timeouts, and garbled serial output with the original queue-based architecture.
 
 ## Symptoms
 
@@ -86,13 +88,24 @@ xQueueSend(g_readyFrameQueue, &cmd, portMAX_DELAY);        // Blocking send
 
 3. **Compared architectures** - Identified the semaphore→two-queue change but did not test reverting it (requires matching FrameProfiler API changes)
 
-## Key Questions
+## Resolution
 
-1. Did the original c980817 dual-core implementation ever work?
-2. Is the two-queue pattern fundamentally different in behavior from the semaphore pattern?
-3. Why does effect timing overhead (~78us) mask the problem?
-4. What's causing character-level serial corruption across all builds?
-5. is our new dual-buffer architecture fatally flawed?  is it even the right architecture?
+The queue-based architecture was replaced with a BufferManager using per-buffer binary semaphores. Key changes:
+
+1. **BufferManager with binary semaphores** - One semaphore per buffer per state (free/ready), providing granular buffer state tracking
+2. **RenderTask and OutputTask** - Refactored render/output logic into dedicated FreeRTOS tasks
+3. **Release after copy** - OutputTask releases buffers immediately after copying to LED strip, maximizing parallelism
+4. **Hall processing pinned to Core 1** - All Core 1 tasks now on same core for better cache locality
+
+See `docs/led_display/RENDER_OUTPUT_ARCHITECTURE.md` for the full architecture.
+
+## Key Questions (Resolved)
+
+1. ~~Did the original c980817 dual-core implementation ever work?~~ **Moot - new architecture**
+2. ~~Is the two-queue pattern fundamentally different in behavior from the semaphore pattern?~~ **Yes - queue overhead and state tracking were problematic**
+3. ~~Why does effect timing overhead (~78us) mask the problem?~~ **Unknown, but irrelevant with new architecture**
+4. ~~What's causing character-level serial corruption across all builds?~~ **Likely ESP_LOG mutex contention - resolved with BufferManager**
+5. ~~is our new dual-buffer architecture fatally flawed?  is it even the right architecture?~~ **Old queue-based architecture was flawed, new BufferManager architecture is correct**
 
 ## Relevant Files
 

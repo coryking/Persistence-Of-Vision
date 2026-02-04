@@ -10,9 +10,9 @@
 #include "freertos/task.h"
 #include <NeoPixelBus.h>
 #include "fl/five_bit_hd_gamma.h"
+#include "EffectManager.h"
 
-// Forward declare (defined in main.cpp)
-class EffectManager;
+// Defined in main.cpp
 extern EffectManager effectManager;
 
 // Perceptual brightness mapping (gamma 2.2)
@@ -80,8 +80,7 @@ inline SlotTarget calculateNextSlot(int lastRenderedSlot, const TimingSnapshot& 
  */
 inline void waitForTargetTime(timestamp_t targetTime) {
     while (esp_timer_get_time() < targetTime) {
-        // Busy wait - CPU has nothing else to do
-        // The ESP32-S3 has no other work during this wait
+        taskYIELD();
     }
 }
 

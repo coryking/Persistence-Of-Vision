@@ -43,23 +43,25 @@ The POV display uses a dual-core render pipeline:
 
 | Name | ESP32 Core | Task | Role |
 |------|------------|------|------|
-| **Render** | Core 1 | Arduino `loop()` | Producer - calculates slots, renders effects |
-| **Output** | Core 0 | `outputTask()` | Consumer - copies to strip, waits for angle, fires DMA |
+| **Render** | Core 1 | `RenderTask` | Producer - calculates slots, renders effects |
+| **Output** | Core 0 | `OutputTask` | Consumer - copies to strip, waits for angle, fires DMA |
 | **Analytics** | Core 0 | `analyticsTask()` | Low priority - aggregates profiler samples, prints stats |
 
-### Two-Queue Buffer Pool Pattern
+### BufferManager Coordination Pattern
 
-The pipeline uses a standard FreeRTOS producer-consumer pattern with two queues:
+The pipeline uses BufferManager with binary semaphores for coordination:
 
 ```
-g_freeBufferQueue:  [0, 1]  →  initially both buffers free
-g_readyFrameQueue:  []      →  initially empty
+BufferManager:
+  buffers_[2]         →  two RenderContext buffers
+  freeSignal_[2]      →  binary semaphore per buffer (free for writing)
+  readySignal_[2]     →  binary semaphore per buffer (ready for reading)
 
-Render:  receive(freeQueue) → render → send(readyQueue)
-Output:  receive(readyQueue) → copy/wait/show → send(freeQueue)
+RenderTask:  acquireWriteBuffer() → render → releaseWriteBuffer(targetTime)
+OutputTask:  acquireReadBuffer() → copy → release → wait → show
 ```
 
-Both receives block until available. Both sends block if full. This provides proper backpressure - if one core is slow, the other blocks waiting.
+Both tasks block on semaphore acquisition if buffers aren't in the expected state. This provides proper backpressure - if one core is slow, the other blocks waiting.
 
 ### How Parallelism Works
 
@@ -113,16 +115,16 @@ This enables `ENABLE_TIMING_INSTRUMENTATION` which:
 The analytics task prints aggregated statistics every 100 samples:
 
 ```
-[RENDER] n=100 effect=3 acquire_us=min/avg/max render_us=min/avg/max queue_us=min/avg/max freeQ=min/avg/max readyQ=min/avg/max
-[OUTPUT] n=100 receive_us=min/avg/max copy_us=min/avg/max wait_us=min/avg/max show_us=min/avg/max
+[RENDER] n=100 effect=3 waitForWriteBuffer_us=min/avg/max render_us=min/avg/max queue_us=min/avg/max
+[OUTPUT] n=100 waitForReadBuffer_us=min/avg/max copy_us=min/avg/max wait_us=min/avg/max show_us=min/avg/max
 [RESOLUTION_CHANGE] from=1.5 to=3.0 render_avg=156 output_avg=89 usec_per_rev=40000
 ```
 
 ### Example Output
 
 ```
-[RENDER] n=100 effect=1 acquire_us=0/2/15 render_us=45/78/156 queue_us=1/3/12 freeQ=0/1/2 readyQ=0/0/1
-[OUTPUT] n=100 receive_us=1/8/45 copy_us=12/18/32 wait_us=45/187/312 show_us=52/54/58
+[RENDER] n=100 effect=1 waitForWriteBuffer_us=0/2/15 render_us=45/78/156 queue_us=1/3/12
+[OUTPUT] n=100 waitForReadBuffer_us=1/8/45 copy_us=12/18/32 wait_us=45/187/312 show_us=52/54/58
 ```
 
 ### Resolution Change Events
@@ -147,18 +149,16 @@ All timing metrics show **min/avg/max** over the sample window (100 frames).
 |--------|-------------|
 | `n` | Number of samples in this report (100 normally, less on resolution change) |
 | `effect` | Current effect index (0-N) |
-| `acquire_us` | Time blocked waiting for free buffer (Output slow indicator) |
+| `waitForWriteBuffer_us` | Time blocked waiting for write buffer (Output slow indicator) |
 | `render_us` | Time spent in effect `render()` |
-| `queue_us` | Time to send frame to Output queue |
-| `freeQ` | Free buffer queue depth (0-2) |
-| `readyQ` | Ready frame queue depth (0-2) |
+| `queue_us` | Time to release buffer to BufferManager |
 
 ### Output Profiler (Core 0)
 
 | Metric | Description |
 |--------|-------------|
 | `n` | Number of samples in this report (100 normally, less on resolution change) |
-| `receive_us` | Time blocked waiting for rendered frame (Render slow indicator) |
+| `waitForReadBuffer_us` | Time blocked waiting for read buffer (Render slow indicator) |
 | `copy_us` | Time to copy pixels from RenderContext to strip buffer |
 | `wait_us` | Time busy-waiting for target angle |
 | `show_us` | Time for SPI transfer (`strip.Show()`) |
@@ -178,48 +178,33 @@ All timing metrics show **min/avg/max** over the sample window (100 frames).
 ### What "Healthy" Looks Like
 
 ```
-[RENDER] n=100 effect=1 acquire_us=0/2/15 render_us=45/78/156 queue_us=1/3/12 freeQ=0/1/2 readyQ=0/0/1
-[OUTPUT] n=100 receive_us=1/8/45 copy_us=12/18/32 wait_us=45/187/312 show_us=52/54/58
+[RENDER] n=100 effect=1 waitForWriteBuffer_us=0/2/15 render_us=45/78/156 queue_us=1/3/12
+[OUTPUT] n=100 waitForReadBuffer_us=1/8/45 copy_us=12/18/32 wait_us=45/187/312 show_us=52/54/58
 ```
 
-- **Low acquire_us avg (< 50us):** Buffers immediately available
-- **Low receive_us avg (< 50us):** Frames immediately available
-- **freeQ avg ~1, readyQ avg ~0:** Balanced pipeline
+- **Low waitForWriteBuffer_us avg (< 50us):** Buffers immediately available
+- **Low waitForReadBuffer_us avg (< 50us):** Frames immediately available
 - **Positive wait_us avg:** Ahead of schedule (good!)
 
 ### What "Unhealthy" Looks Like
 
 **Output-limited (Output can't keep up):**
 ```
-[RENDER] n=100 effect=1 acquire_us=200/450/800 render_us=45/78/156 queue_us=1/3/12 freeQ=0/0/1 readyQ=0/1/2
-[OUTPUT] n=100 receive_us=0/2/10 copy_us=12/18/32 wait_us=0/0/5 show_us=52/54/58
+[RENDER] n=100 effect=1 waitForWriteBuffer_us=200/450/800 render_us=45/78/156 queue_us=1/3/12
+[OUTPUT] n=100 waitForReadBuffer_us=0/2/10 copy_us=12/18/32 wait_us=0/0/5 show_us=52/54/58
 ```
 
-- High `acquire_us` avg/max = Render frequently blocked waiting for buffer
-- `freeQ` avg near 0 = both buffers in use by Output
+- High `waitForWriteBuffer_us` avg/max = Render frequently blocked waiting for buffer
 - `wait_us` avg near 0 = consistently arriving late
 
 **Render-limited (Render can't keep up):**
 ```
-[RENDER] n=100 effect=1 acquire_us=0/2/10 render_us=400/800/1200 queue_us=1/3/12 freeQ=1/2/2 readyQ=0/0/0
-[OUTPUT] n=100 receive_us=200/450/800 copy_us=12/18/32 wait_us=100/300/600 show_us=52/54/58
+[RENDER] n=100 effect=1 waitForWriteBuffer_us=0/2/10 render_us=400/800/1200 queue_us=1/3/12
+[OUTPUT] n=100 waitForReadBuffer_us=200/450/800 copy_us=12/18/32 wait_us=100/300/600 show_us=52/54/58
 ```
 
-- High `receive_us` avg/max = Output frequently blocked waiting for frame
-- `freeQ` avg near 2 = both buffers sitting free (Render too slow)
+- High `waitForReadBuffer_us` avg/max = Output frequently blocked waiting for frame
 - High `wait_us` avg = plenty of time to spare (Render is bottleneck)
-
-### Queue Depth Interpretation
-
-| freeQ | readyQ | Meaning |
-|-------|--------|---------|
-| 2 | 0 | Both free, Output starved (Render-limited) |
-| 1 | 1 | Balanced, good pipelining |
-| 1 | 0 | Normal, one in flight |
-| 0 | 1 | Output working, Render blocked |
-| 0 | 2 | Both rendered, Output behind (Output-limited) |
-
-Note: `freeQ + readyQ` should always equal ~2 (accounting for in-flight frames).
 
 ## Angular Resolution Calculation
 
@@ -264,9 +249,9 @@ The parallel pipeline is worth the complexity when:
 2. **wait time is significant** (otherwise no time to absorb)
 3. **angular resolution is a bottleneck** (need more slots per revolution)
 
-If `acquire_us` avg is consistently high (> 100us), we're not getting parallelism - we're running sequentially with extra overhead.
+If `waitForWriteBuffer_us` avg is consistently high (> 100us), we're not getting parallelism - we're running sequentially with extra overhead.
 
-**Key insight:** Low `acquire_us` avg AND low `receive_us` avg = good pipelining. High in either = bottleneck on that side.
+**Key insight:** Low `waitForWriteBuffer_us` avg AND low `waitForReadBuffer_us` avg = good pipelining. High in either = bottleneck on that side.
 
 ## Grep-Friendly Output
 

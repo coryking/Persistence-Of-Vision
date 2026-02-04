@@ -115,13 +115,6 @@ public:
      */
     void setHallAvgUs(period_t avgUs);
 
-    // ========== Debug ==========
-
-    /**
-     * Print current stats to serial (for debugging)
-     */
-    void print() const;
-
 private:
     // Singleton - private constructor
     RotorDiagnosticStats() = default;

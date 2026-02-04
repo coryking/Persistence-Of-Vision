@@ -158,19 +158,7 @@ void RotorDiagnosticStats::setHallAvgUs(period_t avgUs) {
     portEXIT_CRITICAL(&_spinlock);
 }
 
-void RotorDiagnosticStats::print() const {
-    portENTER_CRITICAL(&_spinlock);
-    ESP_LOGI(TAG, "seq=%lu hall=%lu outliers(fast/slow/ratio)=%lu/%lu/%lu "
-                  "lastOutlier=%luus(reason=%u) espnow=%lu/%lu render=%u skip=%u notRot=%u "
-                  "effect=%u bright=%u",
-                  _reportSequence, _hallEventsTotal,
-                  _outliersTooFast, _outliersTooSlow, _outliersRatioLow,
-                  _lastOutlierInterval_us, _lastOutlierReason,
-                  _espnowSendAttempts - _espnowSendFailures,
-                  _espnowSendAttempts, _renderCount, _skipCount, _notRotatingCount,
-                  _effectNumber, _brightness);
-    portEXIT_CRITICAL(&_spinlock);
-}
+// print() method removed - unused, stats sent via ESP-NOW to motor controller
 
 void RotorDiagnosticStats::timerCallback(TimerHandle_t xTimer) {
     // Get the instance from timer ID

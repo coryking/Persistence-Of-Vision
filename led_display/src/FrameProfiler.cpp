@@ -25,21 +25,19 @@ static QueueHandle_t g_analyticsQueue = nullptr;
 static void printRenderStats(const RenderAggregator& agg) {
     // Use ESP_LOGI instead of Serial.printf to share mutex with ESP_LOG* calls
     // from other components (ESP-NOW, etc.) - prevents character interleaving
-    ESP_LOGI(TAG_RENDER, "n=%u effect=%u acquire_us=%u/%u/%u render_us=%u/%u/%u "
-                  "queue_us=%u/%u/%u freeQ=%u/%u/%u readyQ=%u/%u/%u",
+    ESP_LOGI(TAG_RENDER, "n=%u effect=%u waitForWriteBuffer_us=%u/%u/%u render_us=%u/%u/%u "
+                  "queue_us=%u/%u/%u",
         agg.sampleCount, agg.lastEffect,
-        agg.acquire.min, agg.acquire.avg(), agg.acquire.max,
+        agg.waitForWriteBuffer.min, agg.waitForWriteBuffer.avg(), agg.waitForWriteBuffer.max,
         agg.render.min, agg.render.avg(), agg.render.max,
-        agg.queue.min, agg.queue.avg(), agg.queue.max,
-        agg.freeQ.min, agg.freeQ.avg(), agg.freeQ.max,
-        agg.readyQ.min, agg.readyQ.avg(), agg.readyQ.max);
+        agg.queue.min, agg.queue.avg(), agg.queue.max);
 }
 
 static void printOutputStats(const OutputAggregator& agg) {
-    ESP_LOGI(TAG_OUTPUT, "n=%u receive_us=%u/%u/%u copy_us=%u/%u/%u "
+    ESP_LOGI(TAG_OUTPUT, "n=%u waitForReadBuffer_us=%u/%u/%u copy_us=%u/%u/%u "
                   "wait_us=%u/%u/%u show_us=%u/%u/%u",
         agg.sampleCount,
-        agg.receive.min, agg.receive.avg(), agg.receive.max,
+        agg.waitForReadBuffer.min, agg.waitForReadBuffer.avg(), agg.waitForReadBuffer.max,
         agg.copy.min, agg.copy.avg(), agg.copy.max,
         agg.wait.min, agg.wait.avg(), agg.wait.max,
         agg.show.min, agg.show.avg(), agg.show.max);
@@ -80,33 +78,29 @@ static void analyticsTask(void* param) {
                 }
 
                 // Record metrics
-                renderAgg.acquire.record(sample.render.acquireUs);
+                renderAgg.waitForWriteBuffer.record(sample.render.waitForWriteBufferUs);
                 renderAgg.render.record(sample.render.renderUs);
                 renderAgg.queue.record(sample.render.queueUs);
-                renderAgg.freeQ.record(sample.render.freeQueueDepth);
-                renderAgg.readyQ.record(sample.render.readyQueueDepth);
                 renderAgg.lastEffect = sample.render.effectIndex;
                 renderAgg.lastMicrosecondsPerRev = sample.render.microsecondsPerRev;
 
                 if (++renderAgg.sampleCount >= 100) {
                     printRenderStats(renderAgg);
-                    renderAgg.acquire.reset();
+                    renderAgg.waitForWriteBuffer.reset();
                     renderAgg.render.reset();
                     renderAgg.queue.reset();
-                    renderAgg.freeQ.reset();
-                    renderAgg.readyQ.reset();
                     renderAgg.sampleCount = 0;
                 }
             } else {
                 // OUTPUT sample
-                outputAgg.receive.record(sample.output.receiveUs);
+                outputAgg.waitForReadBuffer.record(sample.output.waitForReadBufferUs);
                 outputAgg.copy.record(sample.output.copyUs);
                 outputAgg.wait.record(sample.output.waitUs);
                 outputAgg.show.record(sample.output.showUs);
 
                 if (++outputAgg.sampleCount >= 100) {
                     printOutputStats(outputAgg);
-                    outputAgg.receive.reset();
+                    outputAgg.waitForReadBuffer.reset();
                     outputAgg.copy.reset();
                     outputAgg.wait.reset();
                     outputAgg.show.reset();
@@ -153,17 +147,14 @@ RenderProfiler::RenderProfiler() {
 
 void RenderProfiler::markStart(uint32_t frameCount, uint8_t effectIndex,
                                 const SlotTarget& target, const TimingSnapshot& timing,
-                                uint32_t revCount, uint32_t acquireUs,
-                                uint8_t freeQueueDepth, uint8_t readyQueueDepth) {
+                                uint32_t revCount, uint32_t waitForWriteBufferUs) {
     (void)target;  // Not needed anymore
     (void)revCount;  // Not needed anymore
     t_start_ = esp_timer_get_time();
     frameCount_ = frameCount;
     effectIndex_ = effectIndex;
     timing_ = &timing;
-    acquireUs_ = acquireUs;
-    freeQueueDepth_ = freeQueueDepth;
-    readyQueueDepth_ = readyQueueDepth;
+    waitForWriteBufferUs_ = waitForWriteBufferUs;
 }
 
 void RenderProfiler::markRenderEnd() {
@@ -182,11 +173,9 @@ void RenderProfiler::emit() {
     sample.source = ProfilerSource::RENDER_CORE;
     sample.render.frameCount = frameCount_;
     sample.render.effectIndex = effectIndex_;
-    sample.render.acquireUs = acquireUs_;
+    sample.render.waitForWriteBufferUs = waitForWriteBufferUs_;
     sample.render.renderUs = static_cast<uint32_t>(t_renderEnd_ - t_start_);
     sample.render.queueUs = static_cast<uint32_t>(t_queueEnd_ - t_renderEnd_);
-    sample.render.freeQueueDepth = freeQueueDepth_;
-    sample.render.readyQueueDepth = readyQueueDepth_;
     sample.render.angularResolution = timing_->angularResolution;
     sample.render.microsecondsPerRev = timing_->microsecondsPerRev;
 
@@ -202,13 +191,10 @@ OutputProfiler::OutputProfiler() {
     ESP_LOGI(TAG_OUTPUT, "OutputProfiler initialized");
 }
 
-void OutputProfiler::markStart(uint32_t frameCount, uint32_t receiveUs,
-                                uint8_t freeQueueDepth, uint8_t readyQueueDepth) {
+void OutputProfiler::markStart(uint32_t frameCount, uint32_t waitForReadBufferUs) {
     t_start_ = esp_timer_get_time();
     frameCount_ = frameCount;
-    receiveUs_ = receiveUs;
-    freeQueueDepth_ = freeQueueDepth;
-    readyQueueDepth_ = readyQueueDepth;
+    waitForReadBufferUs_ = waitForReadBufferUs;
 }
 
 void OutputProfiler::markCopyEnd() {
@@ -230,7 +216,7 @@ void OutputProfiler::emit() {
     ProfilerSample sample;
     sample.source = ProfilerSource::OUTPUT_CORE;
     sample.output.frameCount = frameCount_;
-    sample.output.receiveUs = receiveUs_;
+    sample.output.waitForReadBufferUs = waitForReadBufferUs_;
     sample.output.copyUs = static_cast<uint32_t>(t_copyEnd_ - t_start_);
     sample.output.waitUs = static_cast<uint32_t>(t_waitEnd_ - t_copyEnd_);
     sample.output.showUs = static_cast<uint32_t>(t_showEnd_ - t_waitEnd_);
