@@ -35,7 +35,7 @@
 #include "BufferManager.h"
 #include "RenderTask.h"
 #include "OutputTask.h"
-#include "WatchdogHelper.h"
+#include "esp_task_wdt.h"
 
 static const char* TAG = "MAIN";
 
@@ -266,9 +266,9 @@ void setup() {
     renderTask.start();
     startHallProcessingTask();
 
-    // OutputTask monopolizes Core 0 legitimately (tight render loop).
-    // Unsubscribe IDLE0 from TWDT - OutputTask is subscribed and feeds WDT itself.
-    WatchdogHelper::unsubscribeIdleTask(0);
+    // Disable Task Watchdog Timer - OutputTask legitimately monopolizes Core 0
+    // with a tight render loop, which would starve IDLE0 and trigger TWDT.
+    esp_task_wdt_deinit();
 
     // Start diagnostic stats collection (sends to motor controller every 500ms)
     RotorDiagnosticStats::instance().setEffectNumber(1);  // Initial effect

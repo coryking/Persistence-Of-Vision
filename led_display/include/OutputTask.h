@@ -15,7 +15,7 @@ private:
 
     TaskHandle_t handle_ = nullptr;
 
-    static constexpr UBaseType_t PRIORITY = 2;
+    static constexpr UBaseType_t PRIORITY = 1;  // Lowered from 2 to let USB CDC run
     static constexpr uint32_t STACK_SIZE = 8192;
     static constexpr BaseType_t CORE = 0;
 };

@@ -4,7 +4,6 @@
 #include "FrameProfiler.h"
 #include "RotorDiagnosticStats.h"
 #include "RevolutionTimer.h"
-#include "WatchdogHelper.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include <NeoPixelBus.h>
@@ -37,7 +36,6 @@ void OutputTask::resume() {
 }
 
 void OutputTask::taskFunction(void* params) {
-    WatchdogHelper::subscribeCurrentTask();
     static_cast<OutputTask*>(params)->run();
 }
 
@@ -89,10 +87,7 @@ void OutputTask::run() {
         // 9. Emit profiler output
         g_outputProfiler.emit();
 
-        // 10. Yield to help same-priority tasks (TelemetryTask) get CPU time
+        // 10. Yield to help same-priority tasks get CPU time
         taskYIELD();
-
-        // 11. Feed WDT - we're subscribed, this prevents timeout when Render is fast
-        WatchdogHelper::feed();
     }
 }
