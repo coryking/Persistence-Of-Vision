@@ -1,0 +1,116 @@
+#include "effects/CartesianGrid.h"
+#include "hardware_config.h"
+#include "geometry.h"
+#include "esp_log.h"
+#include <FastLED.h>
+#include <math.h>
+
+static const char* TAG = "GRID";
+
+// =============================================================================
+// Coordinate System Constants
+// =============================================================================
+
+// The display has ~4 "virtual" pixels in the center hole + 40 real LED rings
+static constexpr int HOLE_PIXELS = 4;
+static constexpr int DISPLAY_PIXELS = 40;
+static constexpr int PIXELS_TO_EDGE = HOLE_PIXELS + DISPLAY_PIXELS;  // 44
+
+// Cartesian coordinate range: -44 to +44
+static constexpr int COORD_MIN = -PIXELS_TO_EDGE;
+static constexpr int COORD_MAX = PIXELS_TO_EDGE;
+
+// Grid configuration
+static constexpr int GRID_SPACING = 10;         // Pixels between grid lines
+static constexpr float LINE_THICKNESS = 1.0f;   // Grid line thickness in pixels
+
+// Grid line colors
+static const CRGB GRID_COLOR = CRGB(255, 255, 255);  // White lines
+static const CRGB BACKGROUND_COLOR = CRGB(0, 0, 0);  // Black background
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Check if a coordinate is near a grid line
+ * @param coord The coordinate to check (can be offset)
+ * @param spacing Distance between grid lines
+ * @return true if within LINE_THICKNESS of a grid line
+ */
+static bool isNearGridLine(float coord, int spacing) {
+    float distToLine = fmodf(fabsf(coord), spacing);
+    if (distToLine > spacing / 2.0f) {
+        distToLine = spacing - distToLine;
+    }
+    return distToLine < LINE_THICKNESS;
+}
+
+/**
+ * Convert physical radius (mm) to "pixel units" for coordinate system
+ * @param radius_mm Physical radius from geometry.h
+ * @return Radius in pixel units (where edge = PIXELS_TO_EDGE)
+ */
+static float radiusToPixels(float radius_mm) {
+    // Scale: outermost LED center is at PIXELS_TO_EDGE pixels
+    return radius_mm * PIXELS_TO_EDGE / RadialGeometry::OUTERMOST_LED_CENTER_MM;
+}
+
+// =============================================================================
+// Effect Implementation
+// =============================================================================
+
+void CartesianGrid::render(RenderContext& ctx) {
+    for (int a = 0; a < HardwareConfig::NUM_ARMS; a++) {
+        auto& arm = ctx.arms[a];
+
+        // Get arm angle in radians for coordinate conversion
+        float angleRad = arm.angleUnits * (M_PI / 1800.0f);  // 3600 units = 2π
+        float cosAngle = cosf(angleRad);
+        float sinAngle = sinf(angleRad);
+
+        for (int p = 0; p < HardwareConfig::ARM_LED_COUNT[a]; p++) {
+            // Get physical radius from geometry
+            int ring = a + (p * HardwareConfig::NUM_ARMS);
+            float radius_mm = RadialGeometry::ringRadiusMM(ring);
+
+            // Convert to pixel units
+            float radius_pixels = radiusToPixels(radius_mm);
+
+            // Compute Cartesian coordinates
+            float x = radius_pixels * cosAngle;
+            float y = radius_pixels * sinAngle;
+
+            // Check if on a grid line (with offset from arrow keys)
+            bool onVerticalLine = isNearGridLine(x + xOffset, GRID_SPACING);
+            bool onHorizontalLine = isNearGridLine(y + yOffset, GRID_SPACING);
+
+            // Set pixel color
+            if (onVerticalLine || onHorizontalLine) {
+                arm.pixels[p] = GRID_COLOR;
+            } else {
+                arm.pixels[p] = BACKGROUND_COLOR;
+            }
+        }
+    }
+}
+
+void CartesianGrid::paramUp() {
+    yOffset++;
+    ESP_LOGI(TAG, "Grid offset -> (%d, %d)", xOffset, yOffset);
+}
+
+void CartesianGrid::paramDown() {
+    yOffset--;
+    ESP_LOGI(TAG, "Grid offset -> (%d, %d)", xOffset, yOffset);
+}
+
+void CartesianGrid::nextMode() {
+    xOffset++;
+    ESP_LOGI(TAG, "Grid offset -> (%d, %d)", xOffset, yOffset);
+}
+
+void CartesianGrid::prevMode() {
+    xOffset--;
+    ESP_LOGI(TAG, "Grid offset -> (%d, %d)", xOffset, yOffset);
+}

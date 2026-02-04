@@ -18,6 +18,7 @@
 #include "effects/Radar.h"
 // #include "effects/SolidArms.h"  // Replaced by ProjectionTest
 #include "effects/ProjectionTest.h"
+#include "effects/CartesianGrid.h"
 #include "effects/RpmArc.h"
 #include "effects/PerArmBlobs.h"
 #include "effects/VirtualBlobs.h"
@@ -66,6 +67,7 @@ NoiseField noiseFieldEffect;
 Radar radarEffect;
 // SolidArms solidArmsEffect;  // Replaced by ProjectionTest
 ProjectionTest projectionTestEffect;
+CartesianGrid cartesianGridEffect;
 RpmArc rpmArcEffect;
 PerArmBlobs perArmBlobsEffect;
 VirtualBlobs virtualBlobsEffect;
@@ -221,6 +223,7 @@ void registerEffects() {
     effectManager.registerEffect(&radarEffect);
     effectManager.registerEffect(&noiseFieldEffect);
     effectManager.registerEffect(&projectionTestEffect);  // Effect 3 - was solidArmsEffect
+    effectManager.registerEffect(&cartesianGridEffect);   // Effect 4 - Cartesian grid validation
     effectManager.registerEffect(&rpmArcEffect);
     effectManager.registerEffect(&perArmBlobsEffect);
     effectManager.registerEffect(&virtualBlobsEffect);
