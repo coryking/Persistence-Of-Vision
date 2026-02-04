@@ -1,6 +1,12 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code and discussing features in this repository.
+
+## Project Overview
+
+A high-speed Persistence of Vision (POV) display using rotating LED arrays.
+
+The ultimate goal is a spinning LED display with three arms arranged 120 degrees apart. Each arm has either 13 or 14 LEDs, creating an interlaced 40-row radial display when spinning.
 
 ## Development Philosophy: Ship Cool Art
 
@@ -32,9 +38,13 @@ This is a hobby art project. The goal is to create beautiful spinning LED displa
 **Critical Timing Reality:**
 
 - This project works because NeoPixelBus has fast, consistent SPI performance
-- Other POV projects using FastLED failed with same architecture due to slow SPI
 - Performance IS correctness - jitter causes visual artifacts
 - See docs/led_display/TIMING_ANALYSIS.md and docs/led_display/PROJECT_COMPARISON.md for measurements
+
+**Render / Output Tasks**
+- We have two tasks forming a double-buffered rendering pipeline.  There is the render task, which manages the angular resolution, timing and whatnot and also, importantly, generates the effects.  There is the output task on the other core which copies from the buffer, does some gamma correction and then spits out to the LEDS via DMA.
+- These two tasks are in a tight pairing to form a pipeline.  Render generates what to draw, then the output task picks it up and spits it out while the render task works on the new frame.
+- Angular resolution is determined by how long this process takes.  Either render or output will be the "slow bottleneck", causing the other end to wait around.  this is normal.  The angular resolution depends on which is the slowest.
 
 ## Documentation Reference
 
@@ -52,12 +62,6 @@ This is a hobby art project. The goal is to create beautiful spinning LED displa
 - **docs/led_display/ESP32_REFERENCE.md** - Integer math system, angle units, FPU performance
 - **docs/led_display/HARDWARE.md** - Physical hardware, power system, sensors
 - **docs/PROJECT_STRUCTURE.md** - Complete project layout
-
-## Project Overview
-
-A high-speed Persistence of Vision (POV) display using rotating LED arrays.
-
-The ultimate goal is a spinning LED display with three arms arranged 120 degrees apart. Each arm has 11 SK9822 LEDs, creating an interlaced 33-row radial display when spinning.
 
 **Hardware Configuration:**
 - Pin assignments: See `include/hardware_config.h`
@@ -172,6 +176,10 @@ The debug env uses `-DCORE_DEBUG_LEVEL=5` which enables all log levels. In relea
 - Removing features or visual effects
 - Changes that could affect artistic output in non-obvious ways
 - Adding new hardware requirements or dependencies
+
+## Known Issues
+
+**Arduino USB CDC Multi-Core Bug:** Serial output from Core 0 (OutputTask, ESP-NOW callbacks) is garbled due to a race condition in Arduino-ESP32's HWCDC implementation. Core 1 output works fine. This is an upstream bug with no fix yet. See **docs/led_display/ARDUINO_USB_CDC_BUG.md** for details and workarounds. Moving to pure ESP-IDF would fix this.
 
 ## Important Notes
 

@@ -12,6 +12,7 @@
 #include "fl/five_bit_hd_gamma.h"
 #include "EffectManager.h"
 
+
 // Defined in main.cpp
 extern EffectManager effectManager;
 

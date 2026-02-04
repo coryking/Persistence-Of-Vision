@@ -121,6 +121,9 @@ void RenderTask::run() {
         // 8. Emit profiler output
         g_renderProfiler.emit();
 
+//        ESP_LOGD(TAG, "RenderTask: frame: %lu, target slot: %d, target time: %lu, now: %lu",
+//                 thisFrame, target.slotNumber, target.targetTime, now);
+
         lastRenderedSlot_ = target.slotNumber;
     }
 }
