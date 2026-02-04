@@ -3,6 +3,7 @@
 import typer
 
 from . import telemetry
+from . import calibration
 
 app = typer.Typer(
     name="pov",
@@ -12,6 +13,7 @@ app = typer.Typer(
 
 # Add subcommand groups
 app.add_typer(telemetry.app, name="telemetry")
+app.add_typer(calibration.app, name="calibration")
 
 
 if __name__ == "__main__":

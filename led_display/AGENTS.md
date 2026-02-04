@@ -67,12 +67,23 @@ This is a hobby art project. The goal is to create beautiful spinning LED displa
 - Pin assignments: See `include/hardware_config.h`
 - Physical hardware: See `docs/led_display/HARDWARE.md`
 
-**CRITICAL: When writing effect render loops, NEVER hardcode LED counts!**
+**CRITICAL: When writing effect render loops, NEVER hardcode counts!**
 
 ```cpp
+// Arm loop - iterate over all 3 arms:
+// BAD:  for (int a = 0; a < 3; a++)
+// GOOD: for (int a = 0; a < HardwareConfig::NUM_ARMS; a++)
+
+// LED loop - iterate over LEDs in an arm:
 // BAD:  for (int p = 0; p < 10; p++)
 // GOOD: for (int p = 0; p < HardwareConfig::LEDS_PER_ARM; p++)
 ```
+
+**Available HardwareConfig constants:**
+- `NUM_ARMS` - Number of arms (3)
+- `LEDS_PER_ARM` - Maximum LEDs per arm (14, for buffer sizing)
+- `ARM_LED_COUNT[a]` - Actual LED count per arm (arm[0]=14, others=13)
+- See `include/hardware_config.h` for complete reference
 
 ## Code Architecture
 

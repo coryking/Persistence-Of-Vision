@@ -72,6 +72,68 @@ static constexpr interval_t MICROS_PER_REV_MIN_SAMPLES = RPM_TO_MICROS(2800);  /
 static constexpr interval_t MICROS_PER_REV_MAX_SAMPLES = RPM_TO_MICROS(50);    // 2 samples (slow)
 
 // -----------------------------------------------------------------------------
+// Radial Geometry (Physical LED Positions)
+// -----------------------------------------------------------------------------
+// Measured from physical calibration - see docs/led_display/HARDWARE.md
+// for measurement methodology and update instructions.
+//
+// The display has a central "hole" because the innermost LED is not at the
+// rotation center. When mapping Cartesian coordinates to polar:
+//   - Points where sqrt(x² + y²) < INNER_DISPLAY_RADIUS_MM are in the blind spot
+//   - Effects that assume radius 0 = center will render incorrectly
+//
+// Ring layout: 40 LEDs create 40 concentric rings when spinning.
+// ARM3 provides rings 0,3,6,9... (14 LEDs), ARM2 provides 1,4,7... (13 LEDs),
+// ARM1 provides 2,5,8... (13 LEDs).
+
+namespace RadialGeometry {
+    // -------------------------------------------------------------------------
+    // LED Strip Physical Constants (fixed by LED product, don't change)
+    // -------------------------------------------------------------------------
+    constexpr float LED_PITCH_MM = 7.0f;        // Center-to-center spacing on strip
+    constexpr float LED_CHIP_SIZE_MM = 5.0f;    // LED chip width (5mm chip + 2mm gap = 7mm pitch)
+
+    // -------------------------------------------------------------------------
+    // Calibration Data (measured values - update via pov calibration interactive)
+    // -------------------------------------------------------------------------
+    // Per-arm innermost LED center positions (mm from rotation center)
+    // To recalibrate: measure tip-to-inner-edge, run led_calibration.py
+    constexpr float ARM3_INNER_RADIUS_MM = 10.00f;  // Rings 0, 3, 6, 9...  (14 LEDs)
+    constexpr float ARM2_INNER_RADIUS_MM = 13.10f;  // Rings 1, 4, 7, 10... (13 LEDs)
+    constexpr float ARM1_INNER_RADIUS_MM = 15.10f;  // Rings 2, 5, 8, 11... (13 LEDs)
+
+    // -------------------------------------------------------------------------
+    // Derived Values (computed from above - do not edit directly)
+    // -------------------------------------------------------------------------
+    constexpr float IDEAL_RING_PITCH_MM = LED_PITCH_MM / 3.0f;
+
+    // Innermost/outermost LED centers
+    constexpr float INNERMOST_LED_CENTER_MM = ARM3_INNER_RADIUS_MM;
+    constexpr float OUTERMOST_LED_CENTER_MM = ARM3_INNER_RADIUS_MM + 13 * LED_PITCH_MM;  // Ring 39
+
+    // Display boundaries (inner/outer edges of the LED chips)
+    constexpr float INNER_DISPLAY_RADIUS_MM = INNERMOST_LED_CENTER_MM - LED_CHIP_SIZE_MM / 2.0f;
+    constexpr float OUTER_DISPLAY_RADIUS_MM = OUTERMOST_LED_CENTER_MM + LED_CHIP_SIZE_MM / 2.0f;
+    constexpr float INNER_HOLE_DIAMETER_MM = 2.0f * INNER_DISPLAY_RADIUS_MM;
+    constexpr float DISPLAY_SPAN_MM = OUTER_DISPLAY_RADIUS_MM - INNER_DISPLAY_RADIUS_MM;
+
+    // -------------------------------------------------------------------------
+    // Functions
+    // -------------------------------------------------------------------------
+
+    /**
+     * Get the physical radius (mm) for a given ring index (0-39)
+     * Ring 0 is innermost, Ring 39 is outermost.
+     */
+    inline constexpr float ringRadiusMM(int ring) {
+        // ring % 3 determines arm: 0=ARM3, 1=ARM2, 2=ARM1
+        // ring / 3 determines LED index on that arm
+        constexpr float armBase[3] = {ARM3_INNER_RADIUS_MM, ARM2_INNER_RADIUS_MM, ARM1_INNER_RADIUS_MM};
+        return armBase[ring % 3] + (ring / 3) * LED_PITCH_MM;
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Rendering Target
 // -----------------------------------------------------------------------------
 

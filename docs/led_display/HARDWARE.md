@@ -145,6 +145,147 @@ Grounded aluminum foil between the RX coil and electronics could reduce electric
 - PWM refresh rate >26kHz (vs SK9822's 4.7kHz) — reduces flicker at high rotation speeds
 - APA102-compatible protocol
 
+### LED Strip Specifications
+
+- **LED pitch**: `LED_PITCH_MM` (7mm) — 5mm chip + 2mm gap
+- **LED chip size**: `LED_CHIP_SIZE_MM` (5mm)
+- **Ideal interlaced ring spacing**: `LED_PITCH_MM / 3` (2.333mm)
+
+### LED Geometry Calibration
+
+**Source of truth:** `led_display/include/geometry.h` → `RadialGeometry` namespace
+
+The three LED strips create 40 interlaced concentric rings when spinning. ARM3 has 14 LEDs (extra at hub end), ARM1 and ARM2 have 13 LEDs each.
+
+**Display boundaries (variables in geometry.h):**
+
+| Parameter | Variable | Formula |
+|-----------|----------|---------|
+| Inner edge | `INNER_DISPLAY_RADIUS_MM` | `ARM3_INNER_RADIUS_MM - LED_CHIP_SIZE_MM/2` |
+| Outer edge | `OUTER_DISPLAY_RADIUS_MM` | Outermost LED center + `LED_CHIP_SIZE_MM/2` |
+| Inner hole Ø | `INNER_HOLE_DIAMETER_MM` | `2 × INNER_DISPLAY_RADIUS_MM` |
+| Display span | `DISPLAY_SPAN_MM` | `OUTER - INNER` |
+
+**Cartesian blind spot:** Any coordinate where `sqrt(x² + y²) < INNER_DISPLAY_RADIUS_MM` cannot be displayed.
+
+**Why the hole matters for Cartesian→polar mapping:**
+
+When projecting a Cartesian image onto the POV display, code converts (x, y) to polar (r, θ). The naive approach assumes the display spans from r=0 (center) to r=max (edge), but this is wrong:
+
+```
+WRONG: Assumes display goes to center
+┌─────────────────────┐
+│    ┌───────────┐    │  ← Image maps from center outward
+│    │  center   │    │     p=0 → r=0 (center)
+│    │     ●     │    │     p=max → r=OUTER (edge)
+│    └───────────┘    │
+└─────────────────────┘
+
+CORRECT: Display has a hole
+┌─────────────────────┐
+│    ┌───────────┐    │
+│    │   HOLE    │    │  ← No LEDs here! (r < INNER_DISPLAY_RADIUS_MM)
+│    │  (dark)   │    │
+│    │    ┌─┐    │    │     p=0 → r=INNERMOST_LED_CENTER_MM
+│    │    │●│    │    │     p=max → r=OUTERMOST_LED_CENTER_MM
+│    └────┴─┴────┘    │
+└─────────────────────┘
+```
+
+Effects that compute `y = radius * sin(θ)` where radius ranges 0→1 will "waste" the inner portion on the blind spot. For accurate projection:
+
+1. Use `RadialGeometry::ringRadiusMM(ring)` to get actual physical radius
+2. Or offset: `physical_r = INNER_DISPLAY_RADIUS_MM + normalized_r * DISPLAY_SPAN_MM`
+
+**Per-arm positions (variables in geometry.h):**
+
+| Arm | Variable | Ring Assignment | Notes |
+|-----|----------|-----------------|-------|
+| ARM3 | `ARM3_INNER_RADIUS_MM` | Rings 0, 3, 6, 9... | Easiest to adjust |
+| ARM2 | `ARM2_INNER_RADIUS_MM` | Rings 1, 4, 7, 10... | Channel constraints |
+| ARM1 | `ARM1_INNER_RADIUS_MM` | Rings 2, 5, 8, 11... | Channel constraints |
+
+**Interlacing alignment:**
+
+LED strips were positioned by eye using grooved channels. Deviations from ideal `LED_PITCH_MM / 3` spacing create visible "lumpy" banding in radial gradients.
+
+Run `pov calibration` to:
+- See current interlacing errors
+- Get adjustment recommendations
+- Generate updated C++ constants for geometry.h
+
+### Calibration Measurement Methodology
+
+Two measurements determine LED positions. Current values are stored in `pov calibration`.
+
+**"Strip Position" measurement (primary):**
+
+Tip-to-inner-edge distance for each arm. This is the most reliable measurement.
+
+```
+Instrument: Digital calipers
+Reference points:
+  - Physical arm tip edge (caliper jaw grips 3D-printed arm)
+  - Inner edge of innermost LED chip (edge closest to rotation center)
+
+    ARM TIP                                    INNERMOST LED
+        │                                           │
+        ▼                                           ▼
+        ┌─┐                                       ┌───┐
+        │ │───────────────────────────────────────│LED│
+        └─┘                                       └───┘
+        |<────────── strip_position[arm] ──────────>|
+```
+
+**"Triangle" measurement (cross-validation):**
+
+Distances between innermost LED centers, forming a triangle. Used to verify Strip Position measurements.
+
+```
+Instrument: Digital calipers with pointed tips
+Reference points: Center of LED chip (black dot inside each LED)
+
+                    ARM3 innermost
+                         ●
+                        / \
+        triangle_13   /   \   triangle_23
+                     /     \
+                    /       \
+                   ●─────────●
+            ARM1   triangle_12   ARM2
+          innermost            innermost
+```
+
+**Derivation (done by `pov calibration`):**
+```
+inner_edge_from_center = ARM_TIP_RADIUS - strip_position
+led_center_from_center = inner_edge_from_center + LED_CHIP_SIZE / 2
+```
+
+### Updating Calibration After Adjustment
+
+If LED strips are repositioned, retake the Strip Position measurement for each adjusted arm. Use the calibration tool to recompute all values:
+
+```bash
+# Show current calibration report
+pov calibration report
+
+# Enter new measurements interactively
+pov calibration interactive
+```
+
+The tool outputs updated C++ constants for `geometry.h`.
+
+**Manual calculation** (if needed):
+```
+ARM[n]_INNER_RADIUS_MM = 104.5 - measurement_3 + 2.5
+```
+
+The ring radii follow from the per-arm base positions:
+- Ring `3k` (k=0,1,2...13): `ARM3_INNER + k * 7.0mm`
+- Ring `3k+1` (k=0,1,2...12): `ARM2_INNER + k * 7.0mm`
+- Ring `3k+2` (k=0,1,2...12): `ARM1_INNER + k * 7.0mm`
+
 ## Sensors
 
 ### Hall Effect Sensor
