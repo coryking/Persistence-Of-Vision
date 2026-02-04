@@ -3,14 +3,17 @@
 #include "geometry.h"
 #include <FastLED.h>  // for sin8
 
-// Jupiter-ish palette: alternating tan/brown/cream bands
+// Jupiter palette: high contrast bands with varying visual weight
+// Arranged to create thick/thin appearance through color contrast
 static const CRGB bandColors[] = {
-    CRGB(210, 180, 140),  // tan
-    CRGB(139, 90, 43),    // brown
-    CRGB(255, 248, 220),  // cream
-    CRGB(160, 82, 45),    // sienna
-    CRGB(222, 184, 135),  // burlywood
-    CRGB(101, 67, 33),    // dark brown
+    CRGB(240, 220, 190),  // bright cream (wide-feeling)
+    CRGB(180, 100, 60),   // rust orange
+    CRGB(255, 240, 220),  // off-white (wide-feeling)
+    CRGB(120, 70, 40),    // dark brown (thin accent)
+    CRGB(230, 180, 140),  // peachy tan
+    CRGB(200, 80, 50),    // burnt orange (Great Red Spot vibe)
+    CRGB(250, 235, 200),  // pale cream
+    CRGB(90, 50, 30),     // deep brown (thin accent)
 };
 static constexpr uint8_t NUM_BANDS = sizeof(bandColors) / sizeof(bandColors[0]);
 
@@ -60,11 +63,27 @@ void ProjectionTest::render(RenderContext& ctx) {
             if (yNormalized < 0) yNormalized = 0;
             if (yNormalized > 255) yNormalized = 255;
 
-            // Map to band index
-            uint8_t bandIndex = (yNormalized * NUM_BANDS) / 256;
+            // Map to band with edge-only anti-aliasing
+            // bandPosition is 0 to (256 * NUM_BANDS - 1), giving sub-band precision
+            uint16_t bandPosition = yNormalized * NUM_BANDS;
+            uint8_t bandIndex = bandPosition / 256;
+            uint8_t frac = bandPosition & 0xFF;  // position within band (0-255)
+
             if (bandIndex >= NUM_BANDS) bandIndex = NUM_BANDS - 1;
 
-            arm.pixels[p] = bandColors[bandIndex];
+            // Anti-alias only at the END of each band (fading toward next)
+            // Start-of-band blending is redundant and causes "ringing"
+            constexpr uint8_t EDGE_WIDTH = 32;  // ~12% of band width
+
+            CRGB color = bandColors[bandIndex];
+
+            if (frac > (255 - EDGE_WIDTH) && bandIndex < NUM_BANDS - 1) {
+                // Near end of band - fade toward next band
+                uint8_t blendAmt = ((frac - (255 - EDGE_WIDTH)) * 255) / EDGE_WIDTH;
+                color = blend(bandColors[bandIndex], bandColors[bandIndex + 1], blendAmt);
+            }
+
+            arm.pixels[p] = color;
         }
     }
 }
