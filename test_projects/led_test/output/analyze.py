@@ -5,6 +5,8 @@ SPI/DMA Timing Analysis for HD107S/SK9822 LEDs
 Analyzes timing data from NeoPixelBus benchmark to derive:
 - Wire time (actual SPI transfer time)
 - Overhead (setup/queue time)
+- Buffer mode comparison (copy vs swap)
+- Total transfer time (Show call to LEDs updated)
 - Linear scaling equations: time = a + b * n (where n = LED count)
 """
 
@@ -43,34 +45,13 @@ def compute_derived_metrics(df: pd.DataFrame) -> pd.DataFrame:
     # Total transfer time from Show() call to LEDs updated:
     # - For sync: show3_us (blocking, LEDs update when Show returns)
     # - For DMA: show3_us + wire_time_us (queue time + background transfer)
-    # But since wire_time = show2 - show3, for DMA: total = show3 + (show2 - show3) = show2
-    # So actually show2 represents total time for a "burst" scenario
-    # For "total time to LEDs updated" from a clean start:
-    # - Sync: show3_us (it blocks for full transfer)
-    # - DMA: show3_us is just queue time, wire happens in background
-    #        Total = show3_us + wire_time_us = show2_us (approximately)
+    # Clipping wire_time to 0 for sync (where it may be slightly negative due to noise)
     df['total_transfer_us'] = df['show3_us'] + df['wire_time_us'].clip(lower=0)
 
     return df
 
 
-def aggregate_by_config(df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate statistics by configuration."""
-    agg = df.groupby(['spi_mhz', 'method', 'feature', 'buffer_mode', 'led_count']).agg({
-        'show1_us': ['mean', 'std', 'min', 'max'],
-        'show2_us': ['mean', 'std', 'min', 'max'],
-        'show3_us': ['mean', 'std', 'min', 'max'],
-        'wire_time_us': ['mean', 'std'],
-        'overhead_us': ['mean', 'std'],
-        'total_transfer_us': ['mean', 'std'],
-    }).round(2)
-
-    # Flatten column names
-    agg.columns = ['_'.join(col).strip() for col in agg.columns.values]
-    return agg.reset_index()
-
-
-def linear_regression(x: np.ndarray, y: np.ndarray) -> dict:
+def linear_regression(x, y) -> dict:
     """Perform linear regression: y = a + b*x"""
     slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
     return {
@@ -92,6 +73,7 @@ def derive_equations(df: pd.DataFrame) -> pd.DataFrame:
             'show2_us': 'mean',
             'show3_us': 'mean',
             'wire_time_us': 'mean',
+            'total_transfer_us': 'mean',
         }).reset_index()
 
         led_counts = means['led_count'].values
@@ -104,6 +86,9 @@ def derive_equations(df: pd.DataFrame) -> pd.DataFrame:
 
         # Regression for wire_time (show2 - show3)
         reg_wire = linear_regression(led_counts, means['wire_time_us'].values)
+
+        # Regression for total transfer time
+        reg_total = linear_regression(led_counts, means['total_transfer_us'].values)
 
         results.append({
             'spi_mhz': spi_mhz,
@@ -122,81 +107,97 @@ def derive_equations(df: pd.DataFrame) -> pd.DataFrame:
             'wire_intercept_us': round(reg_wire['intercept_a'], 2),
             'wire_slope_us_per_led': round(reg_wire['slope_b'], 3),
             'wire_r_squared': round(reg_wire['r_squared'], 4),
+            # Total transfer time equation
+            'total_intercept_us': round(reg_total['intercept_a'], 2),
+            'total_slope_us_per_led': round(reg_total['slope_b'], 3),
+            'total_r_squared': round(reg_total['r_squared'], 4),
         })
 
     return pd.DataFrame(results)
 
 
-def theoretical_wire_time(led_count: int, spi_mhz: int, bytes_per_led: int = 4) -> float:
-    """
-    Calculate theoretical SPI wire time.
-
-    DotStar/SK9822 protocol:
-    - Start frame: 4 bytes (0x00000000)
-    - LED data: 4 bytes per LED (1 brightness + 3 RGB)
-    - End frame: ceil(n/2) bytes of 0xFF (at least n/2 clock edges)
-
-    Time = bits / clock_rate
-    """
-    start_frame_bytes = 4
-    led_data_bytes = led_count * bytes_per_led
-    end_frame_bytes = max(4, (led_count + 15) // 16 * 4)  # Round up to 4-byte boundary
-
-    total_bytes = start_frame_bytes + led_data_bytes + end_frame_bytes
-    total_bits = total_bytes * 8
-
-    clock_hz = spi_mhz * 1_000_000
-    time_us = (total_bits / clock_hz) * 1_000_000
-
-    return time_us
-
-
-def analyze_sync_vs_dma(df: pd.DataFrame) -> None:
-    """Compare sync vs DMA behavior."""
+def analyze_buffer_modes(df: pd.DataFrame) -> None:
+    """Compare copy vs swap buffer modes."""
     print("\n" + "="*80)
-    print("SYNC vs DMA BEHAVIOR ANALYSIS")
+    print("BUFFER MODE COMPARISON (copy vs swap)")
     print("="*80)
+    print("\nmaintainBuffer=true (copy): Copies edit buffer to send buffer")
+    print("maintainBuffer=false (swap): Swaps buffers (faster, but you must overwrite all pixels)")
 
-    for spi_mhz in sorted(df['spi_mhz'].unique()):
+    for method in ['sync', 'dma']:
+        print(f"\n--- {method.upper()} ---")
+
+        method_data = df[df['method'] == method]
+        if method_data.empty:
+            print("  No data")
+            continue
+
+        # Compare at 40MHz BGR, various LED counts
+        for led_count in [40, 100, 200]:
+            subset = method_data[(method_data['spi_mhz'] == 40) &
+                                (method_data['feature'] == 'BGR') &
+                                (method_data['led_count'] == led_count)]
+
+            copy_data = subset[subset['buffer_mode'] == 'copy']
+            swap_data = subset[subset['buffer_mode'] == 'swap']
+
+            if copy_data.empty or swap_data.empty:
+                continue
+
+            copy_show3 = copy_data['show3_us'].mean()
+            swap_show3 = swap_data['show3_us'].mean()
+            diff = copy_show3 - swap_show3
+            pct = (diff / copy_show3) * 100 if copy_show3 > 0 else 0
+
+            print(f"  40MHz BGR @ {led_count} LEDs:")
+            print(f"    copy: {copy_show3:.1f}µs, swap: {swap_show3:.1f}µs, diff: {diff:.1f}µs ({pct:.1f}% faster)")
+
+
+def analyze_total_transfer_time(df: pd.DataFrame) -> None:
+    """Compare total transfer time between sync and DMA."""
+    print("\n" + "="*80)
+    print("TOTAL TRANSFER TIME ANALYSIS")
+    print("="*80)
+    print("\nQuestion: Does DMA increase total time from Show() to LEDs updated?")
+    print("Total time = overhead (Show return) + wire time (background transfer)")
+
+    for spi_mhz in [40, 20, 10]:
         print(f"\n--- {spi_mhz} MHz ---")
 
-        for feature in ['BGR', 'LBGR']:
-            subset = df[(df['spi_mhz'] == spi_mhz) & (df['feature'] == feature)]
+        for led_count in [40, 100, 200]:
+            print(f"\n  {led_count} LEDs (BGR, copy mode):")
 
-            sync_data = subset[subset['method'] == 'sync']
-            dma_data = subset[subset['method'] == 'dma']
+            sync_data = df[(df['method'] == 'sync') &
+                          (df['spi_mhz'] == spi_mhz) &
+                          (df['feature'] == 'BGR') &
+                          (df['buffer_mode'] == 'copy') &
+                          (df['led_count'] == led_count)]
+
+            dma_data = df[(df['method'] == 'dma') &
+                         (df['spi_mhz'] == spi_mhz) &
+                         (df['feature'] == 'BGR') &
+                         (df['buffer_mode'] == 'copy') &
+                         (df['led_count'] == led_count)]
 
             if sync_data.empty or dma_data.empty:
+                print("    (missing data)")
                 continue
 
-            # Compare at a specific LED count (40 LEDs, typical use case)
-            led_count = 40
-            sync_40 = sync_data[sync_data['led_count'] == led_count]
-            dma_40 = dma_data[dma_data['led_count'] == led_count]
+            # For sync: total = show3 (blocking)
+            sync_total = sync_data['show3_us'].mean()
 
-            if sync_40.empty or dma_40.empty:
-                continue
+            # For DMA: total = show3 (overhead) + wire_time (background)
+            dma_overhead = dma_data['show3_us'].mean()
+            dma_wire = dma_data['wire_time_us'].mean()
+            dma_total = dma_overhead + max(0, dma_wire)
 
-            print(f"\n  {feature} @ {led_count} LEDs:")
-            print(f"    SYNC: show1={sync_40['show1_us'].mean():.1f}µs, "
-                  f"show2={sync_40['show2_us'].mean():.1f}µs, "
-                  f"show3={sync_40['show3_us'].mean():.1f}µs")
-            print(f"    DMA:  show1={dma_40['show1_us'].mean():.1f}µs, "
-                  f"show2={dma_40['show2_us'].mean():.1f}µs, "
-                  f"show3={dma_40['show3_us'].mean():.1f}µs")
+            diff = dma_total - sync_total
+            diff_pct = (diff / sync_total) * 100 if sync_total > 0 else 0
 
-            # Check if sync shows expected behavior (all ~equal)
-            sync_ratio = sync_40['show2_us'].mean() / sync_40['show3_us'].mean()
-            print(f"    SYNC show2/show3 ratio: {sync_ratio:.2f} (expected ~1.0 for blocking)")
-
-            # Check if DMA shows expected behavior (show2 >> show3)
-            dma_ratio = dma_40['show2_us'].mean() / dma_40['show3_us'].mean()
-            print(f"    DMA show2/show3 ratio: {dma_ratio:.2f} (expected >1.0 for async)")
-
-            # Wire time estimate
-            wire_time = dma_40['show2_us'].mean() - dma_40['show3_us'].mean()
-            theoretical = theoretical_wire_time(led_count, spi_mhz)
-            print(f"    DMA wire time: {wire_time:.1f}µs (theoretical: {theoretical:.1f}µs)")
+            print(f"    SYNC total: {sync_total:.1f}µs (all blocking)")
+            print(f"    DMA  total: {dma_total:.1f}µs (overhead: {dma_overhead:.1f}µs + wire: {dma_wire:.1f}µs)")
+            print(f"    Difference: {diff:+.1f}µs ({diff_pct:+.1f}%)")
+            print(f"    CPU freed:  {dma_wire:.1f}µs ({(dma_wire/dma_total)*100:.0f}% of transfer time)")
 
 
 def print_equations(equations_df: pd.DataFrame) -> None:
@@ -207,12 +208,15 @@ def print_equations(equations_df: pd.DataFrame) -> None:
     print("\nFormat: time_us = intercept + slope * led_count")
     print("        (intercept = constant overhead, slope = per-LED cost)")
 
+    # Focus on copy mode (most common usage)
+    copy_equations = equations_df[equations_df['buffer_mode'] == 'copy']
+
     for method in ['sync', 'dma']:
         print(f"\n{'='*40}")
-        print(f"  {method.upper()} METHODS")
+        print(f"  {method.upper()} METHODS (buffer_mode=copy)")
         print(f"{'='*40}")
 
-        method_data = equations_df[equations_df['method'] == method]
+        method_data = copy_equations[copy_equations['method'] == method]
 
         for _, row in method_data.iterrows():
             print(f"\n  {row['spi_mhz']} MHz {row['feature']}:")
@@ -227,36 +231,40 @@ def print_equations(equations_df: pd.DataFrame) -> None:
                 # Wire time (show2 - show3)
                 print(f"    Wire time:            {row['wire_intercept_us']:.1f} + {row['wire_slope_us_per_led']:.3f} * n  (R²={row['wire_r_squared']:.4f})")
 
+            # Total transfer time
+            print(f"    Total transfer:       {row['total_intercept_us']:.1f} + {row['total_slope_us_per_led']:.3f} * n  (R²={row['total_r_squared']:.4f})")
+
 
 def print_practical_summary(equations_df: pd.DataFrame) -> None:
     """Print practical timing estimates for common LED counts."""
     print("\n" + "="*80)
-    print("PRACTICAL TIMING ESTIMATES")
+    print("PRACTICAL TIMING ESTIMATES (40MHz BGR, copy mode)")
     print("="*80)
 
     led_counts = [40, 80, 100, 200]
 
+    copy_equations = equations_df[equations_df['buffer_mode'] == 'copy']
+
     for method in ['sync', 'dma']:
         print(f"\n--- {method.upper()} ---")
 
-        method_data = equations_df[equations_df['method'] == method]
-
-        # Focus on 40MHz BGR (most common config)
-        row = method_data[(method_data['spi_mhz'] == 40) & (method_data['feature'] == 'BGR')]
+        row = copy_equations[(copy_equations['method'] == method) &
+                            (copy_equations['spi_mhz'] == 40) &
+                            (copy_equations['feature'] == 'BGR')]
         if row.empty:
+            print("  No data")
             continue
         row = row.iloc[0]
 
-        print(f"\n  40 MHz BGR (production config):")
-        print(f"  {'LEDs':<6} {'show2 (burst)':<15} {'show3 (spaced)':<15} {'wire time':<12}")
-        print(f"  {'-'*6} {'-'*15} {'-'*15} {'-'*12}")
+        print(f"\n  {'LEDs':<6} {'Show() returns':<16} {'Total transfer':<16} {'CPU free time':<14}")
+        print(f"  {'-'*6} {'-'*16} {'-'*16} {'-'*14}")
 
         for n in led_counts:
-            show2 = row['show2_intercept_us'] + row['show2_slope_us_per_led'] * n
             show3 = row['show3_intercept_us'] + row['show3_slope_us_per_led'] * n
-            wire = show2 - show3 if method == 'dma' else show2
+            total = row['total_intercept_us'] + row['total_slope_us_per_led'] * n
+            cpu_free = total - show3 if method == 'dma' else 0
 
-            print(f"  {n:<6} {show2:<15.1f} {show3:<15.1f} {wire:<12.1f}")
+            print(f"  {n:<6} {show3:<16.1f} {total:<16.1f} {cpu_free:<14.1f}")
 
 
 def check_for_anomalies(df: pd.DataFrame) -> None:
@@ -265,19 +273,20 @@ def check_for_anomalies(df: pd.DataFrame) -> None:
     print("ANOMALY CHECK")
     print("="*80)
 
+    # Use copy mode for checks
+    copy_data = df[df['buffer_mode'] == 'copy']
+
     # Check: For sync, show2 should ≈ show3 (both blocking)
-    sync_data = df[df['method'] == 'sync']
-    sync_ratio = (sync_data['show2_us'] / sync_data['show3_us']).mean()
-    print(f"\nSync show2/show3 ratio (expected ~1.0): {sync_ratio:.3f}")
+    sync_data = copy_data[copy_data['method'] == 'sync']
+    if not sync_data.empty:
+        sync_ratio = (sync_data['show2_us'] / sync_data['show3_us']).mean()
+        print(f"\nSync show2/show3 ratio (expected ~1.0): {sync_ratio:.3f}")
 
     # Check: For DMA, show2 should > show3 (show2 waits for previous)
-    dma_data = df[df['method'] == 'dma']
-    dma_ratio = (dma_data['show2_us'] / dma_data['show3_us']).mean()
-    print(f"DMA show2/show3 ratio (expected >1.0): {dma_ratio:.3f}")
-
-    # Check: show1 should ≈ show3 (both have no pending DMA)
-    show1_show3_ratio = (df['show1_us'] / df['show3_us']).mean()
-    print(f"show1/show3 ratio (expected ~1.0): {show1_show3_ratio:.3f}")
+    dma_data = copy_data[copy_data['method'] == 'dma']
+    if not dma_data.empty:
+        dma_ratio = (dma_data['show2_us'] / dma_data['show3_us']).mean()
+        print(f"DMA show2/show3 ratio (expected >1.0): {dma_ratio:.3f}")
 
     # Check: Wire time should scale with 1/clock
     print("\nWire time scaling with clock speed (should halve when clock doubles):")
@@ -301,6 +310,10 @@ def main():
     df = load_and_clean_data(CSV_PATH)
     print(f"Loaded {len(df)} data points (after removing {WARMUP_ITERATIONS} warmup iterations)")
 
+    # Check if we have buffer_mode data
+    buffer_modes = df['buffer_mode'].unique()
+    print(f"Buffer modes in data: {list(buffer_modes)}")
+
     print("Computing derived metrics...")
     df = compute_derived_metrics(df)
 
@@ -308,7 +321,8 @@ def main():
     equations_df = derive_equations(df)
 
     # Output analysis
-    analyze_sync_vs_dma(df)
+    analyze_buffer_modes(df)
+    analyze_total_transfer_time(df)
     print_equations(equations_df)
     print_practical_summary(equations_df)
     check_for_anomalies(df)
@@ -317,12 +331,6 @@ def main():
     equations_path = CSV_PATH.parent / "equations.csv"
     equations_df.to_csv(equations_path, index=False)
     print(f"\n\nEquations saved to: {equations_path}")
-
-    # Save aggregated data
-    agg_df = aggregate_by_config(df)
-    agg_path = CSV_PATH.parent / "aggregated.csv"
-    agg_df.to_csv(agg_path, index=False)
-    print(f"Aggregated data saved to: {agg_path}")
 
 
 if __name__ == "__main__":
