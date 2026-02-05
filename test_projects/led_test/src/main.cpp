@@ -5,6 +5,7 @@
 // Wire time = show2_us - show3_us
 //
 // Tests sync (Arduino SPI) vs async DMA (ESP-IDF) methods.
+// Tests maintainBuffer=true (copy) vs maintainBuffer=false (swap) modes.
 //
 // Output: CSV to serial at 921600 baud
 
@@ -30,7 +31,7 @@ constexpr int NUM_LED_COUNTS = sizeof(LED_COUNTS) / sizeof(LED_COUNTS[0]);
 
 // Timed Show() wrapper - returns duration in microseconds
 template<typename T_STRIP>
-int64_t timedShow(T_STRIP& strip, bool maintainBuffer = true) {
+int64_t timedShow(T_STRIP& strip, bool maintainBuffer) {
     int64_t t0 = esp_timer_get_time();
     strip.Show(maintainBuffer);
     return esp_timer_get_time() - t0;
@@ -47,6 +48,8 @@ int64_t timedDelay(int ms) {
 template<typename T_STRIP>
 void runTest(T_STRIP& strip, const char* speed, const char* method,
              const char* feature, int ledCount, bool maintainBuffer) {
+    const char* bufferMode = maintainBuffer ? "copy" : "swap";
+
     strip.Begin(CLK_PIN, -1, DATA_PIN, -1);
 
     // Initial Show(true) to initialize both buffers per NeoPixelBus docs
@@ -73,9 +76,22 @@ void runTest(T_STRIP& strip, const char* speed, const char* method,
         // === Delay 2: Settle before next iteration ===
         int64_t delay2_us = timedDelay(SETTLE_DELAY_MS);
 
-        Serial.printf("%s,%s,%s,%d,%d,%lld,%lld,%lld,%lld,%lld\n",
-                      speed, method, feature, ledCount, i,
+        Serial.printf("%s,%s,%s,%s,%d,%d,%lld,%lld,%lld,%lld,%lld\n",
+                      speed, method, feature, bufferMode, ledCount, i,
                       show1_us, show2_us, delay1_us, show3_us, delay2_us);
+    }
+}
+
+// Run both buffer modes for a given strip type
+template<typename T_STRIP>
+void runBothBufferModes(const char* speed, const char* method, const char* feature, int ledCount) {
+    {
+        T_STRIP strip(ledCount);
+        runTest(strip, speed, method, feature, ledCount, true);   // maintainBuffer=true (copy)
+    }
+    {
+        T_STRIP strip(ledCount);
+        runTest(strip, speed, method, feature, ledCount, false);  // maintainBuffer=false (swap)
     }
 }
 
@@ -91,7 +107,7 @@ void setup() {
     while (Serial.available()) Serial.read();
 
     Serial.println("\nStarting SPI/DMA timing characterization...\n");
-    Serial.println("spi_mhz,method,feature,led_count,iteration,show1_us,show2_us,delay1_us,show3_us,delay2_us");
+    Serial.println("spi_mhz,method,feature,buffer_mode,led_count,iteration,show1_us,show2_us,delay1_us,show3_us,delay2_us");
 
     for (int c = 0; c < NUM_LED_COUNTS; c++) {
         int ledCount = LED_COUNTS[c];
@@ -99,34 +115,22 @@ void setup() {
         // ========== SYNCHRONOUS METHODS (Arduino SPI) ==========
 
         // 40 MHz sync
-        {
-            NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(ledCount);
-            runTest(strip, "40", "sync", "BGR", ledCount, true);
-        }
-        {
-            NeoPixelBus<DotStarLbgrFeature, DotStarSpi40MhzMethod> strip(ledCount);
-            runTest(strip, "40", "sync", "LBGR", ledCount, true);
-        }
+        runBothBufferModes<NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod>>(
+            "40", "sync", "BGR", ledCount);
+        runBothBufferModes<NeoPixelBus<DotStarLbgrFeature, DotStarSpi40MhzMethod>>(
+            "40", "sync", "LBGR", ledCount);
 
         // 20 MHz sync
-        {
-            NeoPixelBus<DotStarBgrFeature, DotStarSpi20MhzMethod> strip(ledCount);
-            runTest(strip, "20", "sync", "BGR", ledCount, true);
-        }
-        {
-            NeoPixelBus<DotStarLbgrFeature, DotStarSpi20MhzMethod> strip(ledCount);
-            runTest(strip, "20", "sync", "LBGR", ledCount, true);
-        }
+        runBothBufferModes<NeoPixelBus<DotStarBgrFeature, DotStarSpi20MhzMethod>>(
+            "20", "sync", "BGR", ledCount);
+        runBothBufferModes<NeoPixelBus<DotStarLbgrFeature, DotStarSpi20MhzMethod>>(
+            "20", "sync", "LBGR", ledCount);
 
         // 10 MHz sync
-        {
-            NeoPixelBus<DotStarBgrFeature, DotStarSpi10MhzMethod> strip(ledCount);
-            runTest(strip, "10", "sync", "BGR", ledCount, true);
-        }
-        {
-            NeoPixelBus<DotStarLbgrFeature, DotStarSpi10MhzMethod> strip(ledCount);
-            runTest(strip, "10", "sync", "LBGR", ledCount, true);
-        }
+        runBothBufferModes<NeoPixelBus<DotStarBgrFeature, DotStarSpi10MhzMethod>>(
+            "10", "sync", "BGR", ledCount);
+        runBothBufferModes<NeoPixelBus<DotStarLbgrFeature, DotStarSpi10MhzMethod>>(
+            "10", "sync", "LBGR", ledCount);
 
         // Release Arduino SPI before DMA takes over
         SPI.end();
@@ -135,34 +139,22 @@ void setup() {
         // ========== ASYNC DMA METHODS (ESP-IDF SPI) ==========
 
         // 40 MHz DMA
-        {
-            NeoPixelBus<DotStarBgrFeature, DotStarEsp32Dma40MhzMethod> strip(ledCount);
-            runTest(strip, "40", "dma", "BGR", ledCount, true);
-        }
-        {
-            NeoPixelBus<DotStarLbgrFeature, DotStarEsp32Dma40MhzMethod> strip(ledCount);
-            runTest(strip, "40", "dma", "LBGR", ledCount, true);
-        }
+        runBothBufferModes<NeoPixelBus<DotStarBgrFeature, DotStarEsp32Dma40MhzMethod>>(
+            "40", "dma", "BGR", ledCount);
+        runBothBufferModes<NeoPixelBus<DotStarLbgrFeature, DotStarEsp32Dma40MhzMethod>>(
+            "40", "dma", "LBGR", ledCount);
 
         // 20 MHz DMA
-        {
-            NeoPixelBus<DotStarBgrFeature, DotStarEsp32Dma20MhzMethod> strip(ledCount);
-            runTest(strip, "20", "dma", "BGR", ledCount, true);
-        }
-        {
-            NeoPixelBus<DotStarLbgrFeature, DotStarEsp32Dma20MhzMethod> strip(ledCount);
-            runTest(strip, "20", "dma", "LBGR", ledCount, true);
-        }
+        runBothBufferModes<NeoPixelBus<DotStarBgrFeature, DotStarEsp32Dma20MhzMethod>>(
+            "20", "dma", "BGR", ledCount);
+        runBothBufferModes<NeoPixelBus<DotStarLbgrFeature, DotStarEsp32Dma20MhzMethod>>(
+            "20", "dma", "LBGR", ledCount);
 
         // 10 MHz DMA
-        {
-            NeoPixelBus<DotStarBgrFeature, DotStarEsp32DmaSpiMethod> strip(ledCount);
-            runTest(strip, "10", "dma", "BGR", ledCount, true);
-        }
-        {
-            NeoPixelBus<DotStarLbgrFeature, DotStarEsp32DmaSpiMethod> strip(ledCount);
-            runTest(strip, "10", "dma", "LBGR", ledCount, true);
-        }
+        runBothBufferModes<NeoPixelBus<DotStarBgrFeature, DotStarEsp32DmaSpiMethod>>(
+            "10", "dma", "BGR", ledCount);
+        runBothBufferModes<NeoPixelBus<DotStarLbgrFeature, DotStarEsp32DmaSpiMethod>>(
+            "10", "dma", "LBGR", ledCount);
 
         delay(50);
     }
