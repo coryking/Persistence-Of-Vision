@@ -1,262 +1,175 @@
+// SPI/DMA Timing Characterization for HD107S/SK9822 LEDs
+//
+// Measures NeoPixelBus SPI timing using back-to-back vs spaced Show() calls.
+// For DMA methods: show2 (burst) includes wait for previous DMA, show3 (spaced) does not.
+// Wire time = show2_us - show3_us
+//
+// Tests sync (Arduino SPI) vs async DMA (ESP-IDF) methods.
+//
+// Output: CSV to serial at 921600 baud
+
 #include <Arduino.h>
-#include <FastLED.h>
 #include <NeoPixelBus.h>
 #include <esp_timer.h>
+#include <SPI.h>
 
-// Benchmark configuration: Set to 1 for FastLED, 0 for NeoPixelBus
-#define BENCHMARK_FASTLED 1
+// Custom DMA method typedefs at different speeds
+typedef DotStarEsp32DmaSpiMethodBase<SpiSpeed40Mhz, Esp32Spi2Bus> DotStarEsp32Dma40MhzMethod;
+typedef DotStarEsp32DmaSpiMethodBase<SpiSpeed20Mhz, Esp32Spi2Bus> DotStarEsp32Dma20MhzMethod;
+typedef DotStarEsp32DmaSpiMethodBase<SpiSpeed10Mhz, Esp32Spi2Bus> DotStarEsp32Dma10MhzMethod;
 
-// Hardware Configuration
-#define MAX_LEDS 42
-#define DATA_PIN 7      // Orange wire - SPI MOSI (GPIO 7)
-#define CLOCK_PIN 9     // Green wire - SPI SCK (GPIO 9)
+// Hardware pins (matches led_display)
+constexpr uint8_t DATA_PIN = D10;
+constexpr uint8_t CLK_PIN = D8;
 
-// Test pattern
-#define TEST_R 128
-#define TEST_G 128
-#define TEST_B 128
+// Test configuration
+constexpr int ITERATIONS = 25;
+constexpr int SETTLE_DELAY_MS = 15;  // Delay to ensure DMA completion
+const int LED_COUNTS[] = {1, 10, 20, 40, 60, 80, 100, 150, 200, 300, 400};
+constexpr int NUM_LED_COUNTS = sizeof(LED_COUNTS) / sizeof(LED_COUNTS[0]);
 
-// Test configurations
-const int LED_COUNTS[] = {30, 33, 42};
-const int NUM_CONFIGS = 3;
-const int NUM_ITERATIONS = 10;
-const int NUM_WARMUP = 3;
-
-// FastLED buffer (allocated at max size)
-CRGB leds[MAX_LEDS];
-
-// Simple stats structure
-struct PerfResult {
-    uint32_t min_us;
-    uint32_t avg_us;
-    uint32_t max_us;
-};
-
-// Dual timing result (for DMA-based methods)
-struct DmaPerfResult {
-    PerfResult show_call;    // Time for Show() to return
-    PerfResult total_time;   // Time including DMA completion
-};
-
-// Calculate min/avg/max from timing samples
-PerfResult calculateStats(uint32_t* times, int count) {
-    PerfResult result = {0xFFFFFFFF, 0, 0};
-    uint32_t sum = 0;
-
-    for (int i = 0; i < count; i++) {
-        if (times[i] < result.min_us) result.min_us = times[i];
-        if (times[i] > result.max_us) result.max_us = times[i];
-        sum += times[i];
-    }
-
-    result.avg_us = sum / count;
-    return result;
+// Timed Show() wrapper - returns duration in microseconds
+template<typename T_STRIP>
+int64_t timedShow(T_STRIP& strip, bool maintainBuffer = true) {
+    int64_t t0 = esp_timer_get_time();
+    strip.Show(maintainBuffer);
+    return esp_timer_get_time() - t0;
 }
 
-// Benchmark FastLED.show()
-PerfResult benchmarkFastLED(int numLeds) {
-    Serial.println("  Setting test pattern...");
-    Serial.flush();
-
-    // Set test pattern
-    for (int i = 0; i < numLeds; i++) {
-        leds[i] = CRGB(TEST_R, TEST_G, TEST_B);
-    }
-
-    Serial.println("  Starting warmup iterations...");
-    Serial.flush();
-
-    // Warmup iterations (not timed)
-    for (int i = 0; i < NUM_WARMUP; i++) {
-        Serial.printf("    Warmup %d...", i + 1);
-        Serial.flush();
-        FastLED.show();
-        Serial.println(" OK");
-        delay(10);
-    }
-
-    Serial.println("  Starting timed iterations...");
-    Serial.flush();
-
-    // Timed iterations
-    uint32_t times[NUM_ITERATIONS];
-    for (int i = 0; i < NUM_ITERATIONS; i++) {
-        int64_t start = esp_timer_get_time();
-        FastLED.show();
-        int64_t elapsed = esp_timer_get_time() - start;
-        times[i] = (uint32_t)elapsed;
-        delay(10);
-    }
-
-    return calculateStats(times, NUM_ITERATIONS);
+// Timed delay wrapper - returns actual delay duration in microseconds
+int64_t timedDelay(int ms) {
+    int64_t t0 = esp_timer_get_time();
+    delay(ms);
+    return esp_timer_get_time() - t0;
 }
 
-// Benchmark NeoPixelBus.Show() with DMA timing
-//
-// NeoPixelBus DMA behavior:
-// - Show() waits for PREVIOUS async DMA transfer to complete
-// - Show() queues NEW async DMA transfer
-// - Show() returns (new transfer happens in background)
-// - Show() only transfers if buffer is dirty (optimization)
-//
-// This means Show() is both synchronous (waits for previous) and asynchronous (queues new).
-// For POV displays this is perfect - you can't start frame N+1 until frame N finishes anyway.
-DmaPerfResult benchmarkNeoPixelBus(NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod>* strip, int numLeds) {
-    // Set test pattern
-    RgbColor color(TEST_R, TEST_G, TEST_B);
-    for (int i = 0; i < numLeds; i++) {
-        strip->SetPixelColor(i, color);
+// Generic test function
+template<typename T_STRIP>
+void runTest(T_STRIP& strip, const char* speed, const char* method,
+             const char* feature, int ledCount, bool maintainBuffer) {
+    strip.Begin(CLK_PIN, -1, DATA_PIN, -1);
+
+    // Initial Show(true) to initialize both buffers per NeoPixelBus docs
+    strip.SetPixelColor(0, RgbColor(0, 0, 0));
+    strip.Show(true);
+    delay(SETTLE_DELAY_MS);
+
+    for (int i = 0; i < ITERATIONS; i++) {
+        // === Show 1: Normal (no pending DMA from previous iteration's delay) ===
+        strip.SetPixelColor(0, RgbColor(i & 1 ? 255 : 0, 0, 0));
+        int64_t show1_us = timedShow(strip, maintainBuffer);
+
+        // === Show 2: Burst (immediately after Show 1, may wait for DMA) ===
+        strip.SetPixelColor(0, RgbColor(i & 1 ? 0 : 255, 0, 0));
+        int64_t show2_us = timedShow(strip, maintainBuffer);
+
+        // === Delay 1: Let any pending DMA complete ===
+        int64_t delay1_us = timedDelay(SETTLE_DELAY_MS);
+
+        // === Show 3: Spaced (after delay, no pending DMA) ===
+        strip.SetPixelColor(0, RgbColor(i & 1 ? 128 : 64, 0, 0));
+        int64_t show3_us = timedShow(strip, maintainBuffer);
+
+        // === Delay 2: Settle before next iteration ===
+        int64_t delay2_us = timedDelay(SETTLE_DELAY_MS);
+
+        Serial.printf("%s,%s,%s,%d,%d,%lld,%lld,%lld,%lld,%lld\n",
+                      speed, method, feature, ledCount, i,
+                      show1_us, show2_us, delay1_us, show3_us, delay2_us);
     }
-
-    // Warmup iterations (not timed)
-    for (int i = 0; i < NUM_WARMUP; i++) {
-        strip->Show();
-        delay(10);
-    }
-
-
-    // Timed iterations
-    // IMPORTANT: NeoPixelBus has dirty tracking - Show() returns immediately if
-    // buffer hasn't changed. Must modify buffer between iterations to force actual transfer!
-    uint32_t show_times[NUM_ITERATIONS];
-    uint32_t total_times[NUM_ITERATIONS];
-
-    for (int i = 0; i < NUM_ITERATIONS; i++) {
-        // Toggle pixel to force dirty flag (NeoPixelBus optimization)
-        RgbColor toggle = (i % 2 == 0) ? RgbColor(TEST_R, TEST_G, TEST_B) : RgbColor(TEST_R, TEST_G, TEST_B + 1);
-        strip->SetPixelColor(0, toggle);
-
-        // Measure Show() call time
-        // Note: Show() internally waits for PREVIOUS DMA transfer, then queues new one
-        int64_t start = esp_timer_get_time();
-        strip->Show();
-        int64_t after_show = esp_timer_get_time();
-        show_times[i] = (uint32_t)(after_show - start);
-
-        // Wait for THIS transfer to complete
-        while (!strip->CanShow()) {
-            delayMicroseconds(1);
-        }
-        int64_t after_dma = esp_timer_get_time();
-        total_times[i] = (uint32_t)(after_dma - start);
-
-        delayMicroseconds(100);
-    }
-
-    DmaPerfResult result;
-    result.show_call = calculateStats(show_times, NUM_ITERATIONS);
-    result.total_time = calculateStats(total_times, NUM_ITERATIONS);
-    return result;
-}
-
-// Run benchmark for specific LED count
-void runBenchmarkForLEDCount(int numLeds) {
-    Serial.printf("\n======== Testing with %d LEDs ========\n", numLeds);
-
-#if BENCHMARK_FASTLED
-    // Initialize FastLED
-    Serial.println("Initializing FastLED...");
-    Serial.printf("  DATA_PIN: %d, CLOCK_PIN: %d\n", DATA_PIN, CLOCK_PIN);
-    Serial.flush();
-
-    FastLED.clear();
-    Serial.println("  FastLED.clear() OK");
-    Serial.flush();
-
-    FastLED.addLeds<APA102, DATA_PIN, CLOCK_PIN, BGR>(leds, numLeds);
-    Serial.println("  FastLED.addLeds() OK");
-    Serial.flush();
-
-    FastLED.setBrightness(255);
-    Serial.println("  FastLED.setBrightness() OK");
-    Serial.flush();
-
-    // Run FastLED benchmark
-    Serial.println("Running FastLED benchmark...");
-    PerfResult fastled = benchmarkFastLED(numLeds);
-
-    // Display results
-    Serial.println("\n--- FastLED Results ---");
-    Serial.printf("  Min: %4lu μs  |  Avg: %4lu μs  |  Max: %4lu μs\n",
-                  fastled.min_us, fastled.avg_us, fastled.max_us);
-#else
-    // Initialize NeoPixelBus (matching production setup)
-    NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod>* strip =
-        new NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod>(numLeds);
-
-    // IMPORTANT: Explicitly specify SPI pins (matches ../src/main.cpp)
-    // Begin(clockPin, -1, dataPin, -1)
-    Serial.println("Initializing NeoPixelBus...");
-    Serial.printf("  CLOCK_PIN: %d, DATA_PIN: %d\n", CLOCK_PIN, DATA_PIN);
-    strip->Begin(CLOCK_PIN, -1, DATA_PIN, -1);
-    Serial.println("  NeoPixelBus.Begin() OK");
-
-    // Run NeoPixelBus benchmark
-    Serial.println("Running NeoPixelBus benchmark...");
-    DmaPerfResult neopixel = benchmarkNeoPixelBus(strip, numLeds);
-
-    // Display results
-    Serial.println("\n--- NeoPixelBus Results ---");
-    Serial.println("Show() call time (DMA kickoff):");
-    Serial.printf("  Min: %4lu μs  |  Avg: %4lu μs  |  Max: %4lu μs\n",
-                  neopixel.show_call.min_us, neopixel.show_call.avg_us, neopixel.show_call.max_us);
-    Serial.println("Total time (including DMA completion):");
-    Serial.printf("  Min: %4lu μs  |  Avg: %4lu μs  |  Max: %4lu μs\n",
-                  neopixel.total_time.min_us, neopixel.total_time.avg_us, neopixel.total_time.max_us);
-
-    // Cleanup
-    delete strip;
-#endif
 }
 
 void setup() {
-    Serial.begin(115200);
+    Serial.begin(921600);
+    delay(1000);
 
-    // Wait up to 5 seconds for USB CDC
-    unsigned long start = millis();
-    while (!Serial && (millis() - start < 5000)) {
-        delay(10);
+    while (Serial.available()) Serial.read();
+    while (!Serial.available()) {
+        Serial.println("Press any key to start timing test...");
+        delay(2000);
     }
-
-    // Print header
-    Serial.println("\n=== LED Performance Benchmark ===");
-    Serial.println("Hardware: ESP32-S3-Zero");
-    Serial.println("LEDs: SK9822/APA102 @ 40MHz SPI");
-#if BENCHMARK_FASTLED
-    Serial.println("Library: FastLED");
-#else
-    Serial.println("Library: NeoPixelBus");
-#endif
-    Serial.printf("Pattern: Solid white (%d,%d,%d)\n", TEST_R, TEST_G, TEST_B);
-    Serial.printf("Iterations: %d\n", NUM_ITERATIONS);
-    Serial.printf("Warmup: %d iterations (not timed)\n", NUM_WARMUP);
-    Serial.println("\nPress any key to start benchmark...");
-
-    // Flush existing input
     while (Serial.available()) Serial.read();
 
-    // Wait for keypress
-    while (!Serial.available()) {
-        delay(10);
-    }
-    Serial.read(); // Consume the keypress
+    Serial.println("\nStarting SPI/DMA timing characterization...\n");
+    Serial.println("spi_mhz,method,feature,led_count,iteration,show1_us,show2_us,delay1_us,show3_us,delay2_us");
 
-    Serial.println("\nStarting benchmark...\n");
+    for (int c = 0; c < NUM_LED_COUNTS; c++) {
+        int ledCount = LED_COUNTS[c];
+
+        // ========== SYNCHRONOUS METHODS (Arduino SPI) ==========
+
+        // 40 MHz sync
+        {
+            NeoPixelBus<DotStarBgrFeature, DotStarSpi40MhzMethod> strip(ledCount);
+            runTest(strip, "40", "sync", "BGR", ledCount, true);
+        }
+        {
+            NeoPixelBus<DotStarLbgrFeature, DotStarSpi40MhzMethod> strip(ledCount);
+            runTest(strip, "40", "sync", "LBGR", ledCount, true);
+        }
+
+        // 20 MHz sync
+        {
+            NeoPixelBus<DotStarBgrFeature, DotStarSpi20MhzMethod> strip(ledCount);
+            runTest(strip, "20", "sync", "BGR", ledCount, true);
+        }
+        {
+            NeoPixelBus<DotStarLbgrFeature, DotStarSpi20MhzMethod> strip(ledCount);
+            runTest(strip, "20", "sync", "LBGR", ledCount, true);
+        }
+
+        // 10 MHz sync
+        {
+            NeoPixelBus<DotStarBgrFeature, DotStarSpi10MhzMethod> strip(ledCount);
+            runTest(strip, "10", "sync", "BGR", ledCount, true);
+        }
+        {
+            NeoPixelBus<DotStarLbgrFeature, DotStarSpi10MhzMethod> strip(ledCount);
+            runTest(strip, "10", "sync", "LBGR", ledCount, true);
+        }
+
+        // Release Arduino SPI before DMA takes over
+        SPI.end();
+        delay(100);
+
+        // ========== ASYNC DMA METHODS (ESP-IDF SPI) ==========
+
+        // 40 MHz DMA
+        {
+            NeoPixelBus<DotStarBgrFeature, DotStarEsp32Dma40MhzMethod> strip(ledCount);
+            runTest(strip, "40", "dma", "BGR", ledCount, true);
+        }
+        {
+            NeoPixelBus<DotStarLbgrFeature, DotStarEsp32Dma40MhzMethod> strip(ledCount);
+            runTest(strip, "40", "dma", "LBGR", ledCount, true);
+        }
+
+        // 20 MHz DMA
+        {
+            NeoPixelBus<DotStarBgrFeature, DotStarEsp32Dma20MhzMethod> strip(ledCount);
+            runTest(strip, "20", "dma", "BGR", ledCount, true);
+        }
+        {
+            NeoPixelBus<DotStarLbgrFeature, DotStarEsp32Dma20MhzMethod> strip(ledCount);
+            runTest(strip, "20", "dma", "LBGR", ledCount, true);
+        }
+
+        // 10 MHz DMA
+        {
+            NeoPixelBus<DotStarBgrFeature, DotStarEsp32DmaSpiMethod> strip(ledCount);
+            runTest(strip, "10", "dma", "BGR", ledCount, true);
+        }
+        {
+            NeoPixelBus<DotStarLbgrFeature, DotStarEsp32DmaSpiMethod> strip(ledCount);
+            runTest(strip, "10", "dma", "LBGR", ledCount, true);
+        }
+
+        delay(50);
+    }
+
+    Serial.println("DONE");
 }
 
 void loop() {
-    // Run benchmarks for each LED count
-    for (int i = 0; i < NUM_CONFIGS; i++) {
-        runBenchmarkForLEDCount(LED_COUNTS[i]);
-        delay(500);  // Small delay between configurations
-    }
-
-    // Done
-    Serial.println("\n=== Benchmark Complete ===");
-    Serial.println("All tests finished. Reset to run again.");
-
-    // Enter infinite loop
-    while (true) {
-        delay(1000);
-    }
+    delay(1000);
 }
