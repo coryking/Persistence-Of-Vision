@@ -1,6 +1,7 @@
 #include "effects/ProjectionTest.h"
 #include "hardware_config.h"
 #include "geometry.h"
+#include "cartesian_helpers.h"
 #include <FastLED.h>  // for sin8
 
 // Jupiter palette: high contrast bands with varying visual weight

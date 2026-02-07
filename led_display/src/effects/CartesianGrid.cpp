@@ -2,24 +2,18 @@
 #include "hardware_config.h"
 #include "geometry.h"
 #include "polar_helpers.h"
+#include "cartesian_helpers.h"
 #include "esp_log.h"
 #include <FastLED.h>
 #include <math.h>
 
 static const char* TAG = "GRID";
 
-// =============================================================================
-// Coordinate System Constants
-// =============================================================================
-
-// The display has ~4 "virtual" pixels in the center hole + 40 real LED rings
-static constexpr int HOLE_PIXELS = 4;
-static constexpr int DISPLAY_PIXELS = 40;
-static constexpr int PIXELS_TO_EDGE = HOLE_PIXELS + DISPLAY_PIXELS;  // 44
 
 // Cartesian coordinate range: -44 to +44
 static constexpr int COORD_MIN = -PIXELS_TO_EDGE;
 static constexpr int COORD_MAX = PIXELS_TO_EDGE;
+
 
 // Grid configuration
 static constexpr int GRID_SPACING = 10;         // Pixels between grid lines
