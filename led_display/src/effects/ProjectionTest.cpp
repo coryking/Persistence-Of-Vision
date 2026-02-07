@@ -17,10 +17,10 @@ static const CRGB bandColors[] = {
 };
 static constexpr uint8_t NUM_BANDS = sizeof(bandColors) / sizeof(bandColors[0]);
 
-// Physical radius constants (from geometry.h, scaled to integer math)
+// Physical radius constants derived from RadialGeometry
 // Using 8-bit fixed point: actual_mm = value / 2
-static constexpr uint8_t INNER_RADIUS_SCALED = 20;   // 10mm * 2
-static constexpr uint8_t OUTER_RADIUS_SCALED = 202;  // 101mm * 2
+static constexpr uint8_t INNER_RADIUS_SCALED = static_cast<uint8_t>(RadialGeometry::INNERMOST_LED_CENTER_MM * 2);
+static constexpr uint8_t OUTER_RADIUS_SCALED = static_cast<uint8_t>(RadialGeometry::OUTERMOST_LED_CENTER_MM * 2);
 static constexpr uint8_t RADIUS_SPAN_SCALED = OUTER_RADIUS_SCALED - INNER_RADIUS_SCALED;
 
 void ProjectionTest::render(RenderContext& ctx) {

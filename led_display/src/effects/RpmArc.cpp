@@ -37,7 +37,7 @@ void RpmArc::render(RenderContext& ctx) {
     // Animate arc width based on speed (wider at higher speed)
     arcWidthUnits = BASE_ARC_WIDTH_UNITS + scale8(MAX_EXTRA_WIDTH_UNITS, speed);
 
-    for (int a = 0; a < 3; a++) {
+    for (int a = 0; a < HardwareConfig::NUM_ARMS; a++) {
         auto& arm = ctx.arms[a];
 
         // Get intensity for this arm (0-255: 0 = outside arc, 255 = at center)

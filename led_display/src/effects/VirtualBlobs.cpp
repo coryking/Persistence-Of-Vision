@@ -22,7 +22,7 @@ void VirtualBlobs::render(RenderContext& ctx) {
         if (!blob.active) continue;
 
         // Check EACH arm (blob can appear on multiple arms simultaneously)
-        for (int a = 0; a < 3; a++) {
+        for (int a = 0; a < HardwareConfig::NUM_ARMS; a++) {
             auto& arm = ctx.arms[a];
 
             if (!isAngleInArcUnits(arm.angleUnits, blob.currentStartAngleUnits, blob.currentArcSizeUnits)) {

@@ -62,7 +62,7 @@ void PulseChaser::render(RenderContext& ctx) {
         );
 
         // Render this pulse on all arms
-        for (int a = 0; a < 3; a++) {
+        for (int a = 0; a < HardwareConfig::NUM_ARMS; a++) {
             auto& arm = ctx.arms[a];
 
             // Get intensity for this arm (0-255: 0 = outside pulse, 255 = at center)

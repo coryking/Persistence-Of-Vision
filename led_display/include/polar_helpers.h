@@ -220,27 +220,6 @@ inline bool isRadiusInRange(uint8_t virtualPos, uint8_t start, uint8_t end) {
 }
 
 /**
- * Normalized radius from virtual position
- *
- * @param virtualPos Virtual pixel position (0-29)
- * @return 0.0 = hub (center), 1.0 = tip (edge)
- */
-inline float normalizedRadius(uint8_t virtualPos) {
-    return static_cast<float>(virtualPos) / 29.0f;
-}
-
-/**
- * Virtual position from normalized radius
- *
- * @param normalized Normalized radius (0.0-1.0)
- * @return Virtual pixel position (0-29)
- */
-inline uint8_t virtualFromNormalized(float normalized) {
-    float clamped = std::max(0.0f, std::min(1.0f, normalized));
-    return static_cast<uint8_t>(clamped * 29.0f);
-}
-
-/**
  * Get arm index and LED position from virtual pixel
  *
  * @param virtualPos Virtual pixel position (0-29)

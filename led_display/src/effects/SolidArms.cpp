@@ -32,7 +32,7 @@ static bool isNearBoundary(angle_t angleUnits, angle_t* distToBoundary) {
  */
 void SolidArms::render(RenderContext& ctx) {
 
-    for (int a = 0; a < 3; a++) {
+    for (int a = 0; a < HardwareConfig::NUM_ARMS; a++) {
         auto& arm = ctx.arms[a];
 
         // Pattern = angleUnits / 180 (exact integer division!)
@@ -103,7 +103,7 @@ void SolidArms::render(RenderContext& ctx) {
     // Each arm lights up when IT crosses 0°, creating one continuous radial line
     // At 2800 RPM, ~3° per frame, so check within 3° of 0°
     // 3 degrees = 30 units, 357 degrees = 3570 units
-    for (int a = 0; a < 3; a++) {
+    for (int a = 0; a < HardwareConfig::NUM_ARMS; a++) {
         angle_t armAngle = ctx.arms[a].angleUnits;
         if (armAngle < 30 || armAngle > 3570) {
             CRGB color = (armAngle < 30) ? CRGB::White : CRGB::Orange;

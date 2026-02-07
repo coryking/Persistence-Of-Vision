@@ -96,7 +96,7 @@ static inline uint16_t applyCompressed(uint16_t val) {
  */
 void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
 
-    for (int armIdx = 0; armIdx < 3; armIdx++) {
+    for (int armIdx = 0; armIdx < HardwareConfig::NUM_ARMS; armIdx++) {
         auto& arm = ctx.arms[armIdx];
         float angleRadians = angleUnitsToRadians(arm.angleUnits);
 
@@ -106,7 +106,7 @@ void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
 #endif
             // Use virtual position to respect radial stagger
             uint8_t virtualPos = armLedToVirtual(armIdx, led);
-            float height = fl::map_range<float, float>(virtualPos, 0, 29, 0.0f, 1.0f);
+            float height = fl::map_range<float, float>(virtualPos, 0, HardwareConfig::TOTAL_LOGICAL_LEDS - 1, 0.0f, 1.0f);
 
             // Get 16-bit palette index from noise (single channel)
             uint16_t noiseVal = noiseCylinderPalette16(angleRadians, height, noiseTimeOffsetMs, radius);

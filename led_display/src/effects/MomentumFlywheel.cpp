@@ -90,7 +90,7 @@ void MomentumFlywheel::render(RenderContext& ctx) {
     CHSV color = energyToColor(storedEnergy);
 
     // Fill all pixels with the glow color
-    for (int a = 0; a < 3; a++) {
+    for (int a = 0; a < HardwareConfig::NUM_ARMS; a++) {
         auto& arm = ctx.arms[a];
         for (int led = 0; led < HardwareConfig::LEDS_PER_ARM; led++) {
             arm.pixels[led] = color;
