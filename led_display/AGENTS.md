@@ -48,6 +48,14 @@ This is a hobby art project. The goal is to create beautiful spinning LED displa
 
 ## Documentation Reference
 
+**BEFORE writing or modifying effects, read this:**
+
+- **docs/led_display/EFFECT_SYSTEM_DESIGN.md** - Complete effect system reference: base class API, RenderContext, virtual pixels, polar helpers, geometry, EffectManager, registration, example patterns, performance rules. **This document eliminates the need to explore the codebase to understand how effects work.**
+
+**FastLED Utility Reference** (read when building effects):
+
+- **docs/led_display/FASTLED_REFERENCE.md** - Comprehensive catalog of FastLED's lib8tion math, noise generators, easing functions, beat generators, palettes, color operations, blending, and other building blocks for effect development. Consult this instead of exploring the FastLED source.
+
 **Foundation Documents** (read these to understand the project):
 
 - **docs/led_display/POV_DISPLAY.md** - Art-first philosophy, polar coordinates, design principles
@@ -61,6 +69,7 @@ This is a hobby art project. The goal is to create beautiful spinning LED displa
 - **docs/led_display/BUILD.md** - Build system, environments, debugging, IntelliSense
 - **docs/led_display/ESP32_REFERENCE.md** - Integer math system, angle units, FPU performance
 - **docs/led_display/HARDWARE.md** - Physical hardware, power system, sensors
+- **docs/led_display/COORDINATE_SYSTEMS.md** - Coordinate systems, projection math, globe rendering
 - **docs/PROJECT_STRUCTURE.md** - Complete project layout
 
 **Hardware Configuration:**
