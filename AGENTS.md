@@ -60,7 +60,7 @@ The motor controller and LED display communicate bidirectionally via ESP-NOW:
 - Effect switching and brightness control
 - Telemetry capture (IMU data from LED display → motor controller flash storage)
 
-See **docs/ESP-NOW_ARCHITECTURE.md** for protocol details, **shared/messages.h** for message definitions, and **docs/ir-control-spec.md** for IR control.
+See **docs/ESP-NOW_ARCHITECTURE.md** for protocol details, **shared/messages.h** for message definitions, **shared/sagetv_buttons.h** for IR button codes, and **docs/ir-control-spec.md** for IR control.
 
 ## IMU Telemetry
 
