@@ -9,10 +9,11 @@ See **docs/PROJECT_STRUCTURE.md** for the complete, authoritative project layout
 **Quick overview:**
 
 - **led_display/** - Main POV display firmware (ESP32-S3)
-  - See led_display/AGENTS.md for LED display-specific guidance
+  - See led_display/AGENTS.md for LED-specific coding rules, pipeline architecture, what-not-to-break
   - Rotating LED arrays, effect system, FreeRTOS-based hall sensor processing
 
 - **motor_controller/** - Motor controller firmware (ESP32-S3-Zero)
+  - See motor_controller/AGENTS.md for motor-specific guidance
   - Simple open-loop PWM control, RGB LED status, IR receiver
 
 - **shared/** - Shared headers for ESP-NOW communication between controllers
@@ -52,14 +53,14 @@ pov telemetry dump          # Download telemetry CSVs
 
 All CLI commands support `--json` for structured output (useful for LLM integration).
 
-## Future Integration
+## ESP-NOW Integration
 
 The motor controller and LED display communicate bidirectionally via ESP-NOW:
-- IR remote control forwarding
-- Telemetry exchange (RPM, status)
-- Effect switching
+- IR remote control forwarding (motor controller → LED display)
+- Effect switching and brightness control
+- Telemetry capture (IMU data from LED display → motor controller flash storage)
 
-See **docs/PROJECT_STRUCTURE.md** for shared message definitions and **docs/ir-control-spec.md** for IR control implementation.
+See **docs/ESP-NOW_ARCHITECTURE.md** for protocol details, **shared/messages.h** for message definitions, and **docs/ir-control-spec.md** for IR control.
 
 ## IMU Telemetry
 

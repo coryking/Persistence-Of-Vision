@@ -765,7 +765,7 @@ Follow the existing refactoring plan:
 
 ## 11. References
 
-- **FastLED Core Library:** `/Users/coryking/projects/POV_Project/docs/fastled-core-library-readme.md`
+- **FastLED Core Library:** `/Users/coryking/projects/POV_Project/docs/led_display/FASTLED_FL_NAMESPACE_REFERENCE.md`
 - **Refactoring Analysis:** `/Users/coryking/projects/POV_Project/docs/EFFECT_REFACTORING_ANALYSIS.md`
 - **NeoPixelBus Investigation:** `/Users/coryking/projects/POV_Project/docs/NEOPIXELBUS_BULK_UPDATE_INVESTIGATION.md`
 - **FastLED Repository:** https://github.com/FastLED/FastLED

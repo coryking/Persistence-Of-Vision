@@ -290,7 +290,7 @@ strip.Show();
 - Expected: ~25-40 μs
 - **Project-killing performance** - invalidated entire architecture
 
-**Reference:** See `docs/PROJECT_COMPARISON.md` and `docs/TIMING_ANALYSIS.md` for full analysis
+**Reference:** See `docs/led_display/POV_PROJECT_ARCHITECTURE_LESSONS.md` and `docs/led_display/TIMING_ANALYSIS.md` for full analysis
 
 ### NeoPixelBus (Current POV_Project)
 

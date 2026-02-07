@@ -41,7 +41,7 @@ void IRAM_ATTR HallEffectDriver::sensorTriggered_ISR(void *arg) {
 - **Queue behavior:** `xQueueOverwriteFromISR` stores latest event; if queue full, overwrites oldest
 - **Critical issue:** If multiple hall triggers occur between main loop reads, only latest timestamp is kept
   - This can miss intermediate triggers but provides latest definitive position
-  - Matches "queue-based" design from `docs/PROJECT_COMPARISON.md`
+  - Matches "queue-based" design from `docs/led_display/POV_PROJECT_ARCHITECTURE_LESSONS.md`
 
 ### 1.2 Hall Processing Task (FreeRTOS)
 

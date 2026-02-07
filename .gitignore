@@ -48,6 +48,9 @@ managed_components/
 CMakeLists.txt
 src/CMakeLists.txt
 
+# Agent working notes (not documentation)
+docs/agent-scratchpad/
+
 # Backups
 *.tar.gz
 *_backup_*

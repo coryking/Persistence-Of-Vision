@@ -3,6 +3,4 @@
 - this is art. please don't have elaborate "test plans". I'm never going to do them....
 - this is a hobby project, there is no detailed testing plan.  it's all casual (for me.... not for you!)
 - if you run coding agents in parallel, don't have them do the build at the end... let the parent agent do it.... otherwise they all build at the same time!
-- if you run coding agents in parallel, don't have them do the build at the end... let the parent agent do it.... otherwise they all build at the same time!
-- if you run coding agents in parallel, don't have them do the build at the end... let the parent agent do it.... otherwise they all build at the same time!
 - if you have to launch a subagent to discover something in the codebase.... make sure that subagent proposes how to fix the documentation so we don't need to do that again.  Lets have the LLM "learn the codebase" by documenting what it finds.

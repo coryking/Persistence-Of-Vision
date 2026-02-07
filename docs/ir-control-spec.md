@@ -22,7 +22,7 @@ The second phase of this operation  assumes we have working bidirectional commun
 
 * IR receiver code from `/Users/coryking/projects/POV_Project/test_projects/ir_remote_test`
 * Same hardware/pins as ir_remote_test (GPIO2 for IR signal)
-* SageTV remote button codes: `/Users/coryking/projects/POV_Project/docs/led_display/sagetv_remote_mapping.json`
+* SageTV remote button codes: `/Users/coryking/projects/POV_Project/led_display/data/sagetv_remote_mapping.json`
 
 ### RC5 Toggle Bit
 
