@@ -43,10 +43,14 @@ public:
                               uint16_t revolutionCount) {}
 
     // === Optional Control (IR Remote via ESP-NOW) ===
-    virtual void nextMode() {}       // Right arrow — cycle internal mode forward
-    virtual void prevMode() {}       // Left arrow  — cycle internal mode backward
-    virtual void paramUp() {}        // Up arrow    — secondary parameter increment
-    virtual void paramDown() {}      // Down arrow  — secondary parameter decrement
+    virtual void right() {}          // RIGHT button
+    virtual void left() {}           // LEFT button
+    virtual void up() {}             // UP button
+    virtual void down() {}           // DOWN button
+    virtual void enter() {}          // ENTER button
+
+    // === Optional Notifications ===
+    virtual void onDisplayPower(bool enabled) {}  // Display power state changed
 
     // === Optional Configuration ===
     virtual bool requiresFullBrightness() const { return false; }
@@ -56,23 +60,22 @@ public:
 
 ### IR Remote Button Mapping
 
-The IR remote on the motor controller sends commands via ESP-NOW to the display. The full mapping is defined in `motor_controller/src/remote_input.cpp`; the effect-relevant buttons are:
+The IR remote on the motor controller sends commands via ESP-NOW to the display. IR button codes are defined in `shared/sagetv_buttons.h`, the full mapping is in `motor_controller/src/remote_input.cpp`. Effect-relevant buttons:
 
-| Remote Button | Effect Method | Convention |
-|---------------|---------------|------------|
-| **Right arrow** | `nextMode()` | Cycle visual variant forward (e.g., contrast mode, phosphor type) |
-| **Left arrow** | `prevMode()` | Cycle visual variant backward |
-| **Up arrow** | `paramUp()` | Cycle content/data forward (e.g., next palette, next texture, next preset) |
-| **Down arrow** | `paramDown()` | Cycle content/data backward |
+| Remote Button | Effect Method | Usage Examples |
+|---------------|---------------|----------------|
+| **RIGHT** | `right()` | NoiseField: next contrast mode; Radar: next phosphor type; CartesianGrid: grid offset X+ |
+| **LEFT** | `left()` | NoiseField: prev contrast mode; Radar: prev phosphor type; CartesianGrid: grid offset X- |
+| **UP** | `up()` | NoiseField: next palette; PolarGlobe: next planet; CartesianGrid: grid offset Y+ |
+| **DOWN** | `down()` | NoiseField: prev palette; PolarGlobe: prev planet; CartesianGrid: grid offset Y- |
+| **ENTER** | `enter()` | (unmapped currently — available for effect use) |
 | **Number 1-9, 0** | (system) | Select effect directly (1-based registration order; 0 = effect 10) |
-| **Vol Up/Down** | (system) | Brightness control (0-10 scale, handled by EffectManager, not per-effect) |
-| **Power** | (system) | Display on/off toggle |
+| **Vol Up/Down** | (system) | Brightness control (0-10 scale, handled by EffectManager) |
+| **Power** | (system) | Display on/off toggle (also triggers `onDisplayPower()` notification) |
 
-**Convention from existing effects:**
-- **Left/Right (mode):** Visual rendering variation — how the same content looks. NoiseField uses it for contrast modes (Normal, S-curve, Turbulence...). Radar uses it for phosphor type (P7, P12, P19, P1).
-- **Up/Down (param):** Content/data selection — what is being shown. NoiseField uses it to cycle palettes. PolarGlobe uses it to cycle planet textures. Radar uses it to cycle presets (Aircraft, Classic, Marine, Zombie).
+**Design philosophy:** Button names are directional (left/right/up/down) rather than semantic (nextMode/prevMode) because usage varies by effect. CartesianGrid uses them spatially for grid offsets. NoiseField uses them for unrelated parameter domains (contrast vs palette). Directional names describe the physical button honestly without imposing false expectations.
 
-**Tip:** Not every effect needs all four. Many effects only implement `paramUp()`/`paramDown()` for palette cycling. The defaults are no-ops, so unimplemented buttons are silently ignored.
+**Tip:** Not every effect needs all five directional buttons. Defaults are no-ops, so unimplemented buttons are silently ignored.
 
 **Overriding brightness control:** Vol Up/Down adjusts a global 0-10 brightness scale applied by EffectManager to all effects. If your effect needs to bypass this (e.g., it depends on precise phosphor colors or has its own brightness logic), override `requiresFullBrightness()` to return `true`. The Radar effect does this because dimming would break its phosphor decay color accuracy:
 
@@ -91,19 +94,25 @@ Passed to `render()` every cycle. Owns the pixel buffers.
 ### Timing Fields
 
 ```cpp
-uint32_t frameCount;        // Frame counter (incremented every render)
-uint32_t timeUs;            // Current timestamp in microseconds
-interval_t microsPerRev;    // Microseconds per revolution (use directly!)
-angle_t slotSizeUnits;      // Angular resolution (angle units per slot)
+uint32_t  frameNumber;         // Sequential frame counter
+uint32_t  timestampUs;         // This frame's wall-clock timestamp in µs
+uint32_t  frameDeltaUs;        // Microseconds since previous render (0 on first frame)
+period_t  revolutionPeriodUs;  // Duration of last revolution in µs
+angle_t   angularSlotWidth;    // Angular resolution per render slot (angle units)
+
+// Convenience getter:
+uint8_t spinSpeed() const;     // Normalized spin speed: 0=stopped, 255=max motor speed
 ```
 
-**Performance rule:** Do NOT convert `microsPerRev` to RPM float in the render path. Use `speedFactor8(microsPerRev)` from `polar_helpers.h` to get a 0-255 speed value instead.
+**Performance rule:** Do NOT convert `revolutionPeriodUs` to RPM float in the render path. Use `ctx.spinSpeed()` or `speedFactor8(ctx.revolutionPeriodUs)` from `polar_helpers.h` to get a 0-255 speed value instead.
+
+**Animation timing:** Use `frameDeltaUs` for smooth animations that advance at wall-clock rate regardless of spin speed. Example: `rotationOffset += (ctx.frameDeltaUs * degreesPerSecond) / 1000000;`. Avoids animation jumps when switching effects (replaces the old `static uint32_t lastTimeUs` anti-pattern).
 
 ### The Three Arms (Physical Reality)
 
 ```cpp
 struct Arm {
-    angle_t angleUnits;                          // THIS arm's angle (3600 = 360°)
+    angle_t angle;                               // THIS arm's angular position (3600 = 360°)
     CRGB pixels[HardwareConfig::LEDS_PER_ARM];   // THIS arm's LEDs: [0]=hub, [max]=tip
 } arms[3];
 ```
