@@ -39,19 +39,15 @@ void PolarGlobe::paramDown() {
 
 void PolarGlobe::render(RenderContext& ctx) {
     // Rotate planet: ~36°/second (full rotation in 10 sec)
-    static uint32_t lastTimeUs = 0;
-    uint32_t deltaUs = ctx.timeUs - lastTimeUs;
-    lastTimeUs = ctx.timeUs;
-
     // 720 columns = 360°, so 72 columns/second = 36°/second
-    rotationOffset += (deltaUs * 9) / 125000;
+    rotationOffset += (ctx.frameDeltaUs * 9) / 125000;
     rotationOffset %= TEXTURE_WIDTH;
 
     for (int a = 0; a < HardwareConfig::NUM_ARMS; a++) {
         auto& arm = ctx.arms[a];
 
         // Map disc angle to texture column (longitude)
-        int textureCol = (arm.angleUnits / 5 + rotationOffset) % TEXTURE_WIDTH;
+        int textureCol = (arm.angle / 5 + rotationOffset) % TEXTURE_WIDTH;
 
         int ledCount = HardwareConfig::ARM_LED_COUNT[a];
         for (int p = 0; p < ledCount; p++) {

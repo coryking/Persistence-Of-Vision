@@ -25,20 +25,15 @@ static constexpr uint8_t RADIUS_SPAN_SCALED = OUTER_RADIUS_SCALED - INNER_RADIUS
 
 void ProjectionTest::render(RenderContext& ctx) {
     // Rotate ~36°/second (full rotation in 10 sec)
-    // Use frame time for consistency across RPM
-    static uint32_t lastTimeUs = 0;
-    uint32_t deltaUs = ctx.timeUs - lastTimeUs;
-    lastTimeUs = ctx.timeUs;
-
     // 360° in 10 sec = 3600 units in 10,000,000 us
-    rotationOffset += (deltaUs * 36) / 100000;
+    rotationOffset += (ctx.frameDeltaUs * 36) / 100000;
     rotationOffset %= ANGLE_FULL_CIRCLE;
 
     for (int a = 0; a < HardwareConfig::NUM_ARMS; a++) {
         auto& arm = ctx.arms[a];
 
         // Effective angle for projection (disc angle + rotation offset)
-        uint16_t effectiveAngle = (arm.angleUnits + rotationOffset) % ANGLE_FULL_CIRCLE;
+        uint16_t effectiveAngle = (arm.angle + rotationOffset) % ANGLE_FULL_CIRCLE;
 
         // sin8 takes 0-255 (maps to 0-360°), returns 0-255 (where 128 = sin(0) = 0)
         uint8_t angle8 = (effectiveAngle * 256UL) / ANGLE_FULL_CIRCLE;

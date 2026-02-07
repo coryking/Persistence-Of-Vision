@@ -44,6 +44,8 @@ void RenderTask::taskFunction(void* params) {
 }
 
 void RenderTask::run() {
+    uint32_t lastRenderTimeUs = 0;
+
     while (true) {
         // 1. Get atomic snapshot of timing values
         TimingSnapshot timing = revTimer.getTimingSnapshot();
@@ -52,6 +54,7 @@ void RenderTask::run() {
         if (!timing.isRotating || !timing.warmupComplete) {
             RotorDiagnosticStats::instance().recordRenderEvent(false, true);  // notRotating=true
             lastRenderedSlot_ = -1;
+            lastRenderTimeUs = 0;
             g_renderProfiler.reset();
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
@@ -95,15 +98,18 @@ void RenderTask::run() {
         interval_t microsecondsPerRev = timing.lastActualInterval;
         if (microsecondsPerRev == 0) microsecondsPerRev = timing.microsecondsPerRev;
 
-        wb.ctx->frameCount = thisFrame;
-        wb.ctx->timeUs = static_cast<uint32_t>(now);
-        wb.ctx->microsPerRev = microsecondsPerRev;
-        wb.ctx->slotSizeUnits = target.slotSize;
+        uint32_t nowU32 = static_cast<uint32_t>(now);
+        wb.ctx->frameNumber = thisFrame;
+        wb.ctx->timestampUs = nowU32;
+        wb.ctx->frameDeltaUs = (lastRenderTimeUs != 0) ? nowU32 - lastRenderTimeUs : 0;
+        wb.ctx->revolutionPeriodUs = static_cast<period_t>(microsecondsPerRev);
+        wb.ctx->angularSlotWidth = target.slotSize;
+        lastRenderTimeUs = nowU32;
 
         // Set arm angles from target - arms[0]=outer, arms[1]=middle(hall), arms[2]=inside
-        wb.ctx->arms[0].angleUnits = (target.angleUnits + OUTER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
-        wb.ctx->arms[1].angleUnits = target.angleUnits;
-        wb.ctx->arms[2].angleUnits = (target.angleUnits + INSIDE_ARM_PHASE) % ANGLE_FULL_CIRCLE;
+        wb.ctx->arms[0].angle = (target.angleUnits + OUTER_ARM_PHASE) % ANGLE_FULL_CIRCLE;
+        wb.ctx->arms[1].angle = target.angleUnits;
+        wb.ctx->arms[2].angle = (target.angleUnits + INSIDE_ARM_PHASE) % ANGLE_FULL_CIRCLE;
 
         // Render current effect
         Effect* current = effectManager.current();

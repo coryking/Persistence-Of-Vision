@@ -26,7 +26,7 @@ void PerArmBlobs::render(RenderContext& ctx) {
         auto& arm = ctx.arms[targetArm];
 
         // Check if arm is currently in blob's angular arc
-        if (!isAngleInArcUnits(arm.angleUnits, blob.currentStartAngleUnits, blob.currentArcSizeUnits)) {
+        if (!isAngleInArcUnits(arm.angle, blob.currentStartAngleUnits, blob.currentArcSizeUnits)) {
             continue;  // Arm not in blob's wedge - skip this blob
         }
 

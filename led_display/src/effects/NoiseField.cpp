@@ -98,7 +98,7 @@ void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
 
     for (int armIdx = 0; armIdx < HardwareConfig::NUM_ARMS; armIdx++) {
         auto& arm = ctx.arms[armIdx];
-        float angleRadians = angleUnitsToRadians(arm.angleUnits);
+        float angleRadians = angleUnitsToRadians(arm.angle);
 
         for (int led = 0; led < HardwareConfig::LEDS_PER_ARM; led++) {
 #ifdef ENABLE_EFFECT_TIMING
@@ -128,7 +128,7 @@ void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
 #ifdef ENABLE_EFFECT_TIMING
             int64_t noiseEnd = esp_timer_get_time();
             ESP_LOGD(TAG, "render: frame: %lu, arm: %d, led: %d, virtualPos: %u, angle: %.4f, height: %.4f, timeOffset: %u, paletteIdx: %u, noise time: %lld us",
-                          ctx.frameCount, armIdx, led, virtualPos, angleRadians, height, noiseTimeOffsetMs, palIdx, noiseEnd - noiseStart);
+                          ctx.frameNumber, armIdx, led, virtualPos, angleRadians, height, noiseTimeOffsetMs, palIdx, noiseEnd - noiseStart);
 #endif
         }
     }

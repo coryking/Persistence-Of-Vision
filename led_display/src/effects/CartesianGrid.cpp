@@ -1,6 +1,7 @@
 #include "effects/CartesianGrid.h"
 #include "hardware_config.h"
 #include "geometry.h"
+#include "polar_helpers.h"
 #include "esp_log.h"
 #include <FastLED.h>
 #include <math.h>
@@ -65,7 +66,7 @@ void CartesianGrid::render(RenderContext& ctx) {
         auto& arm = ctx.arms[a];
 
         // Get arm angle in radians for coordinate conversion
-        float angleRad = arm.angleUnits * (M_PI / 1800.0f);  // 3600 units = 2π
+        float angleRad = angleUnitsToRadians(arm.angle);
         float cosAngle = cosf(angleRad);
         float sinAngle = sinf(angleRad);
 

@@ -248,9 +248,9 @@ void IRAM_ATTR Radar::renderBlipsToBuffer(const RenderContext& ctx, timestamp_t 
         if (led >= HardwareConfig::ARM_LED_COUNT[arm]) continue;
 
         // Check if this arm is currently looking at the blip's bearing
-        angle_t armAngle = ctx.arms[arm].angleUnits;
+        angle_t armAngle = ctx.arms[arm].angle;
         angle_t dist = angularDistanceAbsUnits(armAngle, blip.bearing);
-        if (dist > ctx.slotSizeUnits) continue;
+        if (dist > ctx.angularSlotWidth) continue;
 
         // Compute phosphor color based on blip age
         timestamp_t age = now - blip.createdAt;
@@ -328,7 +328,7 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
     int64_t targetsTime = 0, sweepTime = 0, phosphorTime = 0, blipsTime = 0;
 #endif
 
-    timestamp_t now = ctx.timeUs;
+    timestamp_t now = ctx.timestampUs;
     const RadarPreset& preset = PRESETS[static_cast<uint8_t>(currentMode)];
 
     // === Phase 1: Update world targets (wall-clock movement) ===
@@ -361,7 +361,7 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
     // === Phase 4: Render each LED ===
     for (int armIdx = 0; armIdx < HardwareConfig::NUM_ARMS; armIdx++) {
         auto& arm = ctx.arms[armIdx];
-        angle_t armAngle = arm.angleUnits;
+        angle_t armAngle = arm.angle;
 
         for (int led = 0; led < HardwareConfig::ARM_LED_COUNT[armIdx]; led++) {
             // Start with black

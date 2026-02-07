@@ -86,7 +86,7 @@ void ArmAlignment::renderArmOnly(RenderContext& ctx, uint8_t armIndex) {
 
         if (a == armIndex) {
             // Active arm
-            angle_t armAngle = arm.angleUnits;
+            angle_t armAngle = arm.angle;
 
             // Check if at 0° marker (±3°, same as SolidArms reference)
             if (armAngle < 30 || armAngle > 3570) {

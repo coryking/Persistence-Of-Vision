@@ -25,7 +25,7 @@ void VirtualBlobs::render(RenderContext& ctx) {
         for (int a = 0; a < HardwareConfig::NUM_ARMS; a++) {
             auto& arm = ctx.arms[a];
 
-            if (!isAngleInArcUnits(arm.angleUnits, blob.currentStartAngleUnits, blob.currentArcSizeUnits)) {
+            if (!isAngleInArcUnits(arm.angle, blob.currentStartAngleUnits, blob.currentArcSizeUnits)) {
                 continue;  // This arm not in blob
             }
 

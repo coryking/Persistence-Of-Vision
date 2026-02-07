@@ -38,13 +38,13 @@ void SolidArms::render(RenderContext& ctx) {
         // Pattern = angleUnits / 180 (exact integer division!)
         // 20 patterns * 18° each = 360° exactly
         // angleUnits is already normalized to 0-3599
-        uint8_t pattern = arm.angleUnits / ANGLE_PER_PATTERN;
+        uint8_t pattern = arm.angle / ANGLE_PER_PATTERN;
         if (pattern > 19) pattern = 19;
 
 #ifdef ENABLE_EFFECT_TIMING
         // Detect boundary proximity
         angle_t distToBoundary;
-        bool nearBoundary = isNearBoundary(arm.angleUnits, &distToBoundary);
+        bool nearBoundary = isNearBoundary(arm.angle, &distToBoundary);
 
         // Detect pattern changes (flickering)
         bool patternChanged = (prevPatterns[a] != 255 && prevPatterns[a] != pattern);
@@ -59,21 +59,21 @@ void SolidArms::render(RenderContext& ctx) {
             if ((prevPatterns[a] == 15 && pattern == 16) ||
                 (prevPatterns[a] == 16 && pattern == 15)) {
                 ESP_LOGD(TAG, "PATTERN_288: arm%d frame=%u angle=%u pat=%d->%d dist=%u",
-                              a, ctx.frameCount, arm.angleUnits, prevPatterns[a], pattern, distToBoundary);
+                              a, ctx.frameNumber, arm.angle, prevPatterns[a], pattern, distToBoundary);
             }
             // Log any other pattern boundary transitions
             else if (nearBoundary) {
                 ESP_LOGD(TAG, "PATTERN_TRANSITION: arm%d frame=%u angle=%u pat=%d->%d dist=%u",
-                              a, ctx.frameCount, arm.angleUnits, prevPatterns[a], pattern, distToBoundary);
+                              a, ctx.frameNumber, arm.angle, prevPatterns[a], pattern, distToBoundary);
             }
         }
 
         prevPatterns[a] = pattern;
 
         // Periodic summary every 10000 frames
-        if (a == 0 && ctx.frameCount % 10000 == 0) {
+        if (a == 0 && ctx.frameNumber % 10000 == 0) {
             ESP_LOGD(TAG, "BOUNDARY_STATS@%u: hits=[%u,%u,%u] changes=[%u,%u,%u]",
-                          ctx.frameCount,
+                          ctx.frameNumber,
                           boundaryHitCount[0], boundaryHitCount[1], boundaryHitCount[2],
                           patternChangeCount[0], patternChangeCount[1], patternChangeCount[2]);
         }
@@ -104,7 +104,7 @@ void SolidArms::render(RenderContext& ctx) {
     // At 2800 RPM, ~3° per frame, so check within 3° of 0°
     // 3 degrees = 30 units, 357 degrees = 3570 units
     for (int a = 0; a < HardwareConfig::NUM_ARMS; a++) {
-        angle_t armAngle = ctx.arms[a].angleUnits;
+        angle_t armAngle = ctx.arms[a].angle;
         if (armAngle < 30 || armAngle > 3570) {
             CRGB color = (armAngle < 30) ? CRGB::White : CRGB::Orange;
             fill_solid(ctx.arms[a].pixels, HardwareConfig::LEDS_PER_ARM, color);

@@ -50,7 +50,7 @@ void MomentumFlywheel::onRevolution(timestamp_t usPerRev, timestamp_t timestamp,
 void MomentumFlywheel::render(RenderContext& ctx) {
     ctx.clear();
 
-    timestamp_t now = ctx.timeUs;
+    timestamp_t now = ctx.timestampUs;
 
     // Apply continuous exponential decay
     if (lastDecayTime > 0 && storedEnergy > 0) {

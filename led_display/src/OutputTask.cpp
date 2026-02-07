@@ -54,7 +54,7 @@ void OutputTask::run() {
         // 2. Track timing
         int64_t copyStart = esp_timer_get_time();
 
-        g_outputProfiler.markStart(rb.ctx->frameCount, receiveUs);
+        g_outputProfiler.markStart(rb.ctx->frameNumber, receiveUs);
 
         // 3. Copy to strip's internal buffer
         copyPixelsToStrip(*rb.ctx, strip);

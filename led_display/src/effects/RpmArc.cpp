@@ -31,7 +31,7 @@ void RpmArc::render(RenderContext& ctx) {
     ctx.clear();
 
     // Calculate speed-based parameters
-    uint8_t speed = speedFactor8(ctx.microsPerRev);
+    uint8_t speed = speedFactor8(ctx.revolutionPeriodUs);
     uint8_t pixelCount = speedToPixelCount(speed);
 
     // Animate arc width based on speed (wider at higher speed)
@@ -41,7 +41,7 @@ void RpmArc::render(RenderContext& ctx) {
         auto& arm = ctx.arms[a];
 
         // Get intensity for this arm (0-255: 0 = outside arc, 255 = at center)
-        uint8_t intensity = arcIntensityUnits(arm.angleUnits, ARC_CENTER_UNITS, arcWidthUnits);
+        uint8_t intensity = arcIntensityUnits(arm.angle, ARC_CENTER_UNITS, arcWidthUnits);
 
         if (intensity == 0) {
             // Arm completely outside arc - already cleared

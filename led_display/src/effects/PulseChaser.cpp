@@ -34,7 +34,7 @@ void PulseChaser::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint
 void PulseChaser::render(RenderContext& ctx) {
     ctx.clear();
 
-    timestamp_t now = ctx.timeUs;
+    timestamp_t now = ctx.timestampUs;
 
     for (int i = 0; i < MAX_PULSES; i++) {
         Pulse& p = pulses[i];
@@ -66,7 +66,7 @@ void PulseChaser::render(RenderContext& ctx) {
             auto& arm = ctx.arms[a];
 
             // Get intensity for this arm (0-255: 0 = outside pulse, 255 = at center)
-            uint8_t intensity = arcIntensityUnits(arm.angleUnits, pulseAngle, PULSE_WIDTH_UNITS);
+            uint8_t intensity = arcIntensityUnits(arm.angle, pulseAngle, PULSE_WIDTH_UNITS);
 
             if (intensity == 0) continue;
 

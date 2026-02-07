@@ -17,24 +17,27 @@
  */
 struct RenderContext {
     // === Timing ===
-    uint32_t frameCount;          // Frame number (incremented every render)
-    uint32_t timeUs;              // Current timestamp (microseconds)
-    interval_t microsPerRev;      // Microseconds per revolution
-    angle_t slotSizeUnits;        // Angular resolution (angle units per slot, 10 units = 1 degree)
+    uint32_t  frameNumber;        // Sequential frame counter
+    uint32_t  timestampUs;        // This frame's wall-clock timestamp in µs
+    uint32_t  frameDeltaUs;       // Microseconds since previous render (0 on first frame)
+    period_t  revolutionPeriodUs; // Duration of last revolution in µs
+    angle_t   angularSlotWidth;   // Angular resolution per render slot (angle units, 10 = 1°)
 
-    // === Convenience Methods ===
+    // === Convenience ===
 
-    // REMOVED: rpm() and degreesPerRender() methods
-    // These used float division which is ~2x slower than integer math on ESP32-S3.
-    // Effects should use microsPerRev directly with speedFactor8() helper instead.
-    //
-    // For debug display only, you can use:
-    //   uint32_t rpm = 60000000UL / microsPerRev;
-    //   (but keep this OUT of render path!)
+    /** Normalized spin speed (0 = stopped/slow, 255 = max motor speed) */
+    uint8_t spinSpeed() const {
+        if (revolutionPeriodUs >= MICROS_PER_REV_MAX) return 0;
+        if (revolutionPeriodUs <= MICROS_PER_REV_MIN) return 255;
+        return static_cast<uint8_t>(
+            (MICROS_PER_REV_MAX - revolutionPeriodUs) * 255 /
+            (MICROS_PER_REV_MAX - MICROS_PER_REV_MIN)
+        );
+    }
 
     // === The Three Arms (physical reality) ===
     struct Arm {
-        angle_t angleUnits;       // THIS arm's current angle (3600 = 360 degrees)
+        angle_t angle;            // THIS arm's angular position (3600 = 360°)
         CRGB pixels[HardwareConfig::LEDS_PER_ARM];  // THIS arm's LEDs: [0]=hub, [LEDS_PER_ARM-1]=tip
     } arms[3];                    // [0]=outer/ARM3(+240°,14LEDs), [1]=middle/ARM2(0°/hall,13LEDs), [2]=inside/ARM1(+120°,13LEDs)
 
