@@ -76,9 +76,11 @@ void runTest(T_STRIP& strip, const char* speed, const char* method,
         // === Delay 2: Settle before next iteration ===
         int64_t delay2_us = timedDelay(SETTLE_DELAY_MS);
 
-        Serial.printf("%s,%s,%s,%s,%d,%d,%lld,%lld,%lld,%lld,%lld\n",
-                      speed, method, feature, bufferMode, ledCount, i,
-                      show1_us, show2_us, delay1_us, show3_us, delay2_us);
+        Serial.printf("%s,%s,%s,%s,%d,%d,%lld,%lld,%lld,%lld,%lld\n", speed,
+                      method, feature, bufferMode, ledCount, i, show1_us,
+                      show2_us, delay1_us, show3_us, delay2_us);
+
+        delay(10); // lets chill to let serial finish before continuing
     }
 }
 
@@ -89,10 +91,11 @@ void runBothBufferModes(const char* speed, const char* method, const char* featu
         T_STRIP strip(ledCount);
         runTest(strip, speed, method, feature, ledCount, true);   // maintainBuffer=true (copy)
     }
-    {
-        T_STRIP strip(ledCount);
-        runTest(strip, speed, method, feature, ledCount, false);  // maintainBuffer=false (swap)
-    }
+    // turns out this affects nothing!
+    //{
+    //    T_STRIP strip(ledCount);
+    //    runTest(strip, speed, method, feature, ledCount, false);  // maintainBuffer=false (swap)
+    //}
 }
 
 void setup() {
@@ -155,7 +158,7 @@ void setup() {
             "10", "dma", "BGR", ledCount);
         runBothBufferModes<NeoPixelBus<DotStarLbgrFeature, DotStarEsp32DmaSpiMethod>>(
             "10", "dma", "LBGR", ledCount);
-
+        SPI.end();
         delay(50);
     }
 
