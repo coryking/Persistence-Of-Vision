@@ -16,17 +16,20 @@ void sendBrightnessDown();
 // Send set effect command to display
 void sendSetEffect(uint8_t effectNumber);
 
-// Send effect mode next command to display
-void sendEffectModeNext();
+// Send IR RIGHT button to display
+void sendEffectRight();
 
-// Send effect mode prev command to display
-void sendEffectModePrev();
+// Send IR LEFT button to display
+void sendEffectLeft();
 
-// Send effect parameter up command to display
-void sendEffectParamUp();
+// Send IR UP button to display
+void sendEffectUp();
 
-// Send effect parameter down command to display
-void sendEffectParamDown();
+// Send IR DOWN button to display
+void sendEffectDown();
+
+// Send IR ENTER button to display
+void sendEffectEnter();
 
 // Print ESP-NOW receive statistics (for debugging) - DEPRECATED, use getters below
 void printEspNowStats();

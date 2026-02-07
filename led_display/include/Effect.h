@@ -46,34 +46,41 @@ public:
     virtual void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) { (void)usPerRev; }
 
     /**
-     * Cycle to next internal mode (if effect supports modes)
-     * Called via ESP-NOW from IR remote left/right buttons
-     * Default: no-op (effect has no modes)
-     */
-    virtual void nextMode() {}
-
-    /**
-     * Cycle to previous internal mode (if effect supports modes)
-     * Called via ESP-NOW from IR remote left/right buttons
-     * Default: no-op (effect has no modes)
-     */
-    virtual void prevMode() {}
-
-    /**
-     * Increment effect's secondary parameter (effect-specific)
-     * Called via ESP-NOW from IR remote up button
-     * Examples: next palette, increase speed, zoom in
+     * IR remote RIGHT button
      * Default: no-op
      */
-    virtual void paramUp() {}
+    virtual void right() {}
 
     /**
-     * Decrement effect's secondary parameter (effect-specific)
-     * Called via ESP-NOW from IR remote down button
-     * Examples: prev palette, decrease speed, zoom out
+     * IR remote LEFT button
      * Default: no-op
      */
-    virtual void paramDown() {}
+    virtual void left() {}
+
+    /**
+     * IR remote UP button
+     * Default: no-op
+     */
+    virtual void up() {}
+
+    /**
+     * IR remote DOWN button
+     * Default: no-op
+     */
+    virtual void down() {}
+
+    /**
+     * IR remote ENTER button
+     * Default: no-op
+     */
+    virtual void enter() {}
+
+    /**
+     * Notification when display power state changes
+     * @param enabled true = display on, false = display off
+     * Default: no-op
+     */
+    virtual void onDisplayPower(bool enabled) { (void)enabled; }
 
     /**
      * Whether this effect requires full brightness (ignores brightness control)

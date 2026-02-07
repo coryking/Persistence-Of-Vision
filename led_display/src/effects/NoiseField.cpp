@@ -150,19 +150,19 @@ void NoiseField::onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint1
 #endif
 }
 
-void NoiseField::nextMode() {
+void NoiseField::right() {
     contrastMode = (contrastMode + 1) % CONTRAST_MODE_COUNT;
     const char* modeNames[] = {"Normal", "S-curve", "Turbulence", "Quantize", "Expanded", "Compressed"};
     ESP_LOGI(TAG, "Contrast mode -> %s (%d)", modeNames[contrastMode], contrastMode);
 }
 
-void NoiseField::prevMode() {
+void NoiseField::left() {
     contrastMode = (contrastMode + CONTRAST_MODE_COUNT - 1) % CONTRAST_MODE_COUNT;
     const char* modeNames[] = {"Normal", "S-curve", "Turbulence", "Quantize", "Expanded", "Compressed"};
     ESP_LOGI(TAG, "Contrast mode -> %s (%d)", modeNames[contrastMode], contrastMode);
 }
 
-void NoiseField::paramUp() {
+void NoiseField::up() {
     paletteIndex = (paletteIndex + 1) % NOISE_PALETTE_COUNT;
     palette = *NOISE_PALETTES[paletteIndex];
     const char* paletteNames[] = {
@@ -174,7 +174,7 @@ void NoiseField::paramUp() {
     ESP_LOGI(TAG, "Palette -> %s (%d)", paletteNames[paletteIndex], paletteIndex);
 }
 
-void NoiseField::paramDown() {
+void NoiseField::down() {
     paletteIndex = (paletteIndex + NOISE_PALETTE_COUNT - 1) % NOISE_PALETTE_COUNT;
     palette = *NOISE_PALETTES[paletteIndex];
     const char* paletteNames[] = {

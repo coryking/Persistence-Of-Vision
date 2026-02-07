@@ -300,10 +300,10 @@ class NoiseField : public Effect {
 public:
     void render(RenderContext &ctx) override;
     void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) override;
-    void nextMode() override;
-    void prevMode() override;
-    void paramUp() override;    // Next palette
-    void paramDown() override;  // Previous palette
+    void right() override;
+    void left() override;
+    void up() override;    // Next palette
+    void down() override;  // Previous palette
 
     timestamp_t noiseTimeOffsetMs = 0;
     float radius = 1.5f;

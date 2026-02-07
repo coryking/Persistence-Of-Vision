@@ -27,12 +27,12 @@ static const char* TEXTURE_NAMES[] = {
     "Sun", "Moon", "Mercury", "Makemake"
 };
 
-void PolarGlobe::paramUp() {
+void PolarGlobe::up() {
     textureIndex = (textureIndex + 1) % NUM_TEXTURES;
     ESP_LOGI(TAG, "Texture -> %s", TEXTURE_NAMES[textureIndex]);
 }
 
-void PolarGlobe::paramDown() {
+void PolarGlobe::down() {
     textureIndex = (textureIndex + NUM_TEXTURES - 1) % NUM_TEXTURES;
     ESP_LOGI(TAG, "Texture -> %s", TEXTURE_NAMES[textureIndex]);
 }

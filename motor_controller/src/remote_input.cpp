@@ -61,10 +61,11 @@ Command remoteInputPoll() {
         case SAGETV_BTN_POWER: cmd = Command::PowerToggle; break;
         case SAGETV_BTN_FAST_FWD: cmd = Command::SpeedUp; break;
         case SAGETV_BTN_REWIND: cmd = Command::SpeedDown; break;
-        case SAGETV_BTN_LEFT: cmd = Command::EffectModePrev; break;
-        case SAGETV_BTN_RIGHT: cmd = Command::EffectModeNext; break;
-        case SAGETV_BTN_UP: cmd = Command::EffectParamUp; break;
-        case SAGETV_BTN_DOWN: cmd = Command::EffectParamDown; break;
+        case SAGETV_BTN_LEFT: cmd = Command::EffectLeft; break;
+        case SAGETV_BTN_RIGHT: cmd = Command::EffectRight; break;
+        case SAGETV_BTN_UP: cmd = Command::EffectUp; break;
+        case SAGETV_BTN_DOWN: cmd = Command::EffectDown; break;
+        case SAGETV_BTN_ENTER: cmd = Command::EffectEnter; break;
         case SAGETV_BTN_RECORD: cmd = Command::CaptureRecord; break;
         case SAGETV_BTN_STOP: cmd = Command::CaptureStop; break;
         case SAGETV_BTN_PLAY: cmd = Command::CapturePlay; break;

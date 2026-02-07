@@ -439,7 +439,7 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
 // Button Handlers
 // ============================================================
 
-void Radar::nextMode() {
+void Radar::right() {
     // Cycle phosphor type forward
     uint8_t next = (static_cast<uint8_t>(currentPhosphorType) + 1) % static_cast<uint8_t>(PhosphorType::COUNT);
     currentPhosphorType = static_cast<PhosphorType>(next);
@@ -448,7 +448,7 @@ void Radar::nextMode() {
     ESP_LOGI(TAG, "Phosphor: %s", names[next]);
 }
 
-void Radar::prevMode() {
+void Radar::left() {
     // Cycle phosphor type backward
     uint8_t prev = static_cast<uint8_t>(currentPhosphorType);
     prev = (prev == 0) ? (static_cast<uint8_t>(PhosphorType::COUNT) - 1) : (prev - 1);
@@ -458,14 +458,14 @@ void Radar::prevMode() {
     ESP_LOGI(TAG, "Phosphor: %s", names[prev]);
 }
 
-void Radar::paramUp() {
+void Radar::up() {
     // Cycle to next preset mode
     uint8_t next = (static_cast<uint8_t>(currentMode) + 1) % static_cast<uint8_t>(RadarMode::COUNT);
     currentMode = static_cast<RadarMode>(next);
     applyPreset();
 }
 
-void Radar::paramDown() {
+void Radar::down() {
     // Cycle to previous preset mode
     uint8_t prev = static_cast<uint8_t>(currentMode);
     prev = (prev == 0) ? (static_cast<uint8_t>(RadarMode::COUNT) - 1) : (prev - 1);

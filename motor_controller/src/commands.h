@@ -9,9 +9,10 @@
 //   11: BrightnessUp, 12: BrightnessDown
 //   13: PowerToggle (use MOTOR_ON/MOTOR_OFF for idempotent control instead)
 //   14: SpeedUp, 15: SpeedDown
-//   16: EffectModeNext, 17: EffectModePrev
-//   18: EffectParamUp, 19: EffectParamDown
-//   20: CaptureRecord, 21: CaptureStop, 22: CapturePlay, 23: CaptureDelete
+//   16: EffectRight, 17: EffectLeft
+//   18: EffectUp, 19: EffectDown
+// 20: EffectEnter
+//   21: CaptureRecord, 22: CaptureStop, 23: CapturePlay, 24: CaptureDelete
 
 enum class Command : uint8_t {
     None = 0,
@@ -22,10 +23,11 @@ enum class Command : uint8_t {
     PowerToggle,
     SpeedUp,
     SpeedDown,
-    EffectModeNext,    // Cycle effect mode forward
-    EffectModePrev,    // Cycle effect mode backward
-    EffectParamUp,     // Effect parameter up
-    EffectParamDown,   // Effect parameter down
+    EffectRight,       // IR RIGHT button
+    EffectLeft,        // IR LEFT button
+    EffectUp,          // IR UP button
+    EffectDown,        // IR DOWN button
+    EffectEnter,       // IR ENTER button
     CaptureRecord,     // Start telemetry capture
     CaptureStop,       // Stop telemetry capture
     CapturePlay,       // Dump captured telemetry as CSV

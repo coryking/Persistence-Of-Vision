@@ -173,35 +173,43 @@ void sendSetEffect(uint8_t effectNumber) {
     }
 }
 
-void sendEffectModeNext() {
-    EffectModeNextMsg msg;
+void sendEffectRight() {
+    EffectRightMsg msg;
     esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
     if (result == ESP_OK) {
-        Serial.println("[ESPNOW] Sent effect mode NEXT");
+        Serial.println("[ESPNOW] Sent IR RIGHT");
     }
 }
 
-void sendEffectModePrev() {
-    EffectModePrevMsg msg;
+void sendEffectLeft() {
+    EffectLeftMsg msg;
     esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
     if (result == ESP_OK) {
-        Serial.println("[ESPNOW] Sent effect mode PREV");
+        Serial.println("[ESPNOW] Sent IR LEFT");
     }
 }
 
-void sendEffectParamUp() {
-    EffectParamUpMsg msg;
+void sendEffectUp() {
+    EffectUpMsg msg;
     esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
     if (result == ESP_OK) {
-        Serial.println("[ESPNOW] Sent effect param UP");
+        Serial.println("[ESPNOW] Sent IR UP");
     }
 }
 
-void sendEffectParamDown() {
-    EffectParamDownMsg msg;
+void sendEffectDown() {
+    EffectDownMsg msg;
     esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
     if (result == ESP_OK) {
-        Serial.println("[ESPNOW] Sent effect param DOWN");
+        Serial.println("[ESPNOW] Sent IR DOWN");
+    }
+}
+
+void sendEffectEnter() {
+    EffectEnterMsg msg;
+    esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
+    if (result == ESP_OK) {
+        Serial.println("[ESPNOW] Sent IR ENTER");
     }
 }
 

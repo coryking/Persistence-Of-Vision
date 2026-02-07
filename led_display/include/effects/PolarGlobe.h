@@ -23,8 +23,8 @@
 class PolarGlobe : public Effect {
 public:
     void render(RenderContext& ctx) override;
-    void paramUp() override;
-    void paramDown() override;
+    void up() override;
+    void down() override;
 
 private:
     static constexpr uint8_t NUM_TEXTURES = 11;

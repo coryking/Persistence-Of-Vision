@@ -17,11 +17,12 @@ enum class EffectCommandType : uint8_t {
     SET_EFFECT = 1,
     BRIGHTNESS_UP = 2,
     BRIGHTNESS_DOWN = 3,
-    EFFECT_MODE_NEXT = 4,
-    EFFECT_MODE_PREV = 5,
-    EFFECT_PARAM_UP = 6,
-    EFFECT_PARAM_DOWN = 7,
+    EFFECT_RIGHT = 4,
+    EFFECT_LEFT = 5,
+    EFFECT_UP = 6,
+    EFFECT_DOWN = 7,
     DISPLAY_POWER = 8,
+    EFFECT_ENTER = 9,
 };
 
 /**
@@ -116,32 +117,41 @@ public:
                 case EffectCommandType::BRIGHTNESS_DOWN:
                     decrementBrightness();
                     break;
-                case EffectCommandType::EFFECT_MODE_NEXT:
+                case EffectCommandType::EFFECT_RIGHT:
                     if (currentIndex < effectCount && effects[currentIndex]) {
-                        effects[currentIndex]->nextMode();
-                        ESP_LOGI(EFFECT_MGR_TAG, "Mode -> next");
+                        effects[currentIndex]->right();
+                        ESP_LOGI(EFFECT_MGR_TAG, "Button -> RIGHT");
                     }
                     break;
-                case EffectCommandType::EFFECT_MODE_PREV:
+                case EffectCommandType::EFFECT_LEFT:
                     if (currentIndex < effectCount && effects[currentIndex]) {
-                        effects[currentIndex]->prevMode();
-                        ESP_LOGI(EFFECT_MGR_TAG, "Mode -> prev");
+                        effects[currentIndex]->left();
+                        ESP_LOGI(EFFECT_MGR_TAG, "Button -> LEFT");
                     }
                     break;
-                case EffectCommandType::EFFECT_PARAM_UP:
+                case EffectCommandType::EFFECT_UP:
                     if (currentIndex < effectCount && effects[currentIndex]) {
-                        effects[currentIndex]->paramUp();
-                        ESP_LOGI(EFFECT_MGR_TAG, "Param -> up");
+                        effects[currentIndex]->up();
+                        ESP_LOGI(EFFECT_MGR_TAG, "Button -> UP");
                     }
                     break;
-                case EffectCommandType::EFFECT_PARAM_DOWN:
+                case EffectCommandType::EFFECT_DOWN:
                     if (currentIndex < effectCount && effects[currentIndex]) {
-                        effects[currentIndex]->paramDown();
-                        ESP_LOGI(EFFECT_MGR_TAG, "Param -> down");
+                        effects[currentIndex]->down();
+                        ESP_LOGI(EFFECT_MGR_TAG, "Button -> DOWN");
+                    }
+                    break;
+                case EffectCommandType::EFFECT_ENTER:
+                    if (currentIndex < effectCount && effects[currentIndex]) {
+                        effects[currentIndex]->enter();
+                        ESP_LOGI(EFFECT_MGR_TAG, "Button -> ENTER");
                     }
                     break;
                 case EffectCommandType::DISPLAY_POWER:
                     setDisplayEnabled(cmd.value != 0);
+                    if (currentIndex < effectCount && effects[currentIndex]) {
+                        effects[currentIndex]->onDisplayPower(cmd.value != 0);
+                    }
                     break;
             }
         }

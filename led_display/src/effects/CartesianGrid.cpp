@@ -96,22 +96,22 @@ void CartesianGrid::render(RenderContext& ctx) {
     }
 }
 
-void CartesianGrid::paramUp() {
+void CartesianGrid::up() {
     yOffset++;
     ESP_LOGI(TAG, "Grid offset -> (%d, %d)", xOffset, yOffset);
 }
 
-void CartesianGrid::paramDown() {
+void CartesianGrid::down() {
     yOffset--;
     ESP_LOGI(TAG, "Grid offset -> (%d, %d)", xOffset, yOffset);
 }
 
-void CartesianGrid::nextMode() {
+void CartesianGrid::right() {
     xOffset++;
     ESP_LOGI(TAG, "Grid offset -> (%d, %d)", xOffset, yOffset);
 }
 
-void CartesianGrid::prevMode() {
+void CartesianGrid::left() {
     xOffset--;
     ESP_LOGI(TAG, "Grid offset -> (%d, %d)", xOffset, yOffset);
 }

@@ -19,10 +19,10 @@
 class CartesianGrid : public Effect {
 public:
     void render(RenderContext& ctx) override;
-    void paramUp() override;    // Shift grid up (y+)
-    void paramDown() override;  // Shift grid down (y-)
-    void nextMode() override;   // Shift grid right (x+)
-    void prevMode() override;   // Shift grid left (x-)
+    void up() override;    // Shift grid up (y+)
+    void down() override;  // Shift grid down (y-)
+    void right() override;   // Shift grid right (x+)
+    void left() override;   // Shift grid left (x-)
 
 private:
     int xOffset = 0;  // Grid horizontal shift

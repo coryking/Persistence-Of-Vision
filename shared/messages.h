@@ -11,10 +11,11 @@ enum MessageType : uint8_t {
     MSG_BRIGHTNESS_UP = 2,     // Motor Controller -> Display
     MSG_BRIGHTNESS_DOWN = 3,   // Motor Controller -> Display
     MSG_SET_EFFECT = 4,        // Motor Controller -> Display
-    MSG_EFFECT_MODE_NEXT = 5,  // Motor Controller -> Display (cycle effect's internal mode forward)
-    MSG_EFFECT_MODE_PREV = 6,  // Motor Controller -> Display (cycle effect's internal mode backward)
-    MSG_EFFECT_PARAM_UP = 7,   // Motor Controller -> Display (effect's secondary parameter up)
-    MSG_EFFECT_PARAM_DOWN = 8, // Motor Controller -> Display (effect's secondary parameter down)
+    MSG_EFFECT_RIGHT = 5,      // Motor Controller -> Display (IR RIGHT button)
+    MSG_EFFECT_LEFT = 6,       // Motor Controller -> Display (IR LEFT button)
+    MSG_EFFECT_UP = 7,         // Motor Controller -> Display (IR UP button)
+    MSG_EFFECT_DOWN = 8,       // Motor Controller -> Display (IR DOWN button)
+    MSG_EFFECT_ENTER = 9,      // Motor Controller -> Display (IR ENTER button)
     // Calibration messages (Display -> Motor Controller)
     MSG_ACCEL_SAMPLES = 10,    // Batched accelerometer samples
     MSG_HALL_EVENT = 11,       // Individual hall trigger event
@@ -87,24 +88,29 @@ struct SetEffectMsg {
     uint8_t effect_number;  // 1-10 (1-based, matches remote buttons)
 } __attribute__((packed));
 
-// Motor Controller -> Display: Cycle effect mode forward
-struct EffectModeNextMsg {
-    uint8_t type = MSG_EFFECT_MODE_NEXT;
+// Motor Controller -> Display: IR RIGHT button
+struct EffectRightMsg {
+    uint8_t type = MSG_EFFECT_RIGHT;
 } __attribute__((packed));
 
-// Motor Controller -> Display: Cycle effect mode backward
-struct EffectModePrevMsg {
-    uint8_t type = MSG_EFFECT_MODE_PREV;
+// Motor Controller -> Display: IR LEFT button
+struct EffectLeftMsg {
+    uint8_t type = MSG_EFFECT_LEFT;
 } __attribute__((packed));
 
-// Motor Controller -> Display: Effect parameter up (effect-specific, e.g., palette)
-struct EffectParamUpMsg {
-    uint8_t type = MSG_EFFECT_PARAM_UP;
+// Motor Controller -> Display: IR UP button
+struct EffectUpMsg {
+    uint8_t type = MSG_EFFECT_UP;
 } __attribute__((packed));
 
-// Motor Controller -> Display: Effect parameter down (effect-specific, e.g., palette)
-struct EffectParamDownMsg {
-    uint8_t type = MSG_EFFECT_PARAM_DOWN;
+// Motor Controller -> Display: IR DOWN button
+struct EffectDownMsg {
+    uint8_t type = MSG_EFFECT_DOWN;
+} __attribute__((packed));
+
+// Motor Controller -> Display: IR ENTER button
+struct EffectEnterMsg {
+    uint8_t type = MSG_EFFECT_ENTER;
 } __attribute__((packed));
 
 // Motor Controller -> Display: Power on/off control

@@ -71,10 +71,10 @@ public:
     void begin() override;
     void render(RenderContext& ctx) override;
     void onRevolution(timestamp_t usPerRev, timestamp_t timestamp, uint16_t revolutionCount) override;
-    void nextMode() override;   // Cycle phosphor type
-    void prevMode() override;   // Cycle phosphor type (reverse)
-    void paramUp() override;    // Cycle to next preset mode
-    void paramDown() override;  // Cycle to previous preset mode
+    void right() override;   // Cycle phosphor type
+    void left() override;   // Cycle phosphor type (reverse)
+    void up() override;    // Cycle to next preset mode
+    void down() override;  // Cycle to previous preset mode
     bool requiresFullBrightness() const override { return true; }
 
 private:
