@@ -16,6 +16,7 @@ enum MessageType : uint8_t {
     MSG_EFFECT_UP = 7,         // Motor Controller -> Display (IR UP button)
     MSG_EFFECT_DOWN = 8,       // Motor Controller -> Display (IR DOWN button)
     MSG_EFFECT_ENTER = 9,      // Motor Controller -> Display (IR ENTER button)
+    MSG_STATS_TOGGLE = 15,     // Motor Controller -> Display (IR INFO button - toggle stats overlay)
     // Calibration messages (Display -> Motor Controller)
     MSG_ACCEL_SAMPLES = 10,    // Batched accelerometer samples
     MSG_HALL_EVENT = 11,       // Individual hall trigger event
@@ -111,6 +112,11 @@ struct EffectDownMsg {
 // Motor Controller -> Display: IR ENTER button
 struct EffectEnterMsg {
     uint8_t type = MSG_EFFECT_ENTER;
+} __attribute__((packed));
+
+// Motor Controller -> Display: IR INFO button (toggle stats overlay)
+struct StatsToggleMsg {
+    uint8_t type = MSG_STATS_TOGGLE;
 } __attribute__((packed));
 
 // Motor Controller -> Display: Power on/off control

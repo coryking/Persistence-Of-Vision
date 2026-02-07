@@ -31,6 +31,9 @@ void sendEffectDown();
 // Send IR ENTER button to display
 void sendEffectEnter();
 
+// Send IR INFO button to display (toggle stats overlay)
+void sendStatsToggle();
+
 // Print ESP-NOW receive statistics (for debugging) - DEPRECATED, use getters below
 void printEspNowStats();
 

@@ -13,6 +13,7 @@
 //   18: EffectUp, 19: EffectDown
 // 20: EffectEnter
 //   21: CaptureRecord, 22: CaptureStop, 23: CapturePlay, 24: CaptureDelete
+//   25: StatsToggle
 
 enum class Command : uint8_t {
     None = 0,
@@ -32,4 +33,5 @@ enum class Command : uint8_t {
     CaptureStop,       // Stop telemetry capture
     CapturePlay,       // Dump captured telemetry as CSV
     CaptureDelete,     // Delete captured telemetry files
+    StatsToggle,       // Toggle stats overlay on display
 };

@@ -5,28 +5,35 @@
 
 /**
  * Cartesian grid effect - renders straight grid lines in polar display
+ * with anti-aliasing experiments
  *
- * Validates coordinate system mapping by drawing vertical and horizontal
- * grid lines at regular intervals. Arrow keys shift the grid pattern to
- * test alignment behavior.
+ * Features:
+ * - Multiple AA techniques (SDF linear, smoothstep, binary/no-AA)
+ * - Tunable feather width
+ * - Automatic slow animation (drift and rotation)
  *
- * Key design:
- * - Origin (0,0) at true center of display (in the hole)
- * - Grid spans approximately -44 to +44 in both x and y
- * - ~44 pixels from center to edge: 40 real LEDs + ~4 "virtual" hole pixels
- * - Arrow keys shift grid lines (left/right for x, up/down for y)
+ * Controls:
+ * - up/down: Adjust AA feather width
+ * - left/right: Cycle through AA techniques
  */
 class CartesianGrid : public Effect {
 public:
     void render(RenderContext& ctx) override;
-    void up() override;    // Shift grid up (y+)
-    void down() override;  // Shift grid down (y-)
-    void right() override;   // Shift grid right (x+)
-    void left() override;   // Shift grid left (x-)
+    void up() override;    // Increase feather width (softer AA)
+    void down() override;  // Decrease feather width (sharper AA)
+    void right() override; // Next AA technique
+    void left() override;  // Previous AA technique
 
 private:
-    int xOffset = 0;  // Grid horizontal shift
-    int yOffset = 0;  // Grid vertical shift
+    enum class AAMode {
+        SDF_LINEAR = 0,    // SDF with linear ramp
+        SDF_SMOOTHSTEP,    // SDF with smoothstep (Hermite curve)
+        BINARY_NO_AA,      // Original binary (no AA)
+        MODE_COUNT
+    };
+
+    AAMode aaMode = AAMode::SDF_LINEAR;
+    float aaFeatherWidth = 2.3f;  // Tunable AA transition width
 };
 
 #endif // CARTESIAN_GRID_H

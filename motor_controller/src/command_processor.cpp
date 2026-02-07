@@ -50,6 +50,7 @@ void processCommand(Command cmd) {
         case Command::CaptureStop:   captureStop(); break;
         // CapturePlay removed - use `pov telemetry dump` CLI instead
         case Command::CaptureDelete: captureDelete(); break;
+        case Command::StatsToggle: sendStatsToggle(); break;
         case Command::None:
         default:
             break;

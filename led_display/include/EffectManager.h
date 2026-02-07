@@ -23,6 +23,7 @@ enum class EffectCommandType : uint8_t {
     EFFECT_DOWN = 7,
     DISPLAY_POWER = 8,
     EFFECT_ENTER = 9,
+    STATS_TOGGLE = 10,
 };
 
 /**
@@ -153,6 +154,10 @@ public:
                         effects[currentIndex]->onDisplayPower(cmd.value != 0);
                     }
                     break;
+                case EffectCommandType::STATS_TOGGLE:
+                    _statsEnabled = !_statsEnabled;
+                    ESP_LOGI(EFFECT_MGR_TAG, "Stats overlay -> %s", _statsEnabled ? "ON" : "OFF");
+                    break;
             }
         }
     }
@@ -281,6 +286,11 @@ public:
      */
     bool isDisplayEnabled() const { return displayEnabled.load(); }
 
+    /**
+     * Check if stats overlay is enabled
+     */
+    bool isStatsEnabled() const { return _statsEnabled; }
+
 private:
     Effect* effects[MAX_EFFECTS];
     uint8_t effectCount;
@@ -288,6 +298,7 @@ private:
     uint8_t brightness;       // 0-10 scale
     QueueHandle_t commandQueue;
     std::atomic<bool> displayEnabled{true};  // Power state (true = render, false = off)
+    bool _statsEnabled{false};  // Stats overlay toggle
 };
 
 #endif // EFFECT_MANAGER_H

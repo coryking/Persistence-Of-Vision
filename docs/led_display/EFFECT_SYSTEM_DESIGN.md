@@ -99,6 +99,7 @@ uint32_t  timestampUs;         // This frame's wall-clock timestamp in µs
 uint32_t  frameDeltaUs;        // Microseconds since previous render (0 on first frame)
 period_t  revolutionPeriodUs;  // Duration of last revolution in µs
 angle_t   angularSlotWidth;    // Angular resolution per render slot (angle units)
+bool      statsEnabled;        // Stats overlay is currently active
 
 // Convenience getter:
 uint8_t spinSpeed() const;     // Normalized spin speed: 0=stopped, 255=max motor speed
@@ -146,6 +147,39 @@ void fillVirtualGradient(uint8_t start, uint8_t end,
 **When to use virtual pixels vs direct arm access:**
 - **Virtual pixels** (`ctx.virt(v)`) — When you want a unified 40-pixel radial line (gradients, sweeps, radial effects). Simpler but ignores that the 3 pixels per row are at different angles.
 - **Direct arm access** (`ctx.arms[a].pixels[p]`) — When you need each arm's actual angle (noise fields, arc-based effects, anything angle-dependent). More control, more accurate.
+
+---
+
+## 2a. Stats Overlay System
+
+**Toggled with INFO button on IR remote.** When enabled, the system draws diagnostic bars overlaid on the running effect at full brightness (rendered in OutputTask AFTER brightness is applied to the effect).
+
+### Reserved Display Space
+
+When `ctx.statsEnabled` is true, effects should avoid these regions to prevent interference:
+
+- **System overlay:** Angular range 0°-180°, rings 3-39
+  - Angular resolution indicator (0°, width = 4× slot width)
+  - Render time bar (~30°, width ~3°)
+  - Output time bar (~45°, width ~3°)
+
+- **Effect debug space:** Rings 0-2 (all angles), angular range 180°-360° (all rings)
+  - Effects may draw their own debug visuals here when `ctx.statsEnabled` is true
+  - Example: CartesianGrid draws coordinate axes in this space
+
+**Implementation note:** The system overlay is rendered by `StatsOverlay::render()` in `OutputTask.cpp` AFTER `copyPixelsToStrip()` applies brightness. This ensures stats bars are always full brightness regardless of the global brightness setting.
+
+### Checking Stats State
+
+```cpp
+void render(RenderContext& ctx) override {
+    // Normal effect rendering...
+
+    if (ctx.statsEnabled) {
+        // Draw effect-specific debug info in rings 0-2 or 180°-360°
+    }
+}
+```
 
 ---
 

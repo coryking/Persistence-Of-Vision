@@ -4,6 +4,8 @@
 #include "FrameProfiler.h"
 #include "RotorDiagnosticStats.h"
 #include "RevolutionTimer.h"
+#include "EffectManager.h"
+#include "StatsOverlay.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include <NeoPixelBus.h>
@@ -14,6 +16,10 @@ OutputTask outputTask;
 
 extern NeoPixelBus<DotStarLbgrFeature, DotStarSpi40MhzMethod> strip;
 extern RevolutionTimer revTimer;
+extern EffectManager effectManager;
+
+// Stats overlay instance
+static StatsOverlay statsOverlay;
 
 void OutputTask::start() {
     xTaskCreatePinnedToCore(taskFunction, "output", STACK_SIZE, this, PRIORITY, &handle_, CORE);
@@ -58,6 +64,12 @@ void OutputTask::run() {
 
         // 3. Copy to strip's internal buffer
         copyPixelsToStrip(*rb.ctx, strip);
+
+        // 3.5. Render stats overlay if enabled (after brightness, so stats are full brightness)
+        if (effectManager.isStatsEnabled()) {
+            statsOverlay.render(*rb.ctx, strip, revTimer);
+        }
+
         g_outputProfiler.markCopyEnd();
 
         int64_t copyEnd = esp_timer_get_time();

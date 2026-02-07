@@ -65,6 +65,7 @@ After masking the toggle bit (`code & 0x07FF`), these are the codes to match:
 | 0 | `0xF00` | `0x300` | 10 |
 | VOL+ | `0xF10` | `0x310` | Brightness ↑ |
 | VOL- | `0x711` | `0x311` | Brightness ↓ |
+| INFO | `0x715` | `0x315` | Toggle stats overlay |
 
 ### Display Prep Work
 

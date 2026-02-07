@@ -104,6 +104,7 @@ void RenderTask::run() {
         wb.ctx->frameDeltaUs = (lastRenderTimeUs != 0) ? nowU32 - lastRenderTimeUs : 0;
         wb.ctx->revolutionPeriodUs = static_cast<period_t>(microsecondsPerRev);
         wb.ctx->angularSlotWidth = target.slotSize;
+        wb.ctx->statsEnabled = effectManager.isStatsEnabled();
         lastRenderTimeUs = nowU32;
 
         // Set arm angles from target - arms[0]=outer, arms[1]=middle(hall), arms[2]=inside

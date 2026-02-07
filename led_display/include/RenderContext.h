@@ -22,6 +22,7 @@ struct RenderContext {
     uint32_t  frameDeltaUs;       // Microseconds since previous render (0 on first frame)
     period_t  revolutionPeriodUs; // Duration of last revolution in µs
     angle_t   angularSlotWidth;   // Angular resolution per render slot (angle units, 10 = 1°)
+    bool      statsEnabled;       // Stats overlay is enabled
 
     // === Convenience ===
 

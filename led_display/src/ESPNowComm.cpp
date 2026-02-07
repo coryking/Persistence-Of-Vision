@@ -70,6 +70,11 @@ static void onDataRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
             xQueueSend(effectManager.getCommandQueue(), &cmd, 0);
             break;
         }
+        case MSG_STATS_TOGGLE: {
+            EffectCommand cmd = {EffectCommandType::STATS_TOGGLE, 0};
+            xQueueSend(effectManager.getCommandQueue(), &cmd, 0);
+            break;
+        }
         case MSG_RESET_ROTOR_STATS: {
             // Reset diagnostic stats counters
             RotorDiagnosticStats::instance().reset();
