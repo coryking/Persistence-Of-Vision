@@ -74,6 +74,7 @@ See: **16-bit-pipeline-status.md** (comprehensive analysis)
 |------|----------|
 | **16-bit-quick-reference.md** | **🔥 START HERE: TL;DR for 16-bit support, code patterns, recommendations** |
 | **16-bit-pipeline-status.md** | **Comprehensive 16-bit support status, palette precision analysis, recommendations** |
+| **16-bit-palette-implementation-plan.md** | **📋 Implementation plan for local 16-bit palette function (Option A: Minimal)** |
 | 16-bit-primitives.md | FastLED 16-bit API reference (noise, math, easing, HSV16) |
 | 16-bit-pipeline-analysis.md | Options for 16-bit render pipeline with 8+5 output |
 | brightness-and-primitives.md | HD mode overview, CRGB structure, standalone gamma function |
