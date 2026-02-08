@@ -17,6 +17,8 @@ enum MessageType : uint8_t {
     MSG_EFFECT_DOWN = 8,       // Motor Controller -> Display (IR DOWN button)
     MSG_EFFECT_ENTER = 9,      // Motor Controller -> Display (IR ENTER button)
     MSG_STATS_TOGGLE = 15,     // Motor Controller -> Display (IR INFO button - toggle stats overlay)
+    MSG_NEXT_EFFECT = 16,      // Motor Controller -> Display (IR CH_UP button - cycle forward)
+    MSG_PREV_EFFECT = 17,      // Motor Controller -> Display (IR CH_DOWN button - cycle backward)
     // Calibration messages (Display -> Motor Controller)
     MSG_ACCEL_SAMPLES = 10,    // Batched accelerometer samples
     MSG_HALL_EVENT = 11,       // Individual hall trigger event
@@ -117,6 +119,16 @@ struct EffectEnterMsg {
 // Motor Controller -> Display: IR INFO button (toggle stats overlay)
 struct StatsToggleMsg {
     uint8_t type = MSG_STATS_TOGGLE;
+} __attribute__((packed));
+
+// Motor Controller -> Display: IR CH_UP button (cycle to next effect)
+struct NextEffectMsg {
+    uint8_t type = MSG_NEXT_EFFECT;
+} __attribute__((packed));
+
+// Motor Controller -> Display: IR CH_DOWN button (cycle to previous effect)
+struct PrevEffectMsg {
+    uint8_t type = MSG_PREV_EFFECT;
 } __attribute__((packed));
 
 // Motor Controller -> Display: Power on/off control

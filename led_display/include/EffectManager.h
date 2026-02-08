@@ -24,6 +24,8 @@ enum class EffectCommandType : uint8_t {
     DISPLAY_POWER = 8,
     EFFECT_ENTER = 9,
     STATS_TOGGLE = 10,
+    NEXT_EFFECT = 11,
+    PREV_EFFECT = 12,
 };
 
 /**
@@ -60,7 +62,7 @@ struct EffectCommand {
  */
 class EffectManager {
 public:
-    static constexpr uint8_t MAX_EFFECTS = 12;
+    static constexpr uint8_t MAX_EFFECTS = 16;
     static constexpr uint8_t DEFAULT_BRIGHTNESS = 5;  // 0-10 scale
 
     EffectManager() : effectCount(0), currentIndex(0), brightness(DEFAULT_BRIGHTNESS), commandQueue(nullptr) {}
@@ -158,6 +160,12 @@ public:
                     _statsEnabled = !_statsEnabled;
                     ESP_LOGI(EFFECT_MGR_TAG, "Stats overlay -> %s", _statsEnabled ? "ON" : "OFF");
                     break;
+                case EffectCommandType::NEXT_EFFECT:
+                    nextEffect();
+                    break;
+                case EffectCommandType::PREV_EFFECT:
+                    prevEffect();
+                    break;
             }
         }
     }
@@ -224,6 +232,26 @@ public:
         RotorDiagnosticStats::instance().setEffectNumber(effectNumber);
 
         ESP_LOGI(EFFECT_MGR_TAG, "Effect -> %d", effectNumber);
+    }
+
+    /**
+     * Cycle to next effect with wrap-around
+     * Wraps from last effect back to first
+     */
+    void nextEffect() {
+        if (effectCount == 0) return;
+        uint8_t newIndex = (currentIndex + 1) % effectCount;
+        changeEffect(newIndex + 1);  // Convert to 1-based for changeEffect
+    }
+
+    /**
+     * Cycle to previous effect with wrap-around
+     * Wraps from first effect back to last
+     */
+    void prevEffect() {
+        if (effectCount == 0) return;
+        uint8_t newIndex = (currentIndex + effectCount - 1) % effectCount;
+        changeEffect(newIndex + 1);  // Convert to 1-based for changeEffect
     }
 
     /**

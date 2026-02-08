@@ -64,11 +64,12 @@ The IR remote on the motor controller sends commands via ESP-NOW to the display.
 
 | Remote Button | Effect Method | Usage Examples |
 |---------------|---------------|----------------|
-| **RIGHT** | `right()` | NoiseField: next contrast mode; Radar: next phosphor type; CartesianGrid: grid offset X+ |
-| **LEFT** | `left()` | NoiseField: prev contrast mode; Radar: prev phosphor type; CartesianGrid: grid offset X- |
-| **UP** | `up()` | NoiseField: next palette; PolarGlobe: next planet; CartesianGrid: grid offset Y+ |
-| **DOWN** | `down()` | NoiseField: prev palette; PolarGlobe: prev planet; CartesianGrid: grid offset Y- |
-| **ENTER** | `enter()` | (unmapped currently — available for effect use) |
+| **RIGHT** | `right()` | NoiseField: next contrast mode; Radar: next phosphor type; Kaleidoscope: next pattern |
+| **LEFT** | `left()` | NoiseField: prev contrast mode; Radar: prev phosphor type; Kaleidoscope: prev pattern |
+| **UP** | `up()` | NoiseField: next palette; PolarGlobe: next planet; Kaleidoscope: next palette |
+| **DOWN** | `down()` | NoiseField: prev palette; PolarGlobe: prev planet; Kaleidoscope: prev palette |
+| **ENTER** | `enter()` | Kaleidoscope: cycle fold count; CartesianGrid: toggle SDF anti-aliasing |
+| **INFO** | (stats overlay) | Toggle rotor diagnostic stats overlay (handled by EffectManager) |
 | **Number 1-9, 0** | (system) | Select effect directly (1-based registration order; 0 = effect 10) |
 | **Vol Up/Down** | (system) | Brightness control (0-10 scale, handled by EffectManager) |
 | **Power** | (system) | Display on/off toggle (also triggers `onDisplayPower()` notification) |
@@ -380,23 +381,60 @@ Let the user cycle through variations via IR remote. Convention: left/right = vi
 
 ```cpp
 // Left/Right arrows: cycle how it looks (rendering variation)
-void nextMode() override {
+void right() override {
     contrastMode = (contrastMode + 1) % MODE_COUNT;
 }
-void prevMode() override {
+void left() override {
     contrastMode = (contrastMode + MODE_COUNT - 1) % MODE_COUNT;
 }
 
 // Up/Down arrows: cycle what is shown (content/data)
-void paramUp() override {
+void up() override {
     paletteIndex = (paletteIndex + 1) % PALETTE_COUNT;
-    palette = *PALETTES[paletteIndex];
+    palette = PALETTES[paletteIndex];
 }
-void paramDown() override {
+void down() override {
     paletteIndex = (paletteIndex + PALETTE_COUNT - 1) % PALETTE_COUNT;
-    palette = *PALETTES[paletteIndex];
+    palette = PALETTES[paletteIndex];
 }
 ```
+
+### Pattern: Shared Palette Collection
+
+**Source:** `include/effects/SharedPalettes.h`
+
+Many effects use color palettes. Instead of duplicating palette definitions, use the shared collection:
+
+```cpp
+#include "effects/SharedPalettes.h"
+
+class MyEffect : public Effect {
+    uint8_t paletteIndex = 0;
+    CRGBPalette16 palette;
+
+    void begin() override {
+        palette = SharedPalettes::PALETTES[paletteIndex];
+    }
+
+    void up() override {
+        paletteIndex = (paletteIndex + 1) % SharedPalettes::PALETTE_COUNT;
+        palette = SharedPalettes::PALETTES[paletteIndex];
+        ESP_LOGI(TAG, "Palette -> %s", SharedPalettes::PALETTE_NAMES[paletteIndex]);
+    }
+
+    void down() override {
+        paletteIndex = (paletteIndex + SharedPalettes::PALETTE_COUNT - 1) % SharedPalettes::PALETTE_COUNT;
+        palette = SharedPalettes::PALETTES[paletteIndex];
+        ESP_LOGI(TAG, "Palette -> %s", SharedPalettes::PALETTE_NAMES[paletteIndex]);
+    }
+};
+```
+
+**Palette categories:**
+- **Palettes 0-11:** Dark-centered custom palettes — mostly black with bright pops. Create stained-glass geometry on geometric effects (dark veins), classic noise fields on noise effects.
+- **Palettes 12-17:** Full-spectrum palettes (FastLED built-ins + Acid) — vibrant colors throughout. Create dominant-color noise on noise effects, vibrant geometric patterns with no dark veins.
+
+**Same palette, different interpretation:** NoiseField with "Ember" (dark-centered) creates black with fiery pops. Kaleidoscope with "Ember" creates stained-glass star patterns with dark veins. NoiseField with "Rainbow" (full-spectrum) creates colorful noise. Kaleidoscope with "Rainbow" creates vibrant rainbow geometric patterns. This is a feature, not a bug.
 
 ---
 

@@ -14,6 +14,7 @@
 // 20: EffectEnter
 //   21: CaptureRecord, 22: CaptureStop, 23: CapturePlay, 24: CaptureDelete
 //   25: StatsToggle
+//   26: NextEffect, 27: PrevEffect
 
 enum class Command : uint8_t {
     None = 0,
@@ -34,4 +35,6 @@ enum class Command : uint8_t {
     CapturePlay,       // Dump captured telemetry as CSV
     CaptureDelete,     // Delete captured telemetry files
     StatsToggle,       // Toggle stats overlay on display
+    NextEffect,        // IR CH_UP button - cycle to next effect
+    PrevEffect,        // IR CH_DOWN button - cycle to previous effect
 };

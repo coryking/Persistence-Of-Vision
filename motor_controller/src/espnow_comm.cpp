@@ -221,6 +221,22 @@ void sendStatsToggle() {
     }
 }
 
+void sendNextEffect() {
+    NextEffectMsg msg;
+    esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
+    if (result == ESP_OK) {
+        Serial.println("[ESPNOW] Sent IR CH_UP (next effect)");
+    }
+}
+
+void sendPrevEffect() {
+    PrevEffectMsg msg;
+    esp_err_t result = esp_now_send(DISPLAY_MAC, reinterpret_cast<uint8_t*>(&msg), sizeof(msg));
+    if (result == ESP_OK) {
+        Serial.println("[ESPNOW] Sent IR CH_DOWN (prev effect)");
+    }
+}
+
 void printEspNowStats() {
     Serial.printf("[ESPNOW] RX stats: hall=%u, accel_pkts=%u, accel_samples=%u, last_len=%u\n",
                   s_rxHallPackets, s_rxAccelPackets, s_rxAccelSamples, (unsigned)s_lastAccelLen);

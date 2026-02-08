@@ -51,6 +51,8 @@ void processCommand(Command cmd) {
         // CapturePlay removed - use `pov telemetry dump` CLI instead
         case Command::CaptureDelete: captureDelete(); break;
         case Command::StatsToggle: sendStatsToggle(); break;
+        case Command::NextEffect: sendNextEffect(); break;
+        case Command::PrevEffect: sendPrevEffect(); break;
         case Command::None:
         default:
             break;

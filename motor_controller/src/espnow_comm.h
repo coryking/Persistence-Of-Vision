@@ -34,6 +34,12 @@ void sendEffectEnter();
 // Send IR INFO button to display (toggle stats overlay)
 void sendStatsToggle();
 
+// Send IR CH_UP button to display (cycle to next effect)
+void sendNextEffect();
+
+// Send IR CH_DOWN button to display (cycle to previous effect)
+void sendPrevEffect();
+
 // Print ESP-NOW receive statistics (for debugging) - DEPRECATED, use getters below
 void printEspNowStats();
 

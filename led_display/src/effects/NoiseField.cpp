@@ -163,25 +163,13 @@ void NoiseField::left() {
 }
 
 void NoiseField::up() {
-    paletteIndex = (paletteIndex + 1) % NOISE_PALETTE_COUNT;
-    palette = *NOISE_PALETTES[paletteIndex];
-    const char* paletteNames[] = {
-        "Ember", "Abyss", "Void", "Firefly",        // Original
-        "Sunset", "Ice", "Gold", "Lava",            // New hue families
-        "FireIce", "Synthwave",                     // Dual-hue
-        "EmberSubtle", "NeonAbyss"                  // Variations
-    };
-    ESP_LOGI(TAG, "Palette -> %s (%d)", paletteNames[paletteIndex], paletteIndex);
+    paletteIndex = (paletteIndex + 1) % SharedPalettes::PALETTE_COUNT;
+    palette = SharedPalettes::PALETTES[paletteIndex];
+    ESP_LOGI(TAG, "Palette -> %s (%d)", SharedPalettes::PALETTE_NAMES[paletteIndex], paletteIndex);
 }
 
 void NoiseField::down() {
-    paletteIndex = (paletteIndex + NOISE_PALETTE_COUNT - 1) % NOISE_PALETTE_COUNT;
-    palette = *NOISE_PALETTES[paletteIndex];
-    const char* paletteNames[] = {
-        "Ember", "Abyss", "Void", "Firefly",        // Original
-        "Sunset", "Ice", "Gold", "Lava",            // New hue families
-        "FireIce", "Synthwave",                     // Dual-hue
-        "EmberSubtle", "NeonAbyss"                  // Variations
-    };
-    ESP_LOGI(TAG, "Palette -> %s (%d)", paletteNames[paletteIndex], paletteIndex);
+    paletteIndex = (paletteIndex + SharedPalettes::PALETTE_COUNT - 1) % SharedPalettes::PALETTE_COUNT;
+    palette = SharedPalettes::PALETTES[paletteIndex];
+    ESP_LOGI(TAG, "Palette -> %s (%d)", SharedPalettes::PALETTE_NAMES[paletteIndex], paletteIndex);
 }
