@@ -27,6 +27,7 @@
 #include "effects/PulseChaser.h"
 #include "effects/MomentumFlywheel.h"
 #include "effects/CalibrationEffect.h"
+#include "effects/Kaleidoscope.h"
 #include "Imu.h"
 #include "TelemetryTask.h"
 #include "timing_utils.h"
@@ -77,6 +78,7 @@ ArmAlignment armAlignmentEffect;
 PulseChaser pulseChaserEffect;
 MomentumFlywheel momentumFlywheelEffect;
 CalibrationEffect calibrationEffect;
+Kaleidoscope kaleidoscopeEffect;
 
 // Effect manager
 EffectManager effectManager;
@@ -168,7 +170,7 @@ void setupLedStrip() {
         for (uint16_t arm = 0; arm < HardwareConfig::NUM_ARMS; arm++) {
             uint8_t colorIdx = (arm + flash) % 3;  // Rotate colors each flash
             uint16_t startLed = HardwareConfig::ARM_START[arm];
-            for (uint16_t led = 0; led < HardwareConfig::LEDS_PER_ARM; led++) {
+            for (uint16_t led = 0; led < HardwareConfig::ARM_LED_COUNT[arm]; led++) {
                 strip.SetPixelColor(startLed + led, bootColors[colorIdx]);
             }
         }
@@ -227,13 +229,14 @@ void registerEffects() {
     effectManager.registerEffect(&projectionTestEffect);  // Effect 3 - was solidArmsEffect
     effectManager.registerEffect(&cartesianGridEffect);   // Effect 4 - Cartesian grid validation
     effectManager.registerEffect(&polarGlobeEffect);      // Effect 5 - Earth from north pole
-    effectManager.registerEffect(&rpmArcEffect);
+    effectManager.registerEffect(&kaleidoscopeEffect);    // Effect 6 - N-fold symmetric geometric patterns
     effectManager.registerEffect(&perArmBlobsEffect);
     effectManager.registerEffect(&virtualBlobsEffect);
     effectManager.registerEffect(&armAlignmentEffect);
     effectManager.registerEffect(&pulseChaserEffect);
     effectManager.registerEffect(&momentumFlywheelEffect);
-    effectManager.registerEffect(&calibrationEffect);  // Effect 10 for rotor balancing
+    effectManager.registerEffect(&calibrationEffect);
+    effectManager.registerEffect(&rpmArcEffect);
 
     ESP_LOGI(TAG, "Registered %d effects", effectManager.getEffectCount());
 }
