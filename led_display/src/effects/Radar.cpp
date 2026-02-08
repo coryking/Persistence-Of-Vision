@@ -168,14 +168,14 @@ Blip* Radar::findFreeBlip() {
 // Phosphor Color Lookup
 // ============================================================
 
-CRGB Radar::getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs, bool forSweep) const {
+CRGB16 Radar::getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs, bool forSweep) const {
     if (ageUs >= maxAgeUs) {
-        return CRGB::Black;
+        return CRGB16::Black;
     }
 
-    // Map age to 0-255 palette index
-    // 0 = fresh (bright), 255 = fully decayed (black)
-    uint8_t paletteIndex = static_cast<uint8_t>((ageUs * 255ULL) / maxAgeUs);
+    // Map age to 16-bit palette index for smooth blending
+    // 0 = fresh (bright), 65535 = fully decayed (black)
+    uint16_t paletteIndex = static_cast<uint16_t>((ageUs * 65535ULL) / maxAgeUs);
 
     // Select palette: sweep uses dimmer palette, blips use full brightness
     const CRGBPalette256& palette = forSweep
@@ -184,7 +184,7 @@ CRGB Radar::getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs, bool forSw
 
     // LINEARBLEND_NOWRAP prevents wrapping from index 255 back to 0
     // (default LINEARBLEND would blend black→white at end of palette)
-    return ColorFromPalette(palette, paletteIndex, 255, LINEARBLEND_NOWRAP);
+    return ColorFromPalette16(palette, paletteIndex, 255, LINEARBLEND_NOWRAP);
 }
 
 // ============================================================
@@ -365,7 +365,7 @@ void IRAM_ATTR Radar::render(RenderContext& ctx) {
 
         for (int led = 0; led < HardwareConfig::ARM_LED_COUNT[armIdx]; led++) {
             // Start with black
-            CRGB color = CRGB::Black;
+            CRGB16 color = CRGB16::Black;
 
             // === Layer 1: Phosphor sweep trail ===
             // Compute angular distance from sweep to this arm position

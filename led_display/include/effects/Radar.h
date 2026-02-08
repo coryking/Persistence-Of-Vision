@@ -120,9 +120,9 @@ private:
      * @param ageUs Age of the phosphor in microseconds
      * @param maxAgeUs Maximum lifetime before fully dark
      * @param forSweep true = use dim sweep palette, false = use bright blip palette
-     * @return CRGB color from palette lookup
+     * @return CRGB16 color from palette lookup
      */
-    CRGB getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs, bool forSweep) const;
+    CRGB16 getPhosphorColor(timestamp_t ageUs, timestamp_t maxAgeUs, bool forSweep) const;
 
     /**
      * Pre-compute blip contributions into blipAccum buffer.
@@ -142,7 +142,7 @@ private:
 
     // === Blip accumulation buffer ===
     // Pre-computed blip colors per LED, filled by renderBlipsToBuffer()
-    CRGB blipAccum[HardwareConfig::NUM_ARMS][HardwareConfig::LEDS_PER_ARM];
+    CRGB16 blipAccum[HardwareConfig::NUM_ARMS][HardwareConfig::LEDS_PER_ARM];
 
     /**
      * Initialize or respawn a world target at random position/velocity

@@ -2,6 +2,8 @@
 #define RENDER_CONTEXT_H
 
 #include <FastLED.h>
+#include "fl_extensions/crgb16.h"
+#include "fl_extensions/palette16.h"
 #include "geometry.h"
 #include "hardware_config.h"
 
@@ -39,7 +41,7 @@ struct RenderContext {
     // === The Three Arms (physical reality) ===
     struct Arm {
         angle_t angle;            // THIS arm's angular position (3600 = 360°)
-        CRGB pixels[HardwareConfig::LEDS_PER_ARM];  // THIS arm's LEDs: [0]=hub, [LEDS_PER_ARM-1]=tip
+        CRGB16 pixels[HardwareConfig::LEDS_PER_ARM];  // THIS arm's LEDs: [0]=hub, [LEDS_PER_ARM-1]=tip
     } arms[3];                    // [0]=outer/ARM3(+240°,14LEDs), [1]=middle/ARM2(0°/hall,13LEDs), [2]=inside/ARM1(+120°,13LEDs)
 
     // === Virtual Pixel Access ===
@@ -98,11 +100,11 @@ public:
     /**
      * Access virtual pixel by position (0-39)
      */
-    CRGB& virt(uint8_t v) {
+    CRGB16& virt(uint8_t v) {
         return arms[VIRT_ARM[v]].pixels[VIRT_PIXEL[v]];
     }
 
-    const CRGB& virt(uint8_t v) const {
+    const CRGB16& virt(uint8_t v) const {
         return arms[VIRT_ARM[v]].pixels[VIRT_PIXEL[v]];
     }
 
@@ -113,7 +115,7 @@ public:
      * @param end Last virtual pixel (exclusive)
      * @param color Color to fill
      */
-    void fillVirtual(uint8_t start, uint8_t end, CRGB color) {
+    void fillVirtual(uint8_t start, uint8_t end, const CRGB16& color) {
         for (uint8_t v = start; v < end && v < HardwareConfig::TOTAL_LOGICAL_LEDS; v++) {
             virt(v) = color;
         }
@@ -135,7 +137,7 @@ public:
         if (end <= start) return;
         for (uint8_t v = start; v < end && v < HardwareConfig::TOTAL_LOGICAL_LEDS; v++) {
             uint8_t palIdx = map(v - start, 0, end - start - 1, paletteStart, paletteEnd);
-            virt(v) = ColorFromPalette(palette, palIdx);
+            virt(v) = ColorFromPalette16(palette, palIdx);
         }
     }
 
@@ -144,7 +146,7 @@ public:
      */
     void clear() {
         for (auto& arm : arms) {
-            fill_solid(arm.pixels, HardwareConfig::LEDS_PER_ARM, CRGB::Black);
+            fill_solid(arm.pixels, HardwareConfig::LEDS_PER_ARM, CRGB16::Black);
         }
     }
 };

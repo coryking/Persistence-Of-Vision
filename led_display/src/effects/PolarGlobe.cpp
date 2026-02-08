@@ -60,7 +60,7 @@ void PolarGlobe::render(RenderContext& ctx) {
             if (textureRow >= TEXTURE_HEIGHT) textureRow = TEXTURE_HEIGHT - 1;
 
             // Read from selected texture
-            CRGB color;
+            CRGB16 color;
             switch (textureIndex) {
                 case 0:  color = polar_earth_day[textureRow][textureCol]; break;
                 case 1:  color = polar_earth_night[textureRow][textureCol]; break;

@@ -114,8 +114,8 @@ uint8_t spinSpeed() const;     // Normalized spin speed: 0=stopped, 255=max moto
 
 ```cpp
 struct Arm {
-    angle_t angle;                               // THIS arm's angular position (3600 = 360°)
-    CRGB pixels[HardwareConfig::LEDS_PER_ARM];   // THIS arm's LEDs: [0]=hub, [max]=tip
+    angle_t angle;                                 // THIS arm's angular position (3600 = 360°)
+    CRGB16 pixels[HardwareConfig::LEDS_PER_ARM];   // THIS arm's LEDs: [0]=hub, [max]=tip
 } arms[3];
 ```
 
@@ -131,9 +131,9 @@ Arm assignments (see `include/hardware_config.h` for authoritative layout):
 The three arms create 40 interlaced concentric rings when spinning. Virtual pixels number these 0 (innermost) to 39 (outermost) in radial order.
 
 ```cpp
-CRGB& virt(uint8_t v);     // Access virtual pixel 0-39
+CRGB16& virt(uint8_t v);   // Access virtual pixel 0-39
 void clear();               // All pixels to black
-void fillVirtual(uint8_t start, uint8_t end, CRGB color);
+void fillVirtual(uint8_t start, uint8_t end, CRGB16 color);
 void fillVirtualGradient(uint8_t start, uint8_t end,
                          const CRGBPalette16& palette,
                          uint8_t paletteStart = 0, uint8_t paletteEnd = 255);
@@ -306,7 +306,7 @@ void render(RenderContext& ctx) override {
         if (intensity == 0) continue;
 
         for (int p = 0; p < HardwareConfig::ARM_LED_COUNT[a]; p++) {
-            CRGB color = ColorFromPalette(palette, p * 8);
+            CRGB16 color = ColorFromPalette16(palette, p * 8);
             color.nscale8(intensity);
             arm.pixels[p] = color;
         }
@@ -322,7 +322,7 @@ When you don't care about per-arm angles (e.g., radial-only effects):
 void render(RenderContext& ctx) override {
     for (uint8_t v = 0; v < HardwareConfig::TOTAL_LOGICAL_LEDS; v++) {
         uint8_t palIdx = map(v, 0, HardwareConfig::TOTAL_LOGICAL_LEDS - 1, 0, 255);
-        ctx.virt(v) = ColorFromPalette(palette, palIdx);
+        ctx.virt(v) = ColorFromPalette16(palette, palIdx);
     }
 }
 ```
@@ -340,7 +340,7 @@ void render(RenderContext& ctx) override {
         for (int p = 0; p < HardwareConfig::ARM_LED_COUNT[a]; p++) {
             float height = static_cast<float>(p) / HardwareConfig::ARM_LED_COUNT[a];
             uint16_t noiseVal = noiseCylinderPalette16(angle, height, timeOffset, radius);
-            arm.pixels[p] = ColorFromPalette(palette, noiseVal >> 8);
+            arm.pixels[p] = ColorFromPalette16(palette, noiseVal);
         }
     }
 }
@@ -438,7 +438,55 @@ class MyEffect : public Effect {
 
 ---
 
-## 8. The PWM Brightness Floor
+## 8. fl_extensions Library
+
+**Source:** `include/fl_extensions/` directory
+
+FastLED extensions designed as future PR candidates. These provide 16-bit color processing.
+
+### CRGB16 Type
+
+16-bit RGB color (0-65535 per channel) for high-precision rendering:
+
+```cpp
+CRGB16 color;                      // Default: black
+CRGB16 color(32768, 65535, 0);    // 16-bit RGB values
+CRGB16 color = CRGB(255, 128, 0); // Implicit 8→16 bit promotion (×257)
+CRGB16 color = CHSV(160, 255, 255); // HSV conversion then promotion
+CRGB16 color = CRGB::Red;         // HTML color code support
+
+color.nscale8(brightness);         // Scale by 8-bit value (0-255)
+color += otherColor;               // Saturating add (clamps at 65535)
+CRGB output = color.toCRGB();      // Downsampling to 8-bit (>>8)
+```
+
+**Why 16-bit?** Reduces banding in gradients and preserves precision through brightness scaling before final hardware downsampling to 8-bit RGB + 5-bit brightness.
+
+**Implicit conversions:** CRGB16 accepts CRGB (8-bit), CHSV, and CRGB::HTMLColorCode automatically.
+
+**Direct assignment from CHSV/CRGB:** You can write `arm.pixels[led] = CHSV(hue, 255, brightness)` directly. The CRGB16 constructor automatically handles the conversion.
+
+### ColorFromPalette16
+
+16-bit palette lookup - reads 8-bit palette entries, promotes to 16-bit, interpolates with 16-bit precision:
+
+```cpp
+CRGB16 color = ColorFromPalette16(palette, index);  // index 0-65535
+CRGB16 color = ColorFromPalette16(palette, index, brightness, LINEARBLEND);
+```
+
+Palette declarations don't change (still 8-bit). Only the output is 16-bit.
+
+### blend16 and fill_solid
+
+```cpp
+CRGB16 result = blend16(color1, color2, amount);  // amount 0-255
+fill_solid(pixels, count, CRGB16::Black);         // CRGB16* overload
+```
+
+---
+
+## 9. The PWM Brightness Floor
 
 PWM dimming on a spinning display creates a unique visual constraint. The LED isn't "dim" — it's fully bright for a shorter duration within each PWM cycle. At low brightness values on a spinning display, the sparse "on" pulses appear as scattered bright dots rather than smooth dim color.
 
@@ -452,7 +500,7 @@ PWM dimming on a spinning display creates a unique visual constraint. The LED is
 
 ---
 
-## 9. Performance Rules
+## 10. Performance Rules
 
 1. **Use integer angle math** (`angle_t`, 3600 units) not float degrees in render paths
 2. **Use `speedFactor8()` instead of RPM float division** — float division is ~2x slower on ESP32-S3
@@ -467,7 +515,7 @@ See `docs/led_display/ESP32_REFERENCE.md` for ESP32-S3 FPU performance details a
 
 ---
 
-## 10. Polar Texture System (PolarGlobe)
+## 11. Polar Texture System (PolarGlobe)
 
 For pre-computed image-based effects, the project includes a polar texture pipeline:
 
@@ -480,7 +528,7 @@ See `include/effects/PolarGlobe.h` and `docs/led_display/COORDINATE_SYSTEMS.md` 
 
 ---
 
-## 11. Types Reference
+## 12. Types Reference
 
 **Source:** `shared/types.h`
 
@@ -494,7 +542,7 @@ typedef uint16_t angle_t;       // Angle in units (3600 = 360°)
 
 ---
 
-## 12. File Structure
+## 13. File Structure
 
 ```
 include/
@@ -515,7 +563,7 @@ src/
 
 ---
 
-## 13. Checklist for New Effects
+## 14. Checklist for New Effects
 
 - [ ] Class inherits from `Effect`, implements `render(RenderContext& ctx)`
 - [ ] Header in `include/effects/`, source in `src/effects/`

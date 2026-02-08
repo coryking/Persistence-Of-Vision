@@ -117,16 +117,18 @@ void copyPixelsToStrip(const RenderContext& ctx, T_STRIP& ledStrip) {
         for (int p = 0; p < count; p++) {  // Only copy valid LEDs
             int physicalPos = reversed ? (count - 1 - p) : p;
 
-            CRGB color = ctx.arms[a].pixels[p];
+            CRGB16 color = ctx.arms[a].pixels[p];
 
-            // HD gamma decomposition: splits color into 8-bit RGB + 5-bit brightness
+            // Apply brightness scaling (0-255, already gamma-corrected)
+            color.nscale8(scale);
+
+            // 5-bit decomposition: splits 16-bit RGB into 8-bit RGB + 5-bit brightness
             // This gives 31 steps at low brightness instead of 1 step above black
             CRGB output;
             uint8_t brightness_5bit;
-            fl::five_bit_hd_gamma_bitshift(
-                color,
-                CRGB(255, 255, 255),  // no color temp correction
-                scale,                 // global brightness (0-255, already gamma-corrected)
+            fl::five_bit_bitshift(
+                color.r, color.g, color.b,
+                255,  // no color temp correction
                 &output,
                 &brightness_5bit
             );

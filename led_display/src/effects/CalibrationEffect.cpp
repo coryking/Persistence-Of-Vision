@@ -47,7 +47,7 @@ void CalibrationEffect::render(RenderContext& ctx) {
     for (int arm = 0; arm < HardwareConfig::NUM_ARMS; arm++) {
         ctx.arms[arm].pixels[0] = CHSV(m_hue, 255, 128);  // Half brightness to save power
         for (int p = 1; p < HardwareConfig::LEDS_PER_ARM; p++) {
-            ctx.arms[arm].pixels[p] = CRGB::Black;
+            ctx.arms[arm].pixels[p] = CRGB16::Black;
         }
     }
 

@@ -4,16 +4,19 @@
 
 ## Executive Summary
 
-`ColorFromPaletteExtended` does NOT have hidden 16-bit precision. The interpolation math uses 16-bit intermediates but immediately truncates back to 8-bit before returning. Each palette segment produces exactly 256 discrete color values.
+**IMPLEMENTED** — The POV display now has a complete 16-bit rendering pipeline:
 
-**16-bit support in FastLED:**
+- ✅ **CRGB16** — Custom 16-bit RGB type implemented in `fl_extensions/crgb16.h`
+- ✅ **ColorFromPalette16** — True 16-bit palette interpolation using `lerp16by16`
+- ✅ **16-bit effects** — All effects converted to use CRGB16 rendering
+- ✅ **Gamma removed** — Five-bit quantization now happens directly from CRGB16 without gamma
+
+**FastLED 16-bit support status:**
 - ✅ Excellent 16-bit noise functions (`inoise16`, `snoise16`, shape helpers)
 - ✅ Complete 16-bit math primitives (`scale16`, `lerp16by16`, easing functions)
 - ✅ `HSV16` type with 16-bit HSV → 8-bit RGB conversion
 - ✅ 16-bit gamma correction and HD output quantization
-- ❌ No CRGB16 type (16-bit RGB color)
-- ❌ No 16-bit palette interpolation functions
-- **Conclusion:** 16-bit clean rendering requires custom color types and palette interpolation
+- ✅ **Custom CRGB16 and ColorFromPalette16** — Implemented in `fl_extensions/`
 
 ---
 

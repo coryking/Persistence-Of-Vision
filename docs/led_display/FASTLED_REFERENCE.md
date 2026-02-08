@@ -6,6 +6,12 @@ A comprehensive catalog of FastLED's utility functions, math helpers, color tool
 
 > **Note:** We use FastLED for color math and utilities only. Final LED data transfer uses NeoPixelBus via SPI. See AGENTS.md.
 
+**fl_extensions Library:** Functions marked `[fl_extensions]` are project-local extensions in `include/fl_extensions/`. These provide 16-bit color processing and are designed as future FastLED PR candidates. Core fl_extensions functions:
+- `CRGB16` - 16-bit RGB type
+- `ColorFromPalette16()` - 16-bit palette lookup
+- `blend16()` - 16-bit color blending
+- `fill_solid(CRGB16*)` - Fill 16-bit arrays
+
 ---
 
 ## Table of Contents
@@ -361,6 +367,34 @@ struct CRGB {
 
 Constructors: `CRGB(r, g, b)`, `CRGB(0xRRGGBB)`, `CRGB(HTMLColorCode)`, `CRGB(CHSV)`.
 
+### CRGB16 (16-bit RGB) [fl_extensions]
+
+**Header:** `include/fl_extensions/crgb16.h`
+
+16-bit RGB color (0-65535 per channel) for high-precision rendering pipeline.
+
+```cpp
+struct CRGB16 {
+    uint16_t r;  // Red: 0-65535
+    uint16_t g;  // Green: 0-65535
+    uint16_t b;  // Blue: 0-65535
+};
+```
+
+**Constructors:**
+- `CRGB16()` - Default black
+- `CRGB16(r, g, b)` - 16-bit values
+- `CRGB16(CRGB c)` - Implicit 8→16 bit promotion (×257)
+- `CRGB16(CHSV hsv)` - HSV conversion then promotion
+- `CRGB16(HTMLColorCode)` - HTML color code support
+
+**Methods:**
+- `nscale8(scale)` - Scale by 8-bit value (0-255)
+- `operator+=` / `operator-=` - Saturating add/subtract (clamps at 65535/0)
+- `toCRGB()` - Downsample to 8-bit (>>8)
+
+**Why 16-bit?** Reduces banding in gradients and preserves precision through brightness scaling before final hardware downsampling.
+
 ### CHSV / hsv8 (8-bit HSV)
 
 **Header:** `src/fl/hsv.h`
@@ -515,10 +549,13 @@ CRGBPalette16 pal = myPal;
 
 | Function | Description |
 |----------|-------------|
-| `ColorFromPalette(pal, index, brightness, blendType)` | Get interpolated color. `index` 0–255 maps across palette |
-| `ColorFromPaletteExtended(pal, index16, brightness, blendType)` | Higher precision with 16-bit index |
+| `ColorFromPalette(pal, index, brightness, blendType)` | Get interpolated color. `index` 0–255 maps across palette → CRGB |
+| `ColorFromPaletteExtended(pal, index16, brightness, blendType)` | Higher precision with 16-bit index → CRGB |
+| `ColorFromPalette16(pal, index, brightness, blendType)` [fl_extensions] | 16-bit palette lookup → CRGB16. Reads 8-bit palette, promotes to 16-bit, interpolates with 16-bit precision |
 
 **Blend types:** `LINEARBLEND` (smooth, default), `NOBLEND` (stepping), `LINEARBLEND_NOWRAP` (no hue wrap).
+
+**Note:** `ColorFromPalette16` accepts both 8-bit and 16-bit index values. Palettes remain 8-bit (CRGBPalette16, etc.), only the output is 16-bit.
 
 ### Palette Transitions
 
@@ -564,7 +601,8 @@ Over 140 named colors accessible as `CRGB::ColorName`:
 
 | Function | Description |
 |----------|-------------|
-| `fill_solid(leds, n, color)` | Fill array with single color |
+| `fill_solid(leds, n, color)` | Fill CRGB array with single color |
+| `fill_solid(leds, n, color)` [fl_extensions overload] | Fill CRGB16 array with single color |
 | `fill_rainbow(leds, n, startHue, deltaHue)` | Fill with rainbow gradient |
 | `fill_rainbow_circular(leds, n, startHue, reversed)` | Rainbow that wraps end → start |
 
@@ -599,6 +637,7 @@ Over 140 named colors accessible as `CRGB::ColorName`:
 |----------|-------------|
 | `blend(c1, c2, amount)` | Blend two CRGB colors (returns new color) |
 | `blend(c1, c2, amount, direction)` | Blend two CHSV colors with hue direction |
+| `blend16(c1, c2, amount)` [fl_extensions] | Blend two CRGB16 colors with 16-bit precision → CRGB16 |
 | `nblend(existing, overlay, amount)` | Destructive blend into `existing` |
 | `blend(src1, src2, dest, count, amount)` | Blend two arrays into destination |
 | `nblend(existing, overlay, count, amount)` | Destructive array blend |

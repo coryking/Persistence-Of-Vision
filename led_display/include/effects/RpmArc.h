@@ -32,7 +32,7 @@ private:
     static constexpr angle_t ARC_CENTER_UNITS = 0;             // 0 degrees = 0 units
 
     // State
-    CRGB gradient[30];
+    CRGB16 gradient[30];
     angle_t arcWidthUnits;
 
     // Helpers

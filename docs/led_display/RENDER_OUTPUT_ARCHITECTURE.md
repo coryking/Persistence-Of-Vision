@@ -56,7 +56,7 @@ This document describes the dual-core render/output pipeline architecture for th
 
 ### Responsibilities
 
-- **Buffer ownership** - Owns the two RenderContext buffers
+- **Buffer ownership** - Owns the two RenderContext buffers (CRGB16 pixel arrays)
 - **State tracking** - Tracks which buffer is free, ready, or in-use
 - **Synchronization** - Hides FreeRTOS primitives (binary semaphores)
 - **Alternation logic** - Handles ping-pong pattern (buffer 0 → 1 → 0 → 1)
@@ -278,11 +278,13 @@ void RenderTask::run() {
 ### Responsibilities
 
 - **Buffer acquisition** - Get ready buffer from BufferManager
-- **Pixel copy** - Copy from RenderContext to LED strip's internal buffer
+- **Pixel copy** - Transform CRGB16 pixels to hardware format and copy to LED strip's internal buffer
 - **Timing gate** - Wait for target time computed by RenderTask
 - **DMA trigger** - Fire `strip.Show()` at precise moment
 - **Buffer release** - Signal BufferManager that buffer is free
 - **Does NOT** - Compute timing, know about RenderTask, or track buffer indices
+
+**Pixel transformation:** CRGB16 (16-bit RGB) → `nscale8(brightness)` → `five_bit_bitshift(r, g, b, 255, &output, &brightness_5bit)` → hardware format (8-bit RGB + 5-bit brightness). Gamma correction has been removed for now.
 
 ### Task Loop
 
@@ -340,8 +342,8 @@ void OutputTask::run() {
 ### Why Release After Copy?
 
 **The buffer chain:**
-1. RenderContext buffer (in BufferManager) - holds rendered pixels
-2. LED strip's internal buffer (in NeoPixelBus) - copied from RenderContext
+1. RenderContext buffer (in BufferManager) - holds rendered CRGB16 pixels
+2. LED strip's internal buffer (in NeoPixelBus) - transformed and copied from RenderContext
 3. DMA reads from LED strip buffer, not RenderContext
 
 **After `copyPixelsToStrip()`:**

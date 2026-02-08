@@ -73,7 +73,7 @@ void CartesianGrid::render(RenderContext& ctx) {
     float invW = 1.0f / aaFeatherWidth;
 
     // Indicator ring configuration - color based on AA mode
-    CRGB indicatorColor;
+    CRGB16 indicatorColor;
     switch (aaMode) {
         case AAMode::SDF_LINEAR:
             indicatorColor = CRGB(0, 255, 0);  // Green
@@ -194,7 +194,7 @@ void CartesianGrid::render(RenderContext& ctx) {
             }
 
             // Blend background and grid color based on opacity
-            arm.pixels[p] = blend(BACKGROUND_COLOR, GRID_COLOR, opacity);
+            arm.pixels[p] = blend16(BACKGROUND_COLOR, GRID_COLOR, opacity);
         }
     }
 }

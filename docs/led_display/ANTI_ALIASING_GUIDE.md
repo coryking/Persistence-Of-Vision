@@ -118,9 +118,9 @@ uint8_t gridOpacity(uint8_t ring, uint16_t angle_idx) {
 }
 
 // ── Color application ──────────────────────────────────────
-void renderPixel(CRGB* pixel, CRGB bg, CRGB fg, uint8_t ring, uint16_t angle) {
+void renderPixel(CRGB16* pixel, CRGB16 bg, CRGB16 fg, uint8_t ring, uint16_t angle) {
     uint8_t alpha = gridOpacity(ring, angle);
-    *pixel = blend(bg, fg, alpha);  // FastLED blend()
+    *pixel = blend16(bg, fg, (uint16_t)alpha << 8);  // 16-bit blend
 }
 ```
 

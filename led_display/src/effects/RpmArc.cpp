@@ -53,7 +53,7 @@ void RpmArc::render(RenderContext& ctx) {
             uint8_t virtualPos = a + p * 3;
 
             if (virtualPos < pixelCount) {
-                CRGB color = gradient[virtualPos];
+                CRGB16 color = gradient[virtualPos];
                 // Apply arc edge fade (intensity already 0-255)
                 color.nscale8(intensity);
                 arm.pixels[p] = color;

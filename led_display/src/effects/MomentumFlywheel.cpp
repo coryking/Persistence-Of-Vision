@@ -87,7 +87,7 @@ void MomentumFlywheel::render(RenderContext& ctx) {
     if (storedEnergy == 0) return;
 
     // Get color from energy level
-    CHSV color = energyToColor(storedEnergy);
+    CRGB16 color = energyToColor(storedEnergy);
 
     // Fill all pixels with the glow color
     for (int a = 0; a < HardwareConfig::NUM_ARMS; a++) {

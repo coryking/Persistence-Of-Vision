@@ -43,30 +43,26 @@ Fix exists (`FASTLED_ESP32_SPI_BULK_TRANSFER=1`) but needs validation on ESP32-S
 
 See: esp32-spi-analysis.md
 
-### 16-Bit Rendering Support **(NEW - Feb 8, 2026)**
+### 16-Bit Rendering Support **(IMPLEMENTED - Feb 8, 2026)**
 
-FastLED provides extensive 16-bit support for noise and math, but **NOT** for palettes or RGB color output:
+**STATUS:** 16-bit rendering pipeline is fully implemented in the POV display.
 
-**What FastLED Offers:**
+**What We Built:**
+- ✅ **CRGB16** — Custom 16-bit RGB type with operators (`fl_extensions/crgb16.h`)
+- ✅ **ColorFromPalette16** — True 16-bit palette interpolation using `lerp16by16` (`fl_extensions/palette16.h`)
+- ✅ **16-bit effects** — All effects converted to render CRGB16
+- ✅ **Direct quantization** — `five_bit_bitshift` accepts CRGB16, gamma removed
+
+**What FastLED Provides:**
 - ✅ `inoise16()`, `snoise16()` - True 16-bit Perlin/Simplex noise
 - ✅ `HSV16` - 16-bit HSV color type with 8-bit RGB conversion
 - ✅ Shape-based noise helpers (`noiseRingHSV16`, `noiseCylinderHSV16`, `noiseSphereHSV16`)
 - ✅ 16-bit math primitives (`scale16`, `lerp16by16`, easing functions)
-- ✅ 16-bit gamma correction (`gamma_2_8`, `gamma16`)
+- ✅ `five_bit_bitshift` — Accepts 16-bit input for HD107S output (8+5 format)
 
-**What FastLED Does NOT Offer:**
-- ❌ No `CRGB16` type (16-bit RGB color)
-- ❌ No 16-bit palette interpolation (`ColorFromPaletteExtended` is 8-bit only)
-- ❌ Palette interpolation has NO hidden 16-bit precision - simple promotion (× 257) gives zero quality improvement
+**Pipeline:** `Effect → CRGB16 → five_bit_bitshift → 8+5 HD107S output`
 
-**Key Insight:** `ColorFromPaletteExtended` uses 8-bit math (`scale8`) that creates 16-bit intermediates but immediately truncates back to 8-bit. There's no hidden precision being thrown away - each palette segment produces exactly 256 discrete color values.
-
-**Recommendation:** For 16-bit clean rendering pipeline:
-- Use `inoise16()` for noise effects (genuine sub-8-bit precision)
-- Write custom 16-bit palette interpolation using `lerp16by16()` if smooth gradients are critical
-- Use `five_bit_bitshift()` to accept 16-bit input for HD107S output (8+5 format)
-
-See: **16-bit-pipeline-status.md** (comprehensive analysis)
+See: **16-bit-pipeline-status.md** (implementation details), **16-bit-quick-reference.md** (usage patterns)
 
 ## Investigation Files
 

@@ -53,17 +53,19 @@ This correctly produces the DotStar/APA102 frame format with per-LED brightness.
 ```cpp
 // Declarations
 NeoPixelBus<DotStarLbgrFeature, DotStarSpi40MhzMethod> strip(NUM_LEDS);
-CRGB leds[NUM_LEDS];  // FastLED effect buffer
+CRGB16 leds[NUM_LEDS];  // 16-bit effect buffer
 
 // Per-frame processing
 for (int i = 0; i < NUM_LEDS; i++) {
     CRGB output;
     uint8_t brightness;
 
-    fl::five_bit_hd_gamma_bitshift(
-        leds[i],              // Input from effect
-        CRGB(255,255,255),    // No color correction
-        global_brightness,     // 0-255
+    // Direct 16-bit → 8+5 quantization (no gamma)
+    five_bit_bitshift(
+        leds[i].r,            // 16-bit red
+        leds[i].g,            // 16-bit green
+        leds[i].b,            // 16-bit blue
+        31,                   // Max brightness scale
         &output,
         &brightness           // 0-31
     );
@@ -78,7 +80,7 @@ strip.Show();
 
 **FastLED strengths:**
 - Rich effect library (noise, palettes, blur, etc.)
-- HD gamma decomposition algorithm
+- 16-bit rendering primitives (`five_bit_bitshift` accepts 16-bit input)
 - Active development
 
 **NeoPixelBus strengths:**
@@ -86,7 +88,11 @@ strip.Show();
 - Clean per-LED brightness via RgbwColor
 - Reliable on ESP32-S3
 
-**Combined:** Best of both - FastLED effects with NeoPixelBus output efficiency.
+**CRGB16 extensions:**
+- Custom 16-bit color type and palette interpolation
+- End-to-end 16-bit pipeline: `CRGB16 → five_bit_bitshift → 8+5 output`
+
+**Combined:** Best of all worlds - 16-bit effects with NeoPixelBus output efficiency.
 
 ## Test Project Validation Goals
 

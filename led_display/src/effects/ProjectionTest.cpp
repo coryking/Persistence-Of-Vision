@@ -71,12 +71,12 @@ void ProjectionTest::render(RenderContext& ctx) {
             // Start-of-band blending is redundant and causes "ringing"
             constexpr uint8_t EDGE_WIDTH = 32;  // ~12% of band width
 
-            CRGB color = bandColors[bandIndex];
+            CRGB16 color = bandColors[bandIndex];
 
             if (frac > (255 - EDGE_WIDTH) && bandIndex < NUM_BANDS - 1) {
                 // Near end of band - fade toward next band
                 uint8_t blendAmt = ((frac - (255 - EDGE_WIDTH)) * 255) / EDGE_WIDTH;
-                color = blend(bandColors[bandIndex], bandColors[bandIndex + 1], blendAmt);
+                color = blend16(bandColors[bandIndex], bandColors[bandIndex + 1], blendAmt);
             }
 
             arm.pixels[p] = color;

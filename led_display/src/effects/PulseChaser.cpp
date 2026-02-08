@@ -74,7 +74,7 @@ void PulseChaser::render(RenderContext& ctx) {
             intensity = scale8(intensity, fade);
 
             // Create color from hue
-            CRGB color = CHSV(p.hue, 255, intensity);
+            CRGB16 color = CHSV(p.hue, 255, intensity);
 
             // Additive blend to all LEDs in arm (uniform radial fill)
             for (int led = 0; led < HardwareConfig::LEDS_PER_ARM; led++) {

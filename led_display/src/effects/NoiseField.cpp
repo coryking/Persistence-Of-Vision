@@ -123,7 +123,7 @@ void IRAM_ATTR NoiseField::render(RenderContext& ctx) {
             }
 
             // Map to color via palette with linear blending (16-bit precision)
-            CRGB color = ColorFromPaletteExtended(palette, palIdx, 255, LINEARBLEND);
+            CRGB16 color = ColorFromPalette16(palette, palIdx, 255, LINEARBLEND);
             arm.pixels[led] = color;
 #ifdef ENABLE_EFFECT_TIMING
             int64_t noiseEnd = esp_timer_get_time();

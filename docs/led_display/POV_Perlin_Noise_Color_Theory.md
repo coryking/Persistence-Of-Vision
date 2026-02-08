@@ -118,7 +118,7 @@ inline uint16_t noiseCylinderPalette16(float angle, float height, uint32_t time,
 
 ```cpp
 uint16_t paletteIndex = noiseCylinderPalette16(angleRadians, height, timeOffset, radius);
-CRGB color = ColorFromPaletteExtended(palette, paletteIndex, 255, LINEARBLEND);
+CRGB16 color = ColorFromPalette16(palette, paletteIndex, 255, LINEARBLEND);
 ```
 
 ## Palette Definitions

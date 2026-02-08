@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include "esp_timer.h"
 #include <FastLED.h>
+#include "fl_extensions/crgb16.h"
 #include "geometry.h"
 
 // Arm indices (physical position)
@@ -19,7 +20,7 @@
 struct Blob {
     bool active;                  // Is this blob alive?
     uint8_t armIndex;             // Which arm (0-2) this blob belongs to (unused for virtual blobs)
-    CRGB color;                   // Blob's color
+    CRGB16 color;                 // Blob's color
 
     // Angular position (where the arc is)
     angle_t currentStartAngleUnits;  // 0-3600 (0-360°), current position

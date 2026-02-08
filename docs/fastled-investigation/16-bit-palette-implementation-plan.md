@@ -1,12 +1,17 @@
-# 16-Bit Palette Implementation Plan (Option A: Minimal)
+# 16-Bit Palette Implementation Plan
 
 *Implementation Date: February 8, 2026*
 
 ## Overview
 
-Add 16-bit palette interpolation function without creating a CRGB16 type. Implementation uses separate `u16` output parameters, following existing FastLED patterns (e.g., `gamma16()`, `five_bit_bitshift()`).
+**STATUS: IMPLEMENTED** ✅
 
-**Status:** Local implementation for POV project. Can be extracted to FastLED PR later.
+The 16-bit palette system is complete and in production use:
+
+- **CRGB16** — Custom 16-bit RGB type with arithmetic operators
+- **ColorFromPalette16** — Returns `CRGB16` (not pointer-output style)
+- **16-bit index support** — Full 0-65535 palette addressing
+- **Location:** `fl_extensions/` directory (candidates for future FastLED PR)
 
 ---
 
@@ -19,41 +24,27 @@ Add 16-bit palette interpolation function without creating a CRGB16 type. Implem
 
 ---
 
-## API Design
+## Final API Design
 
 ### Function Signature
 
 ```cpp
-namespace fl {
-
-/// Get 16-bit color from palette with true sub-8-bit interpolation
-/// @param pal The palette to extract color from
-/// @param index 16-bit palette position (0-65535)
-/// @param out_r Pointer to output red channel (16-bit)
-/// @param out_g Pointer to output green channel (16-bit)
-/// @param out_b Pointer to output blue channel (16-bit)
-/// @param brightness Global brightness scaling (0-255, default 255)
-/// @param blendType LINEARBLEND or NOBLEND (default LINEARBLEND)
-void ColorFromPalette16(const CRGBPalette16& pal, u16 index,
-                        u16* out_r, u16* out_g, u16* out_b,
-                        u8 brightness = 255,
-                        TBlendType blendType = LINEARBLEND);
-
-}  // namespace fl
+// Returns CRGB16 directly (not pointer-output)
+CRGB16 ColorFromPalette16(const CRGBPalette16& pal, u16 index,
+                          u8 brightness = 255,
+                          TBlendType blendType = LINEARBLEND);
 ```
 
 ### Usage Example
 
 ```cpp
 // Generate 16-bit palette color
-u16 r16, g16, b16;
 u16 palette_index = noise_value;  // 0-65535
-
-fl::ColorFromPalette16(myPalette, palette_index, &r16, &g16, &b16);
+CRGB16 color = ColorFromPalette16(myPalette, palette_index);
 
 // Apply to HD107S LEDs
 u8 brightness_5bit;
-five_bit_bitshift(r16, g16, b16, 31, &leds[i], &brightness_5bit);
+five_bit_bitshift(color.r, color.g, color.b, 31, &leds[i], &brightness_5bit);
 ```
 
 ---

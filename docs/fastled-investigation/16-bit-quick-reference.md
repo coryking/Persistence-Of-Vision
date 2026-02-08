@@ -4,15 +4,32 @@
 
 ## TL;DR
 
-`ColorFromPaletteExtended` has NO hidden 16-bit precision. Simple promotion (× 257) gives **zero quality improvement** - same 256 discrete levels, just numerically scaled up.
+**IMPLEMENTED** — The POV display has custom 16-bit extensions:
 
-**FastLED provides excellent 16-bit noise and math, but NO 16-bit color types or palette functions.**
+- **CRGB16** type (`fl_extensions/crgb16.h`) — 16-bit RGB color with arithmetic operators
+- **ColorFromPalette16** (`fl_extensions/palette16.h`) — True 16-bit palette interpolation
+- **16-bit effects** — All effects use CRGB16 rendering, quantized via `five_bit_bitshift`
+
+**FastLED provides excellent 16-bit noise and math. We extended it with 16-bit color types and palette functions.**
 
 ---
 
 ## Available 16-Bit Features ✅
 
-### Noise Functions
+### Custom Extensions (fl_extensions/)
+```cpp
+// 16-bit RGB color type
+struct CRGB16 { u16 r, g, b; };
+CRGB16 operator+(CRGB16 a, CRGB16 b);
+CRGB16 scale16(CRGB16 c, u16 scale);
+CRGB16 blend16(CRGB16 a, CRGB16 b, u16 amountOfB);
+
+// 16-bit palette interpolation (returns CRGB16)
+CRGB16 ColorFromPalette16(const CRGBPalette16& pal, u16 index,
+                          u8 brightness = 255, TBlendType blendType = LINEARBLEND);
+```
+
+### FastLED Noise Functions
 ```cpp
 u16 inoise16(u32 x, u32 y, u32 z);     // Perlin noise 0-65535
 u16 snoise16(u32 x, u32 y, u32 z);     // Simplex noise 0-65535
@@ -22,23 +39,21 @@ HSV16 noiseRingHSV16(float angle, u32 time, float radius);
 HSV16 noiseCylinderHSV16(float angle, float height, u32 time, float radius);
 ```
 
-### Math Primitives
+### FastLED Math Primitives
 ```cpp
 u16 scale16(u16 i, fract16 scale);          // (i * scale) / 65536
 u16 lerp16by16(u16 a, u16 b, fract16 frac); // 16-bit linear interpolation
 u16 easeInOutCubic16(u16 i);                // 16-bit easing
 ```
 
-### Color Types
+### FastLED Color Types
 ```cpp
 struct HSV16 { u16 h, s, v; };  // 16-bit HSV
 CRGB ToRGB() const;              // Convert to 8-bit RGB
 ```
 
-### Gamma & HD Output
+### HD Output (FastLED)
 ```cpp
-u16 gamma_2_8(u8 value);  // 8-bit → 16-bit gamma (LUT, γ=2.8)
-
 // Accept 16-bit input, output 8+5 HD format
 void five_bit_bitshift(u16 r16, u16 g16, u16 b16, u8 brightness,
                        CRGB* out, u8* out_power_5bit);
@@ -46,28 +61,21 @@ void five_bit_bitshift(u16 r16, u16 g16, u16 b16, u8 brightness,
 
 ---
 
-## Missing 16-Bit Features ❌
+## Implementation Location
 
-### No CRGB16 Type
-```cpp
-// Does NOT exist in FastLED
-struct CRGB16 { u16 r, g, b; };  // Must be implemented manually
+Custom 16-bit extensions live in `led_display/include/fl_extensions/` and `led_display/src/fl_extensions/`:
+
+```
+led_display/
+  include/fl_extensions/
+    crgb16.h              # CRGB16 type, operators, conversions
+    palette16.h           # ColorFromPalette16 function
+  src/fl_extensions/
+    crgb16.cpp            # CRGB16 implementation
+    palette16.cpp         # Palette interpolation implementation
 ```
 
-### No 16-Bit Palette Functions
-```cpp
-// ColorFromPaletteExtended is 8-bit only
-CRGB ColorFromPaletteExtended(const CRGBPalette16& pal, u16 index);
-//    ^^^^                                              ^^^ 16-bit index, but...
-//    8-bit output with 8-bit interpolation math
-
-// Internal implementation uses scale8():
-u8 result = ((u16)color * (u16)blend_factor) >> 8;
-//          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-//          16-bit intermediate, immediately truncated to 8-bit
-```
-
-**Implementation detail:** Exactly 256 discrete color values between any two palette stops.
+These are **candidates for future FastLED PR** but currently maintained locally for agility.
 
 ---
 

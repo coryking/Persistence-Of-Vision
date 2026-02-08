@@ -74,7 +74,7 @@ void ArmAlignment::render(RenderContext& ctx) {
 }
 
 void ArmAlignment::renderArmOnly(RenderContext& ctx, uint8_t armIndex) {
-    // Arm colors: R, G, B
+    // Arm colors: R, G, B (CRGB literals promote implicitly to CRGB16)
     static const CRGB ARM_COLORS[3] = {
         CRGB(255, 0, 0),   // arm 0 = RED
         CRGB(0, 255, 0),   // arm 1 = GREEN
@@ -91,7 +91,7 @@ void ArmAlignment::renderArmOnly(RenderContext& ctx, uint8_t armIndex) {
             // Check if at 0° marker (±3°, same as SolidArms reference)
             if (armAngle < 30 || armAngle > 3570) {
                 // White/orange reference marker for crisp visual
-                CRGB color = (armAngle < 30) ? CRGB::White : CRGB::Orange;
+                CRGB16 color = (armAngle < 30) ? CRGB::White : CRGB::Orange;
                 color.nscale8(fadeLevel);
                 fill_solid(arm.pixels, HardwareConfig::LEDS_PER_ARM, color);
             } else {
@@ -105,7 +105,7 @@ void ArmAlignment::renderArmOnly(RenderContext& ctx, uint8_t armIndex) {
                 );
 
                 if (inColoredArc) {
-                    CRGB color = ARM_COLORS[a];
+                    CRGB16 color = ARM_COLORS[a];
                     uint8_t brightness = arcIntensityUnits(
                         armAngle,
                         ANGLE_UNITS(0),
@@ -148,6 +148,7 @@ void ArmAlignment::renderWalkingPixel(RenderContext& ctx) {
     uint8_t ledPos = radialDistance;
 
     // Color matches arm (same as arm display test)
+    // CRGB literals promote implicitly to CRGB16
     static const CRGB ARM_COLORS[3] = {
         CRGB(255, 0, 0),   // arm 0 = RED
         CRGB(0, 255, 0),   // arm 1 = GREEN

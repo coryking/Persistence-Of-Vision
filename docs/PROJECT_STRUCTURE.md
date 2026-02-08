@@ -37,7 +37,7 @@ led_display/
 ├── src/
 │   ├── main.cpp              # Entry point, FreeRTOS task creation
 │   ├── RenderTask.cpp        # Core 1: effect rendering, angular resolution
-│   ├── OutputTask.cpp        # Core 0: gamma correction, DMA output to LEDs
+│   ├── OutputTask.cpp        # Core 0: quantization (five_bit_bitshift), DMA output
 │   ├── BufferManager.cpp     # Double-buffer coordination between render/output
 │   ├── HallEffectDriver.cpp  # Hall sensor ISR and timing
 │   ├── HallSimulator.cpp     # Fake hall sensor for bench testing
@@ -46,6 +46,9 @@ led_display/
 │   ├── TelemetryTask.cpp     # IMU sampling task
 │   ├── FrameProfiler.cpp     # Pipeline timing instrumentation
 │   ├── RotorDiagnosticStats.cpp  # Rotor health statistics
+│   ├── fl_extensions/        # FastLED 16-bit extensions (future PR candidates)
+│   │   ├── crgb16.cpp        # CRGB16 implementation
+│   │   └── palette16.cpp     # 16-bit palette interpolation
 │   └── effects/              # 13 visual effects (see EFFECT_SYSTEM_DESIGN.md)
 ├── include/
 │   ├── hardware_config.h     # Pin definitions, LED counts, timing constants
@@ -65,6 +68,9 @@ led_display/
 │   ├── polar_helpers.h       # Angle math, noise helpers, coordinate utilities
 │   ├── pixel_utils.h         # Pixel manipulation helpers
 │   ├── types.h               # angle_t, interval_t, key constants
+│   ├── fl_extensions/        # FastLED 16-bit extensions (future PR candidates)
+│   │   ├── crgb16.h          # CRGB16 type, operators, conversions
+│   │   └── palette16.h       # ColorFromPalette16 function
 │   └── effects/              # Effect headers
 ├── data/
 │   └── sagetv_remote_mapping.json  # IR button code reference

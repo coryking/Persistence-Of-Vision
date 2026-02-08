@@ -63,7 +63,7 @@ void IRAM_ATTR Kaleidoscope::render(RenderContext& ctx) {
 
             // Scale 8-bit pattern value to 16-bit palette index for smooth blending
             uint16_t palIdx = ((uint16_t)patternVal) << 8;
-            arm.pixels[led] = ColorFromPaletteExtended(palette, palIdx, 255, LINEARBLEND);
+            arm.pixels[led] = ColorFromPalette16(palette, palIdx, 255, LINEARBLEND);
         }
     }
 }
