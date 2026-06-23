@@ -190,3 +190,7 @@ No SPI optimization needed.
 ### Per-Effect Comparison
 
 ![Timing by Effect](./timing_by_effect.png)
+
+### Time Series
+
+![Timing Time Series](./timing_timeseries.png)
